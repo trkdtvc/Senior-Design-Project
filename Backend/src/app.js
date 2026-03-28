@@ -8,6 +8,7 @@ const channelRoutes = require("./routes/channelRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const roleRoutes = require("./routes/roleRoutes");
 const memberRoleRoutes = require("./routes/memberRoleRoutes");
+const serverMemberRoutes = require("./routes/serverMemberRoutes");
 
 app.use(express.json());
 
@@ -18,5 +19,6 @@ app.use("/api/channels", channelRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/member-roles", memberRoleRoutes);
+app.use("/api/server-members", serverMemberRoutes);
 
 module.exports = app;
