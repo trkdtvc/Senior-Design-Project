@@ -17,7 +17,7 @@ This project is meant to bring together the main parts of a full-stack web appli
 - Planned AI assistant integration
 - Planned deployment
 
-## Tech Stack
+## Technologies Used
 ### Backend
 - Node.js
 - Express.js
