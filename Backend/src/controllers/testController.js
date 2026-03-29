@@ -1,7 +1,7 @@
 const testData = require("../models/testModel");
 
 const getTestMessage = (req, res) => {
-  res.json(testData);
+  res.status(200).json(testData);
 };
 
 module.exports = {
