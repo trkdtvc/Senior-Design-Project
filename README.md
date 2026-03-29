@@ -1,15 +1,15 @@
 # Senior Design Project
-Your Friendly Neighborhood Chatster (YFNC) is a Discord-style web chat platform built as a senior design project. It is focused on real-time text communication, room-based interaction, role-based organization, and AI assistant integration.
+Your Friendly Neighborhood Chatster (YFNC) is a Discord-inspired chat app I’m building for my senior design project. The idea is to create a platform where users can join servers, chat in channels, manage roles and permissions, and eventually use an integrated AI assistant inside the app.
 
 ## Project Overview
-The goal of this project is to build a modern web-based chat application for communities, teams, and student groups. The platform supports user authentication, server and channel organization, text messaging, role and permission management, backend API documentation, testing, email integration, and deployment.
+This project is meant to bring together the main parts of a full-stack web application in one place. It includes authentication, server and channel management, messaging, backend documentation, testing, email support, and later deployment. The main goal is to build something practical that feels like a real-world communication platform rather than just a basic school project.
 
 ## Main Features
 - User registration and login with JWT authentication
 - Server creation and management
 - Channel organization
-- Text-based messaging system
-- Role-based access and permissions
+- Text-based messaging
+- Role-based permissions
 - REST API backend
 - Swagger / OpenAPI documentation
 - Integration testing with Jest and Supertest
@@ -34,19 +34,13 @@ The goal of this project is to build a modern web-based chat application for com
 - Bootstrap
 
 ## Current Project Status
-The backend foundation has been completed, including:
-- Core backend entities
-- Routes, controllers, and models structure
-- JWT-based authentication
-- Centralized error handling
-- Swagger documentation
-- Initial integration testing setup with passing tests
+At this stage, the backend foundation is already in place. That includes the main backend entities, the routes/controllers/models structure, JWT authentication, centralized error handling, Swagger documentation, and the first round of integration tests.
 
-Currently completed test coverage includes:
-- Public route test
-- Protected auth route without token
-- Protected server route without token
-- Unknown route / 404 middleware test
+The current test setup already covers:
+- a public route
+- a protected auth route without a token
+- a protected server route without a token
+- an unknown route returning a 404 response
 
 ## Project Structure
 ```bash
