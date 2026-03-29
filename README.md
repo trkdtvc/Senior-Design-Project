@@ -1,5 +1,5 @@
 # Senior Design Project
-Your Friendly Neighborhood Chatster (YFNC) is a Discord-inspired chat app I’m building for my senior design project. The idea is to create a platform where users can join servers, chat in channels, manage roles and permissions, and eventually use an integrated AI assistant inside the app.
+Your Friendly Neighborhood Chatster (YFNC) is a chat app I’m building for my senior design project. The idea is to create a platform where users can join servers, chat in channels, manage roles and permissions, and eventually use an integrated AI assistant inside the app.
 
 ## Project Overview
 This project is meant to bring together the main parts of a full-stack web application in one place. It includes authentication, server and channel management, messaging, backend documentation, testing, email support, and later deployment. The main goal is to build something practical that feels like a real-world communication platform rather than just a basic school project.
