@@ -59,8 +59,6 @@ const registerUser = async (req, res, next) => {
       email
     };
 
-    const token = generateToken(user);
-
     const verificationToken = crypto.randomBytes(32).toString("hex");
     const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     
@@ -83,8 +81,7 @@ const registerUser = async (req, res, next) => {
     });
 
     res.status(201).json({
-      message: "User registered successfully",
-      token,
+      message: "User registered successfully. Please verify your email before logging in.",
       user
     });
   } catch (error) {
@@ -123,7 +120,7 @@ const loginUser = async (req, res, next) => {
       res.status(403);
       throw new Error("Please verify your email before logging in");
     }
-    
+
     const token = generateToken(user);
 
     res.status(200).json({
