@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { sendEmail } = require("../services/emailService");
 const {
   findUserByEmail,
@@ -10,7 +11,6 @@ const {
   verifyUserByToken,
   markUserAsVerified
 } = require("../models/userModel");
-const crypto = require("crypto");
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -22,6 +22,33 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
+};
+
+const getVerificationBaseUrl = () => {
+  return process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+};
+
+const sendVerificationEmailToUser = async (user, verificationToken, expiresInHours = 24) => {
+  const verificationLink = `${getVerificationBaseUrl()}/api/auth/verify-email?token=${verificationToken}`;
+
+  await sendEmail({
+    to: user.email,
+    subject: "Verify your email - Your Friendly Neighborhood Chatster",
+    text: `Hello ${user.username},
+
+Please verify your email by visiting this link:
+
+${verificationLink}
+
+This link expires in ${expiresInHours} hours.`,
+    html: `
+      <h2>Verify your email</h2>
+      <p>Hello ${user.username},</p>
+      <p>Click the link below to verify your account:</p>
+      <a href="${verificationLink}">${verificationLink}</a>
+      <p>This link expires in ${expiresInHours} hours.</p>
+    `
+  });
 };
 
 const registerUser = async (req, res, next) => {
@@ -56,31 +83,22 @@ const registerUser = async (req, res, next) => {
     const user = {
       user_id: result.insertId,
       username,
-      email
+      email,
+      is_verified: 0
     };
 
     const verificationToken = crypto.randomBytes(32).toString("hex");
     const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    
+
     await setVerificationToken(
       user.user_id,
       verificationToken,
       verificationTokenExpires
     );
-    
-    await sendEmail({
-      to: user.email,
-      subject: "Verify your email - Your Friendly Neighborhood Chatster",
-      text: `Hello ${user.username},
-      
-    Please verify your email by visiting this link:
-      
-    http://localhost:5000/api/auth/verify-email?token=${verificationToken}
-      
-    This link expires in 24 hours.`
-    });
 
-    res.status(201).json({
+    await sendVerificationEmailToUser(user, verificationToken, 24);
+
+    return res.status(201).json({
       message: "User registered successfully. Please verify your email before logging in.",
       user
     });
@@ -123,13 +141,14 @@ const loginUser = async (req, res, next) => {
 
     const token = generateToken(user);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Login successful",
       token,
       user: {
         user_id: user.user_id,
         username: user.username,
-        email: user.email
+        email: user.email,
+        is_verified: user.is_verified
       }
     });
   } catch (error) {
@@ -155,8 +174,49 @@ const verifyEmail = async (req, res, next) => {
 
     await markUserAsVerified(user.user_id);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Email verified successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resendVerificationEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400);
+      throw new Error("Email is required");
+    }
+
+    const user = await findUserByEmail(email);
+
+    if (!user) {
+      return res.status(200).json({
+        message: "If an unverified account with that email exists, a new verification email has been sent"
+      });
+    }
+
+    if (user.is_verified) {
+      res.status(400);
+      throw new Error("This email is already verified");
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await setVerificationToken(
+      user.user_id,
+      verificationToken,
+      verificationTokenExpires
+    );
+
+    await sendVerificationEmailToUser(user, verificationToken, 24);
+
+    return res.status(200).json({
+      message: "Verification email resent successfully"
     });
   } catch (error) {
     next(error);
@@ -172,7 +232,12 @@ const getMe = async (req, res, next) => {
       throw new Error("User not found");
     }
 
-    res.status(200).json(user);
+    return res.status(200).json({
+      user_id: user.user_id,
+      username: user.username,
+      email: user.email,
+      is_verified: user.is_verified
+    });
   } catch (error) {
     next(error);
   }
@@ -182,5 +247,6 @@ module.exports = {
   registerUser,
   loginUser,
   getMe,
-  verifyEmail
+  verifyEmail,
+  resendVerificationEmail
 };

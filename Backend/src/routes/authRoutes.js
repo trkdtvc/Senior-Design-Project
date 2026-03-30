@@ -3,7 +3,8 @@ const {
   registerUser,
   loginUser,
   getMe,
-  verifyEmail
+  verifyEmail,
+  resendVerificationEmail
 } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -25,6 +26,7 @@ const router = express.Router();
  *               - username
  *               - email
  *               - password
+ *               - confirmPassword
  *             properties:
  *               username:
  *                 type: string
@@ -33,6 +35,9 @@ const router = express.Router();
  *                 type: string
  *                 example: tarik@example.com
  *               password:
+ *                 type: string
+ *                 example: Password123
+ *               confirmPassword:
  *                 type: string
  *                 example: Password123
  *     responses:
@@ -56,12 +61,13 @@ router.post("/register", registerUser);
  *           schema:
  *             type: object
  *             required:
- *               - email
+ *               - login
  *               - password
  *             properties:
- *               email:
+ *               login:
  *                 type: string
  *                 example: tarik@example.com
+ *                 description: Email or username
  *               password:
  *                 type: string
  *                 example: Password123
@@ -71,7 +77,9 @@ router.post("/register", registerUser);
  *       400:
  *         description: Missing login data
  *       401:
- *         description: Invalid email or password
+ *         description: Invalid credentials
+ *       403:
+ *         description: Email not verified
  */
 router.post("/login", loginUser);
 
@@ -90,6 +98,52 @@ router.post("/login", loginUser);
  *         description: Not authorized, token failed or missing
  */
 router.get("/me", protect, getMe);
+
+/**
+ * @swagger
+ * /api/auth/verify-email:
+ *   get:
+ *     summary: Verify user email
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Email verification token
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *       400:
+ *         description: Invalid or expired verification token
+ */
 router.get("/verify-email", verifyEmail);
+
+/**
+ * @swagger
+ * /api/auth/resend-verification:
+ *   post:
+ *     summary: Resend verification email
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: tarik@example.com
+ *     responses:
+ *       200:
+ *         description: Verification email resent successfully
+ *       400:
+ *         description: Email is required or already verified
+ */
+router.post("/resend-verification", resendVerificationEmail);
 
 module.exports = router;
