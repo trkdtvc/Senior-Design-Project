@@ -2,7 +2,8 @@ const express = require("express");
 const {
   registerUser,
   loginUser,
-  getMe
+  getMe,
+  verifyEmail
 } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -89,5 +90,6 @@ router.post("/login", loginUser);
  *         description: Not authorized, token failed or missing
  */
 router.get("/me", protect, getMe);
+router.get("/verify-email", verifyEmail);
 
 module.exports = router;

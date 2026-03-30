@@ -5,8 +5,12 @@ const {
   findUserByEmail,
   findUserByUsername,
   findUserById,
-  createUser
+  createUser,
+  setVerificationToken,
+  verifyUserByToken,
+  markUserAsVerified
 } = require("../models/userModel");
+const crypto = require("crypto");
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -57,17 +61,25 @@ const registerUser = async (req, res, next) => {
 
     const token = generateToken(user);
 
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    
+    await setVerificationToken(
+      user.user_id,
+      verificationToken,
+      verificationTokenExpires
+    );
+    
     await sendEmail({
       to: user.email,
-      subject: "Welcome to Your Friendly Neighborhood Chatster",
+      subject: "Verify your email - Your Friendly Neighborhood Chatster",
       text: `Hello ${user.username},
-
-Welcome to Your Friendly Neighborhood Chatster!
-
-Your account has been created successfully.
-
-Enjoy the app!
-`
+      
+    Please verify your email by visiting this link:
+      
+    http://localhost:5000/api/auth/verify-email?token=${verificationToken}
+      
+    This link expires in 24 hours.`
     });
 
     res.status(201).json({
@@ -123,6 +135,32 @@ const loginUser = async (req, res, next) => {
   }
 };
 
+const verifyEmail = async (req, res, next) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      res.status(400);
+      throw new Error("Verification token is required");
+    }
+
+    const user = await verifyUserByToken(token);
+
+    if (!user) {
+      res.status(400);
+      throw new Error("Invalid or expired verification token");
+    }
+
+    await markUserAsVerified(user.user_id);
+
+    res.status(200).json({
+      message: "Email verified successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getMe = async (req, res, next) => {
   try {
     const user = await findUserById(req.user.user_id);
@@ -141,5 +179,6 @@ const getMe = async (req, res, next) => {
 module.exports = {
   registerUser,
   loginUser,
-  getMe
+  getMe,
+  verifyEmail
 };

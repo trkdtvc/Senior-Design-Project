@@ -32,9 +32,49 @@ const createUser = async (username, email, passwordHash) => {
   return result;
 };
 
+const setVerificationToken = async (userId, token, expiresAt) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET verification_token = ?, verification_token_expires = ?
+     WHERE user_id = ?`,
+    [token, expiresAt, userId]
+  );
+
+  return result;
+};
+
+const verifyUserByToken = async (token) => {
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM users
+     WHERE verification_token = ?
+       AND verification_token_expires > NOW()
+     LIMIT 1`,
+    [token]
+  );
+
+  return rows[0];
+};
+
+const markUserAsVerified = async (userId) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET is_verified = 1,
+         verification_token = NULL,
+         verification_token_expires = NULL
+     WHERE user_id = ?`,
+    [userId]
+  );
+
+  return result;
+};
+
 module.exports = {
   findUserByEmail,
   findUserByUsername,
   findUserById,
-  createUser
+  createUser,
+  setVerificationToken,
+  verifyUserByToken,
+  markUserAsVerified
 };
