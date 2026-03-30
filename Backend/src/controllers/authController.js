@@ -119,6 +119,11 @@ const loginUser = async (req, res, next) => {
       throw new Error("Invalid credentials");
     }
 
+    if (!user.is_verified) {
+      res.status(403);
+      throw new Error("Please verify your email before logging in");
+    }
+    
     const token = generateToken(user);
 
     res.status(200).json({
