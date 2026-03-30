@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { sendEmail } = require("../services/emailService");
 const {
   findUserByEmail,
   findUserByUsername,
@@ -55,6 +56,19 @@ const registerUser = async (req, res, next) => {
     };
 
     const token = generateToken(user);
+
+    await sendEmail({
+      to: user.email,
+      subject: "Welcome to Your Friendly Neighborhood Chatster",
+      text: `Hello ${user.username},
+
+Welcome to Your Friendly Neighborhood Chatster!
+
+Your account has been created successfully.
+
+Enjoy the app!
+`
+    });
 
     res.status(201).json({
       message: "User registered successfully",
