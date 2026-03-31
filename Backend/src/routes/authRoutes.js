@@ -14,6 +14,13 @@ const router = express.Router();
 
 /**
  * @swagger
+ * tags:
+ *   - name: Auth
+ *     description: Authentication and account management routes
+ */
+
+/**
+ * @swagger
  * /api/auth/register:
  *   post:
  *     summary: Register a new user
@@ -35,12 +42,15 @@ const router = express.Router();
  *                 example: tarik1
  *               email:
  *                 type: string
+ *                 format: email
  *                 example: tarik@example.com
  *               password:
  *                 type: string
+ *                 format: password
  *                 example: Password123
  *               confirmPassword:
  *                 type: string
+ *                 format: password
  *                 example: Password123
  *     responses:
  *       201:
@@ -54,7 +64,7 @@ router.post("/register", registerUser);
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Login a user
+ *     summary: Log in a user with username or email
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -68,16 +78,17 @@ router.post("/register", registerUser);
  *             properties:
  *               login:
  *                 type: string
+ *                 description: Username or email
  *                 example: tarik@example.com
- *                 description: Email or username
  *               password:
  *                 type: string
+ *                 format: password
  *                 example: Password123
  *     responses:
  *       200:
- *         description: User logged in successfully
+ *         description: Login successful
  *       400:
- *         description: Missing login data
+ *         description: Login and password are required
  *       401:
  *         description: Invalid credentials
  *       403:
@@ -89,7 +100,7 @@ router.post("/login", loginUser);
  * @swagger
  * /api/auth/me:
  *   get:
- *     summary: Get current logged-in user
+ *     summary: Get the currently authenticated user
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
@@ -105,7 +116,7 @@ router.get("/me", protect, getMe);
  * @swagger
  * /api/auth/verify-email:
  *   get:
- *     summary: Verify user email
+ *     summary: Verify a user's email address
  *     tags: [Auth]
  *     parameters:
  *       - in: query
@@ -126,7 +137,7 @@ router.get("/verify-email", verifyEmail);
  * @swagger
  * /api/auth/resend-verification:
  *   post:
- *     summary: Resend verification email
+ *     summary: Resend the email verification link
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -139,12 +150,13 @@ router.get("/verify-email", verifyEmail);
  *             properties:
  *               email:
  *                 type: string
+ *                 format: email
  *                 example: tarik@example.com
  *     responses:
  *       200:
  *         description: Verification email resent successfully
  *       400:
- *         description: Email is required or already verified
+ *         description: Email is required or account is already verified
  */
 router.post("/resend-verification", resendVerificationEmail);
 
@@ -152,7 +164,7 @@ router.post("/resend-verification", resendVerificationEmail);
  * @swagger
  * /api/auth/forgot-password:
  *   post:
- *     summary: Send password reset email
+ *     summary: Send a password reset email
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -165,6 +177,7 @@ router.post("/resend-verification", resendVerificationEmail);
  *             properties:
  *               email:
  *                 type: string
+ *                 format: email
  *                 example: tarik@example.com
  *     responses:
  *       200:
@@ -178,7 +191,7 @@ router.post("/forgot-password", forgotPassword);
  * @swagger
  * /api/auth/reset-password:
  *   post:
- *     summary: Reset user password using reset token
+ *     summary: Reset a user's password using a reset token
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -193,12 +206,14 @@ router.post("/forgot-password", forgotPassword);
  *             properties:
  *               token:
  *                 type: string
- *                 example: abc123resetoken
+ *                 example: abc123resettoken
  *               newPassword:
  *                 type: string
+ *                 format: password
  *                 example: NewPassword123
  *               confirmPassword:
  *                 type: string
+ *                 format: password
  *                 example: NewPassword123
  *     responses:
  *       200:

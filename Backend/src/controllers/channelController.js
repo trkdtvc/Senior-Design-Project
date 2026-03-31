@@ -2,7 +2,8 @@ const channelModel = require("../models/channelModel");
 
 const createChannel = async (req, res, next) => {
   try {
-    const { serverId, channelName } = req.body;
+    const serverId = req.body.server_id || req.body.serverId;
+    const channelName = req.body.channel_name || req.body.channelName;
     const userId = req.user.user_id;
 
     if (!serverId || !channelName) {

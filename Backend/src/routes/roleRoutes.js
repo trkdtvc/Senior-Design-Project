@@ -5,6 +5,13 @@ const { protect } = require("../middleware/authMiddleware");
 
 /**
  * @swagger
+ * tags:
+ *   - name: Roles
+ *     description: Role management routes
+ */
+
+/**
+ * @swagger
  * /api/roles:
  *   post:
  *     summary: Create a new role

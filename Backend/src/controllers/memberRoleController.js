@@ -2,7 +2,8 @@ const memberRoleModel = require("../models/memberRoleModel");
 
 const assignRole = async (req, res, next) => {
   try {
-    const { memberId, roleId } = req.body;
+    const memberId = req.body.member_id || req.body.memberId;
+    const roleId = req.body.role_id || req.body.roleId;
 
     if (!memberId || !roleId) {
       res.status(400);

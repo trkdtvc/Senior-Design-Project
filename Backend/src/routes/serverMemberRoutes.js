@@ -5,6 +5,13 @@ const { protect } = require("../middleware/authMiddleware");
 
 /**
  * @swagger
+ * tags:
+ *   - name: Server Members
+ *     description: Server member management routes
+ */
+
+/**
+ * @swagger
  * /api/server-members/{serverId}:
  *   get:
  *     summary: Get all members of a server

@@ -5,6 +5,13 @@ const { protect } = require("../middleware/authMiddleware");
 
 /**
  * @swagger
+ * tags:
+ *   - name: Messages
+ *     description: Message management routes
+ */
+
+/**
+ * @swagger
  * /api/messages:
  *   post:
  *     summary: Create a new message

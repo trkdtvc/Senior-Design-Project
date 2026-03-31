@@ -2,7 +2,8 @@ const roleModel = require("../models/roleModel");
 
 const createRole = async (req, res, next) => {
   try {
-    const { serverId, roleName } = req.body;
+    const serverId = req.body.server_id || req.body.serverId;
+    const roleName = req.body.role_name || req.body.roleName;
 
     if (!serverId || !roleName) {
       res.status(400);

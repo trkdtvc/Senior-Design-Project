@@ -5,6 +5,13 @@ const { protect } = require("../middleware/authMiddleware");
 
 /**
  * @swagger
+ * tags:
+ *   - name: Channels
+ *     description: Channel management routes
+ */
+
+/**
+ * @swagger
  * /api/channels:
  *   post:
  *     summary: Create a new channel

@@ -2,7 +2,8 @@ const messageModel = require("../models/messageModel");
 
 const createMessage = async (req, res, next) => {
   try {
-    const { channelId, content } = req.body;
+    const channelId = req.body.channel_id || req.body.channelId;
+    const content = req.body.content;
     const userId = req.user.user_id;
 
     if (!channelId || !content) {

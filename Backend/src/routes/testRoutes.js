@@ -5,6 +5,13 @@ const router = express.Router();
 
 /**
  * @swagger
+ * tags:
+ *   - name: Test
+ *     description: Test routes
+ */
+
+/**
+ * @swagger
  * /api/test:
  *   get:
  *     summary: Get test message
@@ -13,7 +20,6 @@ const router = express.Router();
  *       200:
  *         description: Test message returned successfully
  */
-
 router.get("/", getTestMessage);
 
 module.exports = router;
