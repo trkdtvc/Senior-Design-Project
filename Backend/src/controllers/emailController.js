@@ -2,7 +2,7 @@ const { sendEmail } = require("../services/emailService");
 
 const sendTestEmail = async (req, res, next) => {
   try {
-    const { to } = req.body;
+    const { to } = req.body || {};
 
     if (!to) {
       return res.status(400).json({ message: "Recipient email is required" });
