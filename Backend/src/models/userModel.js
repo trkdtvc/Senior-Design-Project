@@ -18,7 +18,7 @@ const findUserByUsername = async (username) => {
 
 const findUserById = async (userId) => {
   const [rows] = await pool.query(
-    "SELECT user_id, username, email, created_at, updated_at FROM users WHERE user_id = ?",
+    "SELECT user_id, username, email, is_verified, created_at, updated_at FROM users WHERE user_id = ?",
     [userId]
   );
   return rows[0];
@@ -69,6 +69,43 @@ const markUserAsVerified = async (userId) => {
   return result;
 };
 
+const setPasswordResetToken = async (userId, token, expiresAt) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET password_reset_token = ?, password_reset_token_expires = ?
+     WHERE user_id = ?`,
+    [token, expiresAt, userId]
+  );
+
+  return result;
+};
+
+const findUserByPasswordResetToken = async (token) => {
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM users
+     WHERE password_reset_token = ?
+       AND password_reset_token_expires > NOW()
+     LIMIT 1`,
+    [token]
+  );
+
+  return rows[0];
+};
+
+const updateUserPassword = async (userId, passwordHash) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET password_hash = ?,
+         password_reset_token = NULL,
+         password_reset_token_expires = NULL
+     WHERE user_id = ?`,
+    [passwordHash, userId]
+  );
+
+  return result;
+};
+
 module.exports = {
   findUserByEmail,
   findUserByUsername,
@@ -76,5 +113,8 @@ module.exports = {
   createUser,
   setVerificationToken,
   verifyUserByToken,
-  markUserAsVerified
+  markUserAsVerified,
+  setPasswordResetToken,
+  findUserByPasswordResetToken,
+  updateUserPassword
 };

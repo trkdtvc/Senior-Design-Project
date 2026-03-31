@@ -4,7 +4,9 @@ const {
   loginUser,
   getMe,
   verifyEmail,
-  resendVerificationEmail
+  resendVerificationEmail,
+  forgotPassword,
+  resetPassword
 } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -145,5 +147,65 @@ router.get("/verify-email", verifyEmail);
  *         description: Email is required or already verified
  */
 router.post("/resend-verification", resendVerificationEmail);
+
+/**
+ * @swagger
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Send password reset email
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: tarik@example.com
+ *     responses:
+ *       200:
+ *         description: Password reset email response returned
+ *       400:
+ *         description: Email is required
+ */
+router.post("/forgot-password", forgotPassword);
+
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Reset user password using reset token
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - newPassword
+ *               - confirmPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: abc123resetoken
+ *               newPassword:
+ *                 type: string
+ *                 example: NewPassword123
+ *               confirmPassword:
+ *                 type: string
+ *                 example: NewPassword123
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       400:
+ *         description: Invalid or expired token, or invalid input
+ */
+router.post("/reset-password", resetPassword);
 
 module.exports = router;

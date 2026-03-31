@@ -9,7 +9,10 @@ const {
   createUser,
   setVerificationToken,
   verifyUserByToken,
-  markUserAsVerified
+  markUserAsVerified,
+  setPasswordResetToken,
+  findUserByPasswordResetToken,
+  updateUserPassword
 } = require("../models/userModel");
 
 const generateToken = (user) => {
@@ -26,6 +29,10 @@ const generateToken = (user) => {
 
 const getVerificationBaseUrl = () => {
   return process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+};
+
+const getFrontendBaseUrl = () => {
+  return process.env.FRONTEND_URL || "http://localhost:3000";
 };
 
 const sendVerificationEmailToUser = async (user, verificationToken, expiresInHours = 24) => {
@@ -53,7 +60,7 @@ This link expires in ${expiresInHours} hours.`,
 
 const registerUser = async (req, res, next) => {
   try {
-    const { username, email, password, confirmPassword } = req.body;
+    const { username, email, password, confirmPassword } = req.body || {};
 
     if (!username || !email || !password || !confirmPassword) {
       res.status(400);
@@ -109,7 +116,7 @@ const registerUser = async (req, res, next) => {
 
 const loginUser = async (req, res, next) => {
   try {
-    const { login, password } = req.body;
+    const { login, password } = req.body || {};
 
     if (!login || !password) {
       res.status(400);
@@ -158,7 +165,7 @@ const loginUser = async (req, res, next) => {
 
 const verifyEmail = async (req, res, next) => {
   try {
-    const { token } = req.query;
+    const { token } = req.query || {};
 
     if (!token) {
       res.status(400);
@@ -184,7 +191,7 @@ const verifyEmail = async (req, res, next) => {
 
 const resendVerificationEmail = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email } = req.body || {};
 
     if (!email) {
       res.status(400);
@@ -223,6 +230,99 @@ const resendVerificationEmail = async (req, res, next) => {
   }
 };
 
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body || {};
+
+    if (!email) {
+      res.status(400);
+      throw new Error("Email is required");
+    }
+
+    const user = await findUserByEmail(email);
+
+    if (user) {
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000);
+      const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}`;
+
+      await setPasswordResetToken(
+        user.user_id,
+        resetToken,
+        resetTokenExpires
+      );
+
+      await sendEmail({
+        to: user.email,
+        subject: "Reset your password - Your Friendly Neighborhood Chatster",
+        text: `Hello ${user.username},
+
+We received a request to reset your password.
+
+Use the link below to reset it:
+${resetLink}
+
+If you are testing the backend without a frontend yet, use this token in your reset-password request:
+${resetToken}
+
+This link/token expires in 1 hour.
+
+If you did not request this, you can ignore this email.`,
+        html: `
+          <h2>Reset your password</h2>
+          <p>Hello ${user.username},</p>
+          <p>We received a request to reset your password.</p>
+          <p>Use the link below to reset it:</p>
+          <a href="${resetLink}">${resetLink}</a>
+          <p>If you are testing the backend without a frontend yet, use this token in your reset-password request:</p>
+          <p><strong>${resetToken}</strong></p>
+          <p>This link/token expires in 1 hour.</p>
+          <p>If you did not request this, you can ignore this email.</p>
+        `
+      });
+    }
+
+    return res.status(200).json({
+      message: "If an account with that email exists, a password reset email has been sent"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword, confirmPassword } = req.body || {};
+
+    if (!token || !newPassword || !confirmPassword) {
+      res.status(400);
+      throw new Error("Token, new password, and confirm password are required");
+    }
+
+    if (newPassword !== confirmPassword) {
+      res.status(400);
+      throw new Error("Passwords do not match");
+    }
+
+    const user = await findUserByPasswordResetToken(token);
+
+    if (!user) {
+      res.status(400);
+      throw new Error("Invalid or expired password reset token");
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await updateUserPassword(user.user_id, passwordHash);
+
+    return res.status(200).json({
+      message: "Password reset successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getMe = async (req, res, next) => {
   try {
     const user = await findUserById(req.user.user_id);
@@ -248,5 +348,7 @@ module.exports = {
   loginUser,
   getMe,
   verifyEmail,
-  resendVerificationEmail
+  resendVerificationEmail,
+  forgotPassword,
+  resetPassword
 };
