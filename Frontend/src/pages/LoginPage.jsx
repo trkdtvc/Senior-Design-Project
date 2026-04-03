@@ -1,23 +1,33 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import "../styles/auth.css";
 
-function LoginPage() {
+const LoginPage = () => {
   const [formData, setFormData] = useState({
     identity: "",
     password: ""
   });
 
+  const [error, setError] = useState("");
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    setFormData((prev) => ({
-      ...prev,
+    setFormData((prevData) => ({
+      ...prevData,
       [name]: value
     }));
+
+    setError("");
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    if (!formData.identity.trim() || !formData.password.trim()) {
+      setError("Please fill in all fields.");
+      return;
+    }
 
     console.log("Login form submitted:", formData);
   };
@@ -32,42 +42,34 @@ function LoginPage() {
           Sign in to continue.
         </p>
 
+        {error && <p className="auth-error">{error}</p>}
+
         <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="auth-field">
-            <label htmlFor="identity">Username or Email</label>
-            <input
-              type="text"
-              id="identity"
-              name="identity"
-              placeholder="Enter your username or email"
-              value={formData.identity}
-              onChange={handleChange}
-            />
-          </div>
+          <input
+            type="text"
+            name="identity"
+            placeholder="Email or username"
+            value={formData.identity}
+            onChange={handleChange}
+          />
 
-          <div className="auth-field">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              placeholder="Enter your password"
-              value={formData.password}
-              onChange={handleChange}
-            />
-          </div>
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={handleChange}
+          />
 
-          <button type="submit" className="auth-button">
-            Login
-          </button>
+          <button type="submit">Login</button>
         </form>
 
-        <p className="auth-footer-text">
-          Don’t have an account? <Link to="/register">Register</Link>
+        <p className="auth-footer">
+          Don't have an account? <Link to="/register">Register</Link>
         </p>
       </div>
     </div>
   );
-}
+};
 
 export default LoginPage;
