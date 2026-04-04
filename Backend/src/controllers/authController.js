@@ -12,7 +12,8 @@ const {
   markUserAsVerified,
   setPasswordResetToken,
   findUserByPasswordResetToken,
-  updateUserPassword
+  updateUserPassword,
+  findUserByVerificationToken
 } = require("../models/userModel");
 
 const generateToken = (user) => {
@@ -32,11 +33,11 @@ const getVerificationBaseUrl = () => {
 };
 
 const getFrontendBaseUrl = () => {
-  return process.env.FRONTEND_URL || "http://localhost:3000";
+  return process.env.FRONTEND_URL || "http://localhost:5173";
 };
 
 const sendVerificationEmailToUser = async (user, verificationToken, expiresInHours = 24) => {
-  const verificationLink = `${getVerificationBaseUrl()}/api/auth/verify-email?token=${verificationToken}`;
+  const verificationLink = `${getFrontendBaseUrl()}/verify-email?token=${verificationToken}`;
 
   await sendEmail({
     to: user.email,
@@ -169,20 +170,35 @@ const verifyEmail = async (req, res, next) => {
 
     if (!token) {
       res.status(400);
-      throw new Error("Verification token is required");
+      throw new Error("Verification token is missing.");
     }
 
-    const user = await verifyUserByToken(token);
+    const user = await findUserByVerificationToken(token);
 
     if (!user) {
       res.status(400);
-      throw new Error("Invalid or expired verification token");
+      throw new Error("Invalid verification token.");
+    }
+
+    if (user.is_verified) {
+      return res.status(200).json({
+        message: "Email already verified."
+      });
+    }
+
+    const isExpired =
+      !user.verification_token_expires ||
+      new Date(user.verification_token_expires) < new Date();
+
+    if (isExpired) {
+      res.status(400);
+      throw new Error("Verification token has expired.");
     }
 
     await markUserAsVerified(user.user_id);
 
     return res.status(200).json({
-      message: "Email verified successfully"
+      message: "Successfully verified."
     });
   } catch (error) {
     next(error);

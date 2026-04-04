@@ -75,3 +75,54 @@
   font-size: 14px;
   text-align: center;
 }
+
+.password-strength-wrapper {
+  margin-top: -6px;
+  margin-bottom: 6px;
+}
+
+.password-strength-text {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.password-strength-weak {
+  color: #ff6b6b;
+}
+
+.password-strength-medium {
+  color: #ffd166;
+}
+
+.password-strength-strong {
+  color: #06d6a0;
+}
+
+.password-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.password-rule {
+  margin: 0;
+  font-size: 13px;
+  color: #b8bfd3;
+}
+
+.password-rule-valid {
+  color: #06d6a0;
+}
+
+.auth-error {
+  color: #ff4d6d;
+}
+
+.auth-error-login {
+  margin: 8px 0 14px;
+}
+
+.auth-error-register-top {
+  margin-top: 12px;
+  margin-bottom: 8px;
+}

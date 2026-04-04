@@ -106,6 +106,17 @@ const updateUserPassword = async (userId, passwordHash) => {
   return result;
 };
 
+const findUserByVerificationToken = async (token) => {
+  const [rows] = await pool.query(
+    `SELECT user_id, username, email, is_verified, verification_token, verification_token_expires
+     FROM users
+     WHERE verification_token = ?`,
+    [token]
+  );
+
+  return rows[0];
+};
+
 module.exports = {
   findUserByEmail,
   findUserByUsername,
@@ -116,5 +127,6 @@ module.exports = {
   markUserAsVerified,
   setPasswordResetToken,
   findUserByPasswordResetToken,
-  updateUserPassword
+  updateUserPassword,
+  findUserByVerificationToken
 };
