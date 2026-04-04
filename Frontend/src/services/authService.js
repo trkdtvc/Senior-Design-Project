@@ -1,10 +1,18 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const handleResponse = async (response) => {
-  const data = await response.json();
+  let data = {};
+
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
 
   if (!response.ok) {
-    throw new Error(data.message || "Something went wrong");
+    const error = new Error(data.message || "Something went wrong");
+    error.response = { data, status: response.status };
+    throw error;
   }
 
   return data;
@@ -38,6 +46,56 @@ export const verifyEmail = async (token) => {
   const response = await fetch(
     `${API_BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`
   );
+
+  return handleResponse(response);
+};
+
+export const resendVerificationEmail = async (email) => {
+  const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email })
+  });
+
+  return handleResponse(response);
+};
+
+export const forgotPassword = async (email) => {
+  const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email })
+  });
+
+  return handleResponse(response);
+};
+
+export const resetPassword = async (token, newPassword, confirmPassword) => {
+  const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      token,
+      newPassword,
+      confirmPassword
+    })
+  });
+
+  return handleResponse(response);
+};
+
+export const getMe = async (token) => {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
 
   return handleResponse(response);
 };

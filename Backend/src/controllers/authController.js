@@ -31,7 +31,11 @@ const getFrontendBaseUrl = () => {
   return process.env.FRONTEND_URL || "http://localhost:5173";
 };
 
-const sendVerificationEmailToUser = async (user, verificationToken, expiresInHours = 24) => {
+const sendVerificationEmailToUser = async (
+  user,
+  verificationToken,
+  expiresInHours = 24
+) => {
   const verificationLink = `${getFrontendBaseUrl()}/verify-email?token=${verificationToken}`;
 
   await sendEmail({
@@ -50,6 +54,43 @@ This link expires in ${expiresInHours} hours.`,
       <p>Click the link below to verify your account:</p>
       <a href="${verificationLink}">${verificationLink}</a>
       <p>This link expires in ${expiresInHours} hours.</p>
+    `
+  });
+};
+
+const sendPasswordResetEmailToUser = async (
+  user,
+  resetToken,
+  expiresInHours = 1
+) => {
+  const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}`;
+
+  await sendEmail({
+    to: user.email,
+    subject: "Reset your password - Your Friendly Neighborhood Chatster",
+    text: `Hello ${user.username},
+
+We received a request to reset your password.
+
+Use the link below to reset it:
+${resetLink}
+
+If you are testing the backend without a frontend yet, use this token in your reset-password request:
+${resetToken}
+
+This link/token expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.
+
+If you did not request this, you can ignore this email.`,
+    html: `
+      <h2>Reset your password</h2>
+      <p>Hello ${user.username},</p>
+      <p>We received a request to reset your password.</p>
+      <p>Use the link below to reset it:</p>
+      <a href="${resetLink}">${resetLink}</a>
+      <p>If you are testing the backend without a frontend yet, use this token in your reset-password request:</p>
+      <p><strong>${resetToken}</strong></p>
+      <p>This link/token expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.</p>
+      <p>If you did not request this, you can ignore this email.</p>
     `
   });
 };
@@ -112,17 +153,18 @@ const registerUser = async (req, res, next) => {
 
 const loginUser = async (req, res, next) => {
   try {
-    const { login, password } = req.body || {};
+    const { login, identity, password } = req.body || {};
+    const loginValue = login || identity;
 
-    if (!login || !password) {
+    if (!loginValue || !password) {
       res.status(400);
       throw new Error("Login and password are required");
     }
 
-    let user = await findUserByEmail(login);
+    let user = await findUserByEmail(loginValue);
 
     if (!user) {
-      user = await findUserByUsername(login);
+      user = await findUserByUsername(loginValue);
     }
 
     if (!user) {
@@ -241,7 +283,7 @@ const resendVerificationEmail = async (req, res, next) => {
   }
 };
 
-const forgotPassword = async (req, res, next) => {
+const requestPasswordReset = async (req, res, next) => {
   try {
     const { email } = req.body || {};
 
@@ -255,7 +297,6 @@ const forgotPassword = async (req, res, next) => {
     if (user) {
       const resetToken = crypto.randomBytes(32).toString("hex");
       const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000);
-      const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}`;
 
       await setPasswordResetToken(
         user.user_id,
@@ -263,34 +304,7 @@ const forgotPassword = async (req, res, next) => {
         resetTokenExpires
       );
 
-      await sendEmail({
-        to: user.email,
-        subject: "Reset your password - Your Friendly Neighborhood Chatster",
-        text: `Hello ${user.username},
-
-We received a request to reset your password.
-
-Use the link below to reset it:
-${resetLink}
-
-If you are testing the backend without a frontend yet, use this token in your reset-password request:
-${resetToken}
-
-This link/token expires in 1 hour.
-
-If you did not request this, you can ignore this email.`,
-        html: `
-          <h2>Reset your password</h2>
-          <p>Hello ${user.username},</p>
-          <p>We received a request to reset your password.</p>
-          <p>Use the link below to reset it:</p>
-          <a href="${resetLink}">${resetLink}</a>
-          <p>If you are testing the backend without a frontend yet, use this token in your reset-password request:</p>
-          <p><strong>${resetToken}</strong></p>
-          <p>This link/token expires in 1 hour.</p>
-          <p>If you did not request this, you can ignore this email.</p>
-        `
-      });
+      await sendPasswordResetEmailToUser(user, resetToken, 1);
     }
 
     return res.status(200).json({
@@ -305,9 +319,14 @@ const resetPassword = async (req, res, next) => {
   try {
     const { token, newPassword, confirmPassword } = req.body || {};
 
-    if (!token || !newPassword || !confirmPassword) {
+    if (!token) {
       res.status(400);
-      throw new Error("Token, new password, and confirm password are required");
+      throw new Error("Invalid password reset token.");
+    }
+
+    if (!newPassword || !confirmPassword) {
+      res.status(400);
+      throw new Error("New password and confirm password are required");
     }
 
     if (newPassword !== confirmPassword) {
@@ -319,7 +338,16 @@ const resetPassword = async (req, res, next) => {
 
     if (!user) {
       res.status(400);
-      throw new Error("Invalid or expired password reset token");
+      throw new Error("Invalid password reset token.");
+    }
+
+    const isExpired =
+      !user.password_reset_token_expires ||
+      new Date(user.password_reset_token_expires) < new Date();
+
+    if (isExpired) {
+      res.status(400);
+      throw new Error("Password reset token has expired.");
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -327,7 +355,7 @@ const resetPassword = async (req, res, next) => {
     await updateUserPassword(user.user_id, passwordHash);
 
     return res.status(200).json({
-      message: "Password reset successfully"
+      message: "Password reset successfully."
     });
   } catch (error) {
     next(error);
@@ -360,6 +388,6 @@ module.exports = {
   getMe,
   verifyEmail,
   resendVerificationEmail,
-  forgotPassword,
+  forgotPassword: requestPasswordReset,
   resetPassword
 };
