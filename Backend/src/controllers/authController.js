@@ -8,7 +8,6 @@ const {
   findUserById,
   createUser,
   setVerificationToken,
-  verifyUserByToken,
   markUserAsVerified,
   setPasswordResetToken,
   findUserByPasswordResetToken,
@@ -26,10 +25,6 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
-};
-
-const getVerificationBaseUrl = () => {
-  return process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
 };
 
 const getFrontendBaseUrl = () => {
@@ -170,7 +165,7 @@ const verifyEmail = async (req, res, next) => {
 
     if (!token) {
       res.status(400);
-      throw new Error("Verification token is missing.");
+      throw new Error("Invalid verification token.");
     }
 
     const user = await findUserByVerificationToken(token);

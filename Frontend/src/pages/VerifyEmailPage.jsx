@@ -13,7 +13,7 @@ const VerifyEmailPage = () => {
 
     if (!token) {
       setStatus("error");
-      setMessage("Verification token is missing.");
+      setMessage("Invalid verification token.");
       return;
     }
 

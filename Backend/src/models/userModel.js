@@ -1,7 +1,7 @@
 const { pool } = require("../config/db");
 
 const findUserByEmail = async (email) => {
-  const [rows] = await pool.query(
+  const [rows] = await pool.execute(
     "SELECT * FROM users WHERE email = ?",
     [email]
   );
@@ -9,7 +9,7 @@ const findUserByEmail = async (email) => {
 };
 
 const findUserByUsername = async (username) => {
-  const [rows] = await pool.query(
+  const [rows] = await pool.execute(
     "SELECT * FROM users WHERE username = ?",
     [username]
   );
@@ -17,7 +17,7 @@ const findUserByUsername = async (username) => {
 };
 
 const findUserById = async (userId) => {
-  const [rows] = await pool.query(
+  const [rows] = await pool.execute(
     "SELECT user_id, username, email, is_verified, created_at, updated_at FROM users WHERE user_id = ?",
     [userId]
   );
@@ -25,7 +25,7 @@ const findUserById = async (userId) => {
 };
 
 const createUser = async (username, email, passwordHash) => {
-  const [result] = await pool.query(
+  const [result] = await pool.execute(
     "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
     [username, email, passwordHash]
   );
@@ -43,12 +43,25 @@ const setVerificationToken = async (userId, token, expiresAt) => {
   return result;
 };
 
+const findUserByVerificationToken = async (token) => {
+  const [rows] = await pool.execute(
+    `SELECT user_id, username, email, is_verified, verification_token, verification_token_expires
+     FROM users
+     WHERE verification_token = ?
+     LIMIT 1`,
+    [token]
+  );
+
+  return rows[0];
+};
+
 const verifyUserByToken = async (token) => {
   const [rows] = await pool.execute(
     `SELECT *
      FROM users
      WHERE verification_token = ?
        AND verification_token_expires > NOW()
+       AND is_verified = 0
      LIMIT 1`,
     [token]
   );
@@ -106,27 +119,16 @@ const updateUserPassword = async (userId, passwordHash) => {
   return result;
 };
 
-const findUserByVerificationToken = async (token) => {
-  const [rows] = await pool.query(
-    `SELECT user_id, username, email, is_verified, verification_token, verification_token_expires
-     FROM users
-     WHERE verification_token = ?`,
-    [token]
-  );
-
-  return rows[0];
-};
-
 module.exports = {
   findUserByEmail,
   findUserByUsername,
   findUserById,
   createUser,
   setVerificationToken,
+  findUserByVerificationToken,
   verifyUserByToken,
   markUserAsVerified,
   setPasswordResetToken,
   findUserByPasswordResetToken,
-  updateUserPassword,
-  findUserByVerificationToken
+  updateUserPassword
 };
