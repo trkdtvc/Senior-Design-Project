@@ -35,9 +35,68 @@ const getServersByUserId = async (userId) => {
   return rows;
 };
 
+const getServerById = async (serverId) => {
+  const [rows] = await pool.query(
+    "SELECT server_id, owner_id, server_name, server_description FROM servers WHERE server_id = ?",
+    [serverId]
+  );
+
+  return rows[0];
+};
+
+const deleteServer = async (serverId) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    await connection.query(
+      `DELETE m
+       FROM messages m
+       INNER JOIN channels c ON m.channel_id = c.channel_id
+       WHERE c.server_id = ?`,
+      [serverId]
+    );
+
+    await connection.query(
+      "DELETE FROM member_roles WHERE member_id IN (SELECT member_id FROM server_members WHERE server_id = ?)",
+      [serverId]
+    );
+
+    await connection.query(
+      "DELETE FROM roles WHERE server_id = ?",
+      [serverId]
+    );
+
+    await connection.query(
+      "DELETE FROM channels WHERE server_id = ?",
+      [serverId]
+    );
+
+    await connection.query(
+      "DELETE FROM server_members WHERE server_id = ?",
+      [serverId]
+    );
+
+    await connection.query(
+      "DELETE FROM servers WHERE server_id = ?",
+      [serverId]
+    );
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 module.exports = {
   createServer,
   addServerMember,
   createDefaultChannel,
-  getServersByUserId
+  getServersByUserId,
+  getServerById,
+  deleteServer
 };

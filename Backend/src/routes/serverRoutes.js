@@ -58,5 +58,6 @@ router.post("/", protect, serverController.createServer);
  *         description: Not authorized
  */
 router.get("/", protect, serverController.getUserServers);
+router.delete("/:serverId", protect, serverController.deleteServer);
 
 module.exports = router;
