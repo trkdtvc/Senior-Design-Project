@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getMe } from "../services/authService";
+import { getUserServers } from "../services/serverService";
 import "../styles/auth.css";
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+
   const [user, setUser] = useState(null);
+  const [servers, setServers] = useState([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -15,7 +18,7 @@ const DashboardPage = () => {
   };
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchDashboardData = async () => {
       const token = localStorage.getItem("token");
 
       if (!token) {
@@ -24,18 +27,31 @@ const DashboardPage = () => {
       }
 
       try {
-        const data = await getMe(token);
-        setUser(data);
+        const userData = await getMe(token);
+        setUser(userData);
+
+        const serverData = await getUserServers(token);
+        console.log("serverData:", serverData);
+
+        if (Array.isArray(serverData)) {
+          setServers(serverData);
+        } else if (Array.isArray(serverData.servers)) {
+          setServers(serverData.servers);
+        } else if (Array.isArray(serverData.data)) {
+          setServers(serverData.data);
+        } else {
+          setServers([]);
+        }
       } catch (err) {
         localStorage.removeItem("token");
-        setError(err.message || "Failed to load user data.");
+        setError(err.message || "Failed to load dashboard data.");
         navigate("/login");
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchUser();
+    fetchDashboardData();
   }, [navigate]);
 
   if (isLoading) {
@@ -59,11 +75,48 @@ const DashboardPage = () => {
 
         {user && (
           <div style={{ marginTop: "1.5rem", textAlign: "left" }}>
-            <p><strong>Username:</strong> {user.username}</p>
-            <p><strong>Email:</strong> {user.email}</p>
-            <p><strong>User ID:</strong> {user.user_id}</p>
+            <p>
+              <strong>Username:</strong> {user.username}
+            </p>
+            <p>
+              <strong>Email:</strong> {user.email}
+            </p>
+            <p>
+              <strong>User ID:</strong> {user.user_id}
+            </p>
           </div>
         )}
+
+        <div style={{ marginTop: "1.5rem", textAlign: "left" }}>
+          <p>
+            <strong>Your Servers:</strong>
+          </p>
+
+          {servers.length === 0 ? (
+            <p>You are not a member of any servers yet.</p>
+          ) : (
+            <ul style={{ paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
+              {servers.map((server) => (
+                <li key={server.server_id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/server/${server.server_id}`)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      color: "inherit",
+                      cursor: "pointer",
+                      textDecoration: "underline"
+                    }}
+                  >
+                    {server.server_name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         <button
           type="button"
