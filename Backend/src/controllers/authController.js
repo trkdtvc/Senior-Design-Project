@@ -326,12 +326,12 @@ const resetPassword = async (req, res, next) => {
 
     if (!newPassword || !confirmPassword) {
       res.status(400);
-      throw new Error("New password and confirm password are required");
+      throw new Error("New password and confirm password are required.");
     }
 
     if (newPassword !== confirmPassword) {
       res.status(400);
-      throw new Error("Passwords do not match");
+      throw new Error("Passwords do not match.");
     }
 
     const user = await findUserByPasswordResetToken(token);
@@ -348,6 +348,16 @@ const resetPassword = async (req, res, next) => {
     if (isExpired) {
       res.status(400);
       throw new Error("Password reset token has expired.");
+    }
+
+    const isSamePassword = await bcrypt.compare(
+      newPassword,
+      user.password_hash
+    );
+
+    if (isSamePassword) {
+      res.status(400);
+      throw new Error("Please do not use the same password you already used.");
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);

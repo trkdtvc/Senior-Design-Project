@@ -80,6 +80,10 @@ const LoginPage = () => {
             onChange={handleChange}
           />
 
+          <p className="auth-forgot-password">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </p>
+
           <button type="submit" disabled={isLoading}>
             {isLoading ? "Signing in..." : "Login"}
           </button>

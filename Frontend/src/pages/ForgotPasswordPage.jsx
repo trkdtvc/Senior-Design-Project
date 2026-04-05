@@ -19,7 +19,7 @@ const ForgotPasswordPage = () => {
 
     if (!email.trim()) {
       setStatus("error");
-      setMessage("Email is required.");
+      setMessage("Email is required");
       return;
     }
 
@@ -49,7 +49,7 @@ const ForgotPasswordPage = () => {
     <div className="auth-page">
       <div className="auth-card">
         <h1 className="auth-logo">YFNC</h1>
-        <p className="auth-subtitle">Reset your password.</p>
+        <p className="auth-subtitle">Password reset</p>
         <p className="auth-description">
           Enter your email and we&apos;ll send you a reset link.
         </p>
@@ -62,12 +62,12 @@ const ForgotPasswordPage = () => {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-form-group">
-            <label htmlFor="email">Email</label>
+            
             <input
               id="email"
               name="email"
               type="email"
-              placeholder="Enter your email"
+              placeholder="Enter your email here:"
               value={email}
               onChange={handleChange}
               disabled={status === "loading"}

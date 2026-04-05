@@ -95,7 +95,7 @@ const setPasswordResetToken = async (userId, token, expiresAt) => {
 
 const findUserByPasswordResetToken = async (token) => {
   const [rows] = await pool.execute(
-    `SELECT user_id, username, email, password_reset_token, password_reset_token_expires
+    `SELECT user_id, username, email, password_hash, password_reset_token, password_reset_token_expires
      FROM users
      WHERE password_reset_token = ?
      LIMIT 1`,
