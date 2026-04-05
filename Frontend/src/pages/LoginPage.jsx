@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { loginUser } from "../services/authService";
 import "../styles/auth.css";
 
 const LoginPage = () => {
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     login: "",
     password: ""
@@ -40,13 +42,16 @@ const LoginPage = () => {
 
       const data = await loginUser(formData);
 
+      localStorage.setItem("token", data.token);
+
       setSuccess(data.message || "Login successful.");
-      console.log("Login successful:", data);
 
       setFormData({
         login: "",
         password: ""
       });
+
+      navigate("/dashboard");
     } catch (err) {
       setError(err.message || "Login failed.");
     } finally {
