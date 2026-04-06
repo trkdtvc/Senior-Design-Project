@@ -303,7 +303,7 @@ textarea.auth-input {
   background-color: #b91c1c;
 }
 
-/* Server CSS starts here:*/
+/* Server CSS starts here: */
 
 .server-page {
   height: 100vh;
@@ -602,14 +602,67 @@ textarea.auth-input {
   align-items: center;
 }
 
-.server-message-input {
-  flex: 1;
-}
-
 .server-send-button {
   width: 150px;
   margin-top: 0;
   flex-shrink: 0;
+}
+
+.server-members-panel {
+  width: 260px;
+  min-width: 260px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 24px;
+  background-color: #0f1420;
+  border: 1px solid #232734;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.server-members-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.server-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.server-member-item {
+  padding: 12px 14px;
+  border: 1px solid #232734;
+  border-radius: 14px;
+  background-color: #151b28;
+}
+
+.server-member-name {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.server-member-email {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #98a2b3;
+  word-break: break-word;
+}
+
+.server-members-empty {
+  margin: 0;
+  color: #98a2b3;
+  line-height: 1.5;
 }
 
 @media (max-width: 1100px) {
@@ -625,7 +678,8 @@ textarea.auth-input {
     flex-direction: column;
   }
 
-  .server-sidebar {
+  .server-sidebar,
+  .server-members-panel {
     width: 100%;
     min-width: 0;
     height: auto;
@@ -653,7 +707,8 @@ textarea.auth-input {
 
   .server-sidebar,
   .server-main-header,
-  .server-message-form {
+  .server-message-form,
+  .server-members-panel {
     padding: 16px;
     border-radius: 20px;
   }
@@ -687,7 +742,7 @@ textarea.auth-input {
   border: 1px solid #3a3d44;
   border-radius: 8px;
   background-color: #2b2d31;
-  color: white;
+  color: #ffffff;
   font: inherit;
   line-height: 1.4;
   resize: none;
@@ -699,6 +754,35 @@ textarea.auth-input {
   border-color: #5865f2;
 }
 
-.message-input:focus {
-  border-color: #5865f2;
+.server-inline-success {
+  margin: 0;
+  text-align: left;
+}
+
+.server-invite-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.server-invite-item {
+  padding: 12px 14px;
+  border: 1px solid #232734;
+  border-radius: 14px;
+  background-color: #151b28;
+}
+
+.server-invite-code {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ffffff;
+  word-break: break-all;
+}
+
+.server-invite-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #98a2b3;
 }

@@ -1,17 +1,21 @@
-const serverMemberModel = require("../models/serverMemberModel");
+const {
+  isUserMemberOfServer,
+  getMembersByServerId
+} = require("../models/serverMemberModel");
 
 const getServerMembers = async (req, res, next) => {
   try {
     const { serverId } = req.params;
+    const userId = req.user.user_id;
 
-    const isMember = await serverMemberModel.isUserMemberOfServer(serverId, req.user.user_id);
+    const isMember = await isUserMemberOfServer(serverId, userId);
 
     if (!isMember) {
       res.status(403);
-      throw new Error("You are not a member of this server");
+      throw new Error("Access denied. You are not a member of this server.");
     }
 
-    const members = await serverMemberModel.getMembersByServerId(serverId);
+    const members = await getMembersByServerId(serverId);
 
     res.status(200).json(members);
   } catch (error) {

@@ -6,6 +6,11 @@ import {
   getChannelMessages,
   createMessage
 } from "../services/messageService";
+import { getServerMembers } from "../services/serverMemberService";
+import {
+  createServerInvite,
+  getServerInvites
+} from "../services/serverInviteService";
 import "../styles/auth.css";
 
 const normalizeServers = (data) => {
@@ -25,6 +30,20 @@ const normalizeChannels = (data) => {
 const normalizeMessages = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.messages)) return data.messages;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const normalizeMembers = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.members)) return data.members;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const normalizeInvites = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.invites)) return data.invites;
   if (Array.isArray(data?.data)) return data.data;
   return [];
 };
@@ -56,8 +75,47 @@ const getMessageContent = (message) =>
 const getMessageTimestamp = (message) =>
   message?.created_at || message?.createdAt || message?.timestamp || null;
 
+const getMemberId = (member) =>
+  member?.member_id || member?.id || member?.memberId || null;
+
+const getMemberName = (member) =>
+  member?.username || member?.name || "Unknown user";
+
+const getMemberEmail = (member) => member?.email || "";
+
+const isOwner = (member) =>
+  member?.is_owner === 1 || member?.is_owner === true || false;
+
+const getInviteId = (invite) =>
+  invite?.invite_id || invite?.id || invite?.inviteId || null;
+
+const getInviteCode = (invite) =>
+  invite?.invite_code || invite?.code || "";
+
+const getInviteExpiresAt = (invite) =>
+  invite?.expires_at || invite?.expiresAt || null;
+
 const formatMessageTimestamp = (timestamp) => {
   if (!timestamp) return "";
+
+  const date = new Date(timestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+};
+
+const formatInviteExpiry = (timestamp) => {
+  if (!timestamp) {
+    return "No expiration";
+  }
 
   const date = new Date(timestamp);
 
@@ -83,6 +141,8 @@ const ServerPage = () => {
 
   const [server, setServer] = useState(null);
   const [channels, setChannels] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [invites, setInvites] = useState([]);
   const [activeChannelId, setActiveChannelId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [channelName, setChannelName] = useState("");
@@ -90,12 +150,16 @@ const ServerPage = () => {
   const [error, setError] = useState("");
   const [channelError, setChannelError] = useState("");
   const [messagesError, setMessagesError] = useState("");
+  const [membersError, setMembersError] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [inviteSuccess, setInviteSuccess] = useState("");
   const [createError, setCreateError] = useState("");
   const [messageCreateError, setMessageCreateError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -164,6 +228,54 @@ const ServerPage = () => {
     [navigate]
   );
 
+  const loadMembers = useCallback(async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!serverId) {
+      setMembers([]);
+      setMembersError("");
+      return;
+    }
+
+    try {
+      setMembersError("");
+      const memberData = await getServerMembers(serverId, token);
+      setMembers(normalizeMembers(memberData));
+    } catch (error) {
+      setMembers([]);
+      setMembersError(error.message || "Failed to load server members.");
+    }
+  }, [serverId, navigate]);
+
+  const loadInvites = useCallback(async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!serverId) {
+      setInvites([]);
+      setInviteError("");
+      return;
+    }
+
+    try {
+      setInviteError("");
+      const inviteData = await getServerInvites(serverId, token);
+      setInvites(normalizeInvites(inviteData));
+    } catch (error) {
+      setInvites([]);
+      setInviteError(error.message || "Failed to load invites.");
+    }
+  }, [serverId, navigate]);
+
   useEffect(() => {
     const fetchServerPageData = async () => {
       const token = localStorage.getItem("token");
@@ -178,6 +290,9 @@ const ServerPage = () => {
         setError("");
         setChannelError("");
         setMessagesError("");
+        setMembersError("");
+        setInviteError("");
+        setInviteSuccess("");
         setCreateError("");
         setMessageCreateError("");
         setDeleteError("");
@@ -193,6 +308,8 @@ const ServerPage = () => {
           setError("Server not found.");
           setServer(null);
           setChannels([]);
+          setMembers([]);
+          setInvites([]);
           setActiveChannelId(null);
           setMessages([]);
           setMessageContent("");
@@ -232,6 +349,9 @@ const ServerPage = () => {
           setMessageContent("");
           setChannelError(error.message || "Failed to load channels.");
         }
+
+        await loadMembers();
+        await loadInvites();
       } catch (error) {
         localStorage.removeItem("token");
         navigate("/login");
@@ -241,7 +361,7 @@ const ServerPage = () => {
     };
 
     fetchServerPageData();
-  }, [serverId, navigate]);
+  }, [serverId, navigate, loadMembers, loadInvites]);
 
   useEffect(() => {
     if (!activeChannelId) {
@@ -367,6 +487,34 @@ const ServerPage = () => {
       setCreateError(error.message || "Failed to create channel.");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleCreateInvite = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setIsCreatingInvite(true);
+      setInviteError("");
+      setInviteSuccess("");
+
+      const response = await createServerInvite(serverId, token);
+      setInviteSuccess(
+        response?.invite_code
+          ? `Invite created: ${response.invite_code}`
+          : "Invite created successfully."
+      );
+
+      await loadInvites();
+    } catch (error) {
+      setInviteError(error.message || "Failed to create invite.");
+    } finally {
+      setIsCreatingInvite(false);
     }
   };
 
@@ -590,6 +738,49 @@ const ServerPage = () => {
               </form>
             </div>
 
+            <div className="server-section">
+              <h2 className="server-section-title">Invites</h2>
+
+              {inviteError && (
+                <p className="auth-error server-inline-error">{inviteError}</p>
+              )}
+
+              {inviteSuccess && (
+                <p className="auth-success server-inline-success">
+                  {inviteSuccess}
+                </p>
+              )}
+
+              <button
+                type="button"
+                className="auth-button"
+                onClick={handleCreateInvite}
+                disabled={isCreatingInvite}
+              >
+                {isCreatingInvite ? "Creating..." : "Create invite code"}
+              </button>
+
+              {invites.length === 0 ? (
+                <p className="server-empty-text">No active invites.</p>
+              ) : (
+                <div className="server-invite-list">
+                  {invites.map((invite) => (
+                    <div
+                      key={getInviteId(invite)}
+                      className="server-invite-item"
+                    >
+                      <p className="server-invite-code">
+                        {getInviteCode(invite)}
+                      </p>
+                      <p className="server-invite-meta">
+                        Expires: {formatInviteExpiry(getInviteExpiresAt(invite))}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {deleteError && (
               <p className="auth-error server-inline-error">{deleteError}</p>
             )}
@@ -695,6 +886,35 @@ const ServerPage = () => {
             </div>
           </form>
         </main>
+
+        <aside className="server-members-panel">
+          <h2 className="server-members-title">Members</h2>
+
+          {membersError && (
+            <p className="auth-error server-inline-error">{membersError}</p>
+          )}
+
+          {members.length === 0 ? (
+            <p className="server-members-empty">No members found.</p>
+          ) : (
+            <div className="server-members-list">
+              {members.map((member) => (
+                <div
+                  key={getMemberId(member)}
+                  className="server-member-item"
+                >
+                  <div className="server-member-name">
+                    {getMemberName(member)}
+                    {isOwner(member) ? " (Owner)" : ""}
+                  </div>
+                  <div className="server-member-email">
+                    {getMemberEmail(member)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   );

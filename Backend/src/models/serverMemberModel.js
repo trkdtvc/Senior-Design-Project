@@ -1,12 +1,32 @@
 const { pool } = require("../config/db");
 
+const addServerMember = async (serverId, userId) => {
+  const [result] = await pool.execute(
+    "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+    [serverId, userId]
+  );
+
+  return result;
+};
+
 const getMembersByServerId = async (serverId) => {
   const [rows] = await pool.execute(
-    `SELECT sm.member_id, sm.server_id, sm.user_id, sm.joined_at, u.username, u.email
+    `SELECT
+      sm.member_id,
+      sm.server_id,
+      sm.user_id,
+      sm.joined_at,
+      u.username,
+      u.email,
+      CASE
+        WHEN s.owner_id = u.user_id THEN 1
+        ELSE 0
+      END AS is_owner
      FROM server_members sm
      JOIN users u ON sm.user_id = u.user_id
+     JOIN servers s ON sm.server_id = s.server_id
      WHERE sm.server_id = ?
-     ORDER BY sm.member_id ASC`,
+     ORDER BY is_owner DESC, u.username ASC`,
     [serverId]
   );
 
@@ -15,7 +35,7 @@ const getMembersByServerId = async (serverId) => {
 
 const isUserMemberOfServer = async (serverId, userId) => {
   const [rows] = await pool.execute(
-    "SELECT member_id FROM server_members WHERE server_id = ? AND user_id = ?",
+    "SELECT member_id FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
     [serverId, userId]
   );
 
@@ -23,6 +43,7 @@ const isUserMemberOfServer = async (serverId, userId) => {
 };
 
 module.exports = {
+  addServerMember,
   getMembersByServerId,
   isUserMemberOfServer
 };

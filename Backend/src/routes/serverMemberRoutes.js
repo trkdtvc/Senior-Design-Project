@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const serverMemberController = require("../controllers/serverMemberController");
+const { getServerMembers } = require("../controllers/serverMemberController");
 const { protect } = require("../middleware/authMiddleware");
 
 /**
@@ -24,15 +24,15 @@ const { protect } = require("../middleware/authMiddleware");
  *         required: true
  *         schema:
  *           type: integer
- *         description: The ID of the server
+ *         description: Server ID
  *     responses:
  *       200:
- *         description: Server members returned successfully
+ *         description: Server members fetched successfully
  *       401:
- *         description: Not authorized
+ *         description: Unauthorized
  *       403:
- *         description: You are not a member of this server
+ *         description: Access denied
  */
-router.get("/:serverId", protect, serverMemberController.getServerMembers);
+router.get("/:serverId", protect, getServerMembers);
 
 module.exports = router;
