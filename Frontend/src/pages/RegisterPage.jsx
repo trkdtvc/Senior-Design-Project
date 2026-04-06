@@ -152,7 +152,7 @@ const RegisterPage = () => {
     <div className="auth-page">
       <div className="auth-card">
         <h1 className="auth-logo">YFNC</h1>
-        <p className="auth-subtitle">Create your account to get started.</p>
+        <p className="auth-subtitle">Create an account to get started.</p>
 
         {isGeneralError && <p className="auth-error">{error}</p>}
         {success && <p className="auth-success">{success}</p>}

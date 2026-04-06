@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getUserServers, deleteServer } from "../services/serverService";
-import { getServerChannels, createChannel } from "../services/channelService";
+import {
+  getServerChannels,
+  createChannel,
+  deleteChannel as deleteChannelById
+} from "../services/channelService";
 import {
   getChannelMessages,
   createMessage
@@ -154,6 +158,7 @@ const ServerPage = () => {
   const [inviteError, setInviteError] = useState("");
   const [inviteSuccess, setInviteSuccess] = useState("");
   const [createError, setCreateError] = useState("");
+  const [deleteChannelError, setDeleteChannelError] = useState("");
   const [messageCreateError, setMessageCreateError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -161,6 +166,7 @@ const ServerPage = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isDeletingChannel, setIsDeletingChannel] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const resetMessageInputHeight = () => {
@@ -168,14 +174,14 @@ const ServerPage = () => {
       return;
     }
 
-    messageInputRef.current.style.height = "44px";
+    messageInputRef.current.style.height = "48px";
   };
 
   const handleMessageInputChange = (e) => {
     setMessageContent(e.target.value);
     setMessageCreateError("");
-    e.target.style.height = "44px";
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+    e.target.style.height = "48px";
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 148)}px`;
   };
 
   const loadMessages = useCallback(
@@ -294,6 +300,7 @@ const ServerPage = () => {
         setInviteError("");
         setInviteSuccess("");
         setCreateError("");
+        setDeleteChannelError("");
         setMessageCreateError("");
         setDeleteError("");
 
@@ -423,6 +430,7 @@ const ServerPage = () => {
   const handleSelectChannel = (channelId) => {
     shouldAutoScrollRef.current = true;
     setActiveChannelId(channelId);
+    setDeleteChannelError("");
     setMessageCreateError("");
     setMessageContent("");
 
@@ -449,6 +457,7 @@ const ServerPage = () => {
     try {
       setIsCreating(true);
       setCreateError("");
+      setDeleteChannelError("");
 
       const response = await createChannel(token, {
         server_id: serverId,
@@ -487,6 +496,58 @@ const ServerPage = () => {
       setCreateError(error.message || "Failed to create channel.");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleDeleteChannel = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!activeChannel) {
+      setDeleteChannelError("Select a channel first.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete #${getChannelName(activeChannel)}? This cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsDeletingChannel(true);
+      setDeleteChannelError("");
+      setMessageCreateError("");
+      shouldAutoScrollRef.current = true;
+
+      await deleteChannelById(token, getChannelId(activeChannel));
+
+      const refreshedChannelData = await getServerChannels(token, serverId);
+      const refreshedChannels = normalizeChannels(refreshedChannelData);
+
+      setChannels(refreshedChannels);
+      setMessages([]);
+      setMessageContent("");
+
+      if (refreshedChannels.length > 0) {
+        setActiveChannelId(getChannelId(refreshedChannels[0]));
+      } else {
+        setActiveChannelId(null);
+      }
+
+      requestAnimationFrame(() => {
+        resetMessageInputHeight();
+      });
+    } catch (error) {
+      setDeleteChannelError(error.message || "Failed to delete channel.");
+    } finally {
+      setIsDeletingChannel(false);
     }
   };
 
@@ -617,6 +678,16 @@ const ServerPage = () => {
     (channel) => String(getChannelId(channel)) === String(activeChannelId)
   );
 
+  const selectedChannelName = activeChannel
+    ? getChannelName(activeChannel)
+    : "";
+
+  const isGeneralChannelSelected =
+    selectedChannelName.trim().toLowerCase() === "general";
+
+  const canDeleteSelectedChannel =
+    !!activeChannel && channels.length > 1 && !isGeneralChannelSelected;
+
   if (isLoading) {
     return (
       <div className="auth-page">
@@ -695,6 +766,31 @@ const ServerPage = () => {
                     );
                   })}
                 </div>
+              )}
+
+              {deleteChannelError && (
+                <p className="auth-error server-inline-error">
+                  {deleteChannelError}
+                </p>
+              )}
+              
+              {activeChannel && isGeneralChannelSelected && (
+                <p className="server-empty-text">
+                  The "general" channel cannot be deleted.
+                </p>
+              )}
+              
+              {activeChannel && !isGeneralChannelSelected && (
+                <button
+                 type="button"
+                 className="auth-button auth-button-danger"
+                 onClick={handleDeleteChannel}
+                 disabled={!canDeleteSelectedChannel || isDeletingChannel}
+                >
+                  {isDeletingChannel
+                   ? "Deleting..."
+                   : `Delete #${getChannelName(activeChannel)}`}
+                </button>
               )}
             </div>
           </div>

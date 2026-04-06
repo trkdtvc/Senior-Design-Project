@@ -71,4 +71,33 @@ router.post("/", protect, channelController.createChannel);
  */
 router.get("/:serverId", protect, channelController.getServerChannels);
 
+/**
+ * @swagger
+ * /api/channels/{channelId}:
+ *   delete:
+ *     summary: Delete a channel
+ *     tags: [Channels]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the channel
+ *     responses:
+ *       200:
+ *         description: Channel deleted successfully
+ *       400:
+ *         description: Invalid delete request
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: You are not a member of this server
+ *       404:
+ *         description: Channel not found
+ */
+router.delete("/:channelId", protect, channelController.deleteChannel);
+
 module.exports = router;

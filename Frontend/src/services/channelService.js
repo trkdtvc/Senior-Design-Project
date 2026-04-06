@@ -33,3 +33,14 @@ export const createChannel = async (token, channelData) => {
 
   return handleResponse(response);
 };
+
+export const deleteChannel = async (token, channelId) => {
+  const response = await fetch(`${API_BASE_URL}/channels/${channelId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  return handleResponse(response);
+};

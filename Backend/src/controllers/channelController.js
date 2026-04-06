@@ -53,7 +53,59 @@ const getServerChannels = async (req, res, next) => {
   }
 };
 
+const deleteChannel = async (req, res, next) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.user_id;
+
+    if (!channelId) {
+      res.status(400);
+      throw new Error("Channel ID is required");
+    }
+
+    const channel = await channelModel.getChannelById(channelId);
+
+    if (!channel) {
+      res.status(404);
+      throw new Error("Channel not found");
+    }
+
+    const isMember = await channelModel.isUserMemberOfServer(
+      channel.server_id,
+      userId
+    );
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this server");
+    }
+
+    const serverChannels = await channelModel.getChannelsByServerId(
+      channel.server_id
+    );
+
+    if (serverChannels.length <= 1) {
+      res.status(400);
+      throw new Error("You cannot delete the last remaining channel");
+    }
+
+    if (channel.channel_name.trim().toLowerCase() === "general") {
+      res.status(400);
+      throw new Error('The "general" channel cannot be deleted');
+    }
+
+    await channelModel.deleteChannel(channelId);
+
+    res.status(200).json({
+      message: "Channel deleted successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createChannel,
-  getServerChannels
+  getServerChannels,
+  deleteChannel
 };

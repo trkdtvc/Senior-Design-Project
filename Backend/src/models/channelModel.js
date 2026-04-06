@@ -21,6 +21,26 @@ const getChannelsByServerId = async (serverId) => {
   return rows;
 };
 
+const getChannelById = async (channelId) => {
+  const [rows] = await pool.query(
+    `SELECT channel_id, server_id, channel_name, created_at, updated_at
+     FROM channels
+     WHERE channel_id = ?`,
+    [channelId]
+  );
+
+  return rows[0];
+};
+
+const deleteChannel = async (channelId) => {
+  const [result] = await pool.query(
+    "DELETE FROM channels WHERE channel_id = ?",
+    [channelId]
+  );
+
+  return result;
+};
+
 const isUserMemberOfServer = async (serverId, userId) => {
   const [rows] = await pool.query(
     `SELECT *
@@ -35,5 +55,7 @@ const isUserMemberOfServer = async (serverId, userId) => {
 module.exports = {
   createChannel,
   getChannelsByServerId,
+  getChannelById,
+  deleteChannel,
   isUserMemberOfServer
 };
