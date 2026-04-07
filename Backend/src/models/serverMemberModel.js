@@ -42,8 +42,18 @@ const isUserMemberOfServer = async (serverId, userId) => {
   return rows.length > 0;
 };
 
+const removeServerMember = async (serverId, userId) => {
+  const [result] = await pool.execute(
+    "DELETE FROM server_members WHERE server_id = ? AND user_id = ?",
+    [serverId, userId]
+  );
+
+  return result;
+};
+
 module.exports = {
   addServerMember,
   getMembersByServerId,
-  isUserMemberOfServer
+  isUserMemberOfServer,
+  removeServerMember
 };

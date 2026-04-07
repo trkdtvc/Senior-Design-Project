@@ -73,10 +73,20 @@ const deactivateInvite = async (inviteId) => {
   return result;
 };
 
+const deactivateInvitesByServerId = async (serverId) => {
+  const [result] = await pool.execute(
+    "UPDATE server_invites SET is_active = 0 WHERE server_id = ? AND is_active = 1",
+    [serverId]
+  );
+
+  return result;
+};
+
 module.exports = {
   createServerInvite,
   getInviteByCode,
   getActiveInvitesByServerId,
   isInviteCodeInUse,
-  deactivateInvite
+  deactivateInvite,
+  deactivateInvitesByServerId
 };

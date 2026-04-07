@@ -16,6 +16,7 @@ import {
   getServerInvites
 } from "../services/serverInviteService";
 import "../styles/auth.css";
+import { getMe } from "../services/authService";
 
 const normalizeServers = (data) => {
   if (Array.isArray(data)) return data;
@@ -86,6 +87,12 @@ const getMemberName = (member) =>
   member?.username || member?.name || "Unknown user";
 
 const getMemberEmail = (member) => member?.email || "";
+
+const getMemberUserId = (member) =>
+  member?.user_id || member?.userId || member?.id || null;
+
+const getServerOwnerId = (server) =>
+  server?.owner_id || server?.ownerId || null;
 
 const isOwner = (member) =>
   member?.is_owner === 1 || member?.is_owner === true || false;
@@ -168,6 +175,9 @@ const ServerPage = () => {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isDeletingChannel, setIsDeletingChannel] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [inviteExpiryDays, setInviteExpiryDays] = useState("7");
+  const [copiedInviteId, setCopiedInviteId] = useState(null);
 
   const resetMessageInputHeight = () => {
     if (!messageInputRef.current) {
@@ -303,6 +313,9 @@ const ServerPage = () => {
         setDeleteChannelError("");
         setMessageCreateError("");
         setDeleteError("");
+
+        const currentUserData = await getMe(token);
+        setCurrentUser(currentUserData);
 
         const serverData = await getUserServers(token);
         const servers = normalizeServers(serverData);
@@ -552,32 +565,48 @@ const ServerPage = () => {
   };
 
   const handleCreateInvite = async () => {
-    const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token");
+  
+  if (!token) {
+    navigate("/login");
+    return;
+  }
 
-    if (!token) {
-      navigate("/login");
-      return;
-    }
+  try {
+    setIsCreatingInvite(true);
+    setInviteError("");
+    setInviteSuccess("");
+    setCopiedInviteId(null);
 
-    try {
-      setIsCreatingInvite(true);
-      setInviteError("");
-      setInviteSuccess("");
+    const payload = inviteExpiryDays
+      ? { expires_in_days: Number(inviteExpiryDays) }
+      : {};
 
-      const response = await createServerInvite(serverId, token);
-      setInviteSuccess(
-        response?.invite_code
-          ? `Invite created: ${response.invite_code}`
-          : "Invite created successfully."
-      );
+    const response = await createServerInvite(serverId, token, payload);
 
-      await loadInvites();
-    } catch (error) {
-      setInviteError(error.message || "Failed to create invite.");
-    } finally {
-      setIsCreatingInvite(false);
-    }
-  };
+    setInviteSuccess(
+      response?.invite_code
+        ? `Invite created: ${response.invite_code}`
+        : "Invite created successfully."
+    );
+
+    await loadInvites();
+  } catch (error) {
+    setInviteError(error.message || "Failed to create invite.");
+  } finally {
+    setIsCreatingInvite(false);
+  }
+};
+
+const handleCopyInvite = async (inviteCode, inviteId) => {
+  try {
+    await navigator.clipboard.writeText(inviteCode);
+    setCopiedInviteId(inviteId);
+    setInviteSuccess(`Invite code copied: ${inviteCode}`);
+  } catch (error) {
+    setInviteError("Failed to copy invite code.");
+  }
+};
 
   const handleSendMessage = async (e) => {
     if (e) {
@@ -674,6 +703,50 @@ const ServerPage = () => {
     }
   };
 
+  const handleLeaveServer = async () => {
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    navigate("/login");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Are you sure you want to leave "${getServerName(server)}"?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setIsDeleting(true);
+    setDeleteError("");
+
+    const response = await fetch(
+      `http://localhost:5000/api/server-members/${serverId}/leave`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to leave server.");
+    }
+
+    navigate("/dashboard");
+  } catch (error) {
+    setDeleteError(error.message || "Failed to leave server.");
+  } finally {
+    setIsDeleting(false);
+  }
+};
+
   const activeChannel = channels.find(
     (channel) => String(getChannelId(channel)) === String(activeChannelId)
   );
@@ -687,6 +760,17 @@ const ServerPage = () => {
 
   const canDeleteSelectedChannel =
     !!activeChannel && channels.length > 1 && !isGeneralChannelSelected;
+    
+    const currentUserId = currentUser?.user_id || currentUser?.id || null;
+    
+    const currentUserIsOwner = 
+     (server && currentUserId
+      ? String(getServerOwnerId(server)) === String(currentUserId)
+      : false) ||
+      members.some(
+        (member) =>
+          String(getMemberUserId(member)) === String(currentUserId) && isOwner(member)
+      );
 
   if (isLoading) {
     return (
@@ -847,6 +931,23 @@ const ServerPage = () => {
                 </p>
               )}
 
+              <div className="auth-form-group">
+                <label htmlFor="inviteExpiryDays" className="auth-label">
+                  Expiration
+                </label>
+                <select
+                 id="inviteExpiryDays"
+                 className="auth-input"
+                 value={inviteExpiryDays}
+                 onChange={(e) => setInviteExpiryDays(e.target.value)}
+                >
+                  <option value="1">1 day</option>
+                  <option value="3">3 days</option>
+                  <option value="7">7 days</option>
+                  <option value="30">30 days</option>
+                </select>
+              </div>
+
               <button
                 type="button"
                 className="auth-button"
@@ -865,12 +966,27 @@ const ServerPage = () => {
                       key={getInviteId(invite)}
                       className="server-invite-item"
                     >
-                      <p className="server-invite-code">
+                      <button
+                       type="button"
+                      className="server-invite-code"
+                      onClick={() => handleCopyInvite(getInviteCode(invite), getInviteId(invite))}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        textAlign: "left",
+                        width: "100%"
+                        }}
+                      >
                         {getInviteCode(invite)}
-                      </p>
-                      <p className="server-invite-meta">
-                        Expires: {formatInviteExpiry(getInviteExpiresAt(invite))}
-                      </p>
+                        </button>
+                         <p className="server-invite-meta">
+                          Expires: {formatInviteExpiry(getInviteExpiresAt(invite))}
+                        </p>
+                         {copiedInviteId === getInviteId(invite) && (
+                          <p className="auth-success server-inline-success">Copied to clipboard.</p>
+                          )}
                     </div>
                   ))}
                 </div>
@@ -880,15 +996,26 @@ const ServerPage = () => {
             {deleteError && (
               <p className="auth-error server-inline-error">{deleteError}</p>
             )}
-
-            <button
-              type="button"
-              className="auth-button auth-button-danger"
-              onClick={handleDeleteServer}
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete server"}
-            </button>
+            
+            {currentUserIsOwner ? (
+              <button
+               type="button"
+               className="auth-button auth-button-danger"
+               onClick={handleDeleteServer}
+               disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete server"}
+              </button>
+            ) : (
+              <button
+               type="button"
+               className="auth-button auth-button-danger"
+               onClick={handleLeaveServer}
+               disabled={isDeleting}
+              >
+                {isDeleting ? "Leaving..." : "Leave server"}
+              </button>
+            )}
           </div>
         </aside>
 

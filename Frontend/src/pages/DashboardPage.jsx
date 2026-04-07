@@ -4,6 +4,8 @@ import { getMe } from "../services/authService";
 import { getUserServers, createServer } from "../services/serverService";
 import "../styles/auth.css";
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
 const normalizeServers = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.servers)) return data.servers;
@@ -34,6 +36,10 @@ const DashboardPage = () => {
   });
   const [createError, setCreateError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  
+  const [inviteCode, setInviteCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -89,6 +95,11 @@ const DashboardPage = () => {
     setCreateError("");
   };
 
+  const handleInviteChange = (e) => {
+    setInviteCode(e.target.value);
+    setJoinError("");
+  };
+
   const handleCreateServer = async (e) => {
     e.preventDefault();
 
@@ -140,6 +151,56 @@ const DashboardPage = () => {
       );
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleJoinServer = async (e) => {
+    e.preventDefault();
+    
+    const token = localStorage.getItem("token");
+    const trimmedInviteCode = inviteCode.trim();
+    
+    if (!trimmedInviteCode) {
+      setJoinError("Invite code is required.");
+      return;
+    }
+    
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+    
+    try {
+      setIsJoining(true);
+      setJoinError("");
+      
+      const response = await fetch(`${API_BASE_URL}/server-invites/join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          invite_code: trimmedInviteCode
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to join server.");
+      }
+      
+      setInviteCode("");
+      await loadServers(token);
+      
+      if (data.server_id) {
+        navigate(`/server/${data.server_id}`);
+      }
+    } catch (error) {
+      setJoinError(error.message || "Failed to join server.");
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -200,6 +261,37 @@ const DashboardPage = () => {
       })}
     </div>
   )}
+</div>
+
+<div style={{ textAlign: "left", marginTop: "1.5rem", marginBottom: "1.5rem" }}>
+  <h2 style={{ marginBottom: "0.75rem" }}>Join a server</h2>
+
+  {joinError && <p className="auth-error">{joinError}</p>}
+
+  <form onSubmit={handleJoinServer}>
+    <div className="auth-form-group">
+      <label htmlFor="invite_code" className="auth-label">
+        Invite code
+      </label>
+      <input
+        id="invite_code"
+        name="invite_code"
+        type="text"
+        className="auth-input"
+        value={inviteCode}
+        onChange={handleInviteChange}
+        placeholder="Enter invite code"
+      />
+    </div>
+
+    <button
+      type="submit"
+      className="auth-button"
+      disabled={isJoining}
+    >
+      {isJoining ? "Joining..." : "Join server"}
+    </button>
+  </form>
 </div>
 
 <div style={{ textAlign: "left", marginTop: "1.5rem", marginBottom: "1.5rem" }}>

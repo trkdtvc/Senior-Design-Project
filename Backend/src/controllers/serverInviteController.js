@@ -5,6 +5,7 @@ const {
   getActiveInvitesByServerId,
   isInviteCodeInUse,
   deactivateInvite,
+  deactivateInvitesByServerId
 } = require("../models/serverInviteModel")
 
 const {
@@ -52,6 +53,8 @@ const createInvite = async (req, res, next) => {
       expiresAt = expirationDate;
     }
 
+    await deactivateInvitesByServerId(serverId);
+    
     const inviteCode = await generateInviteCode();
 
     await createServerInvite(serverId, userId, inviteCode, expiresAt);
