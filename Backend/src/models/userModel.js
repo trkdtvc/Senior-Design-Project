@@ -18,9 +18,21 @@ const findUserByUsername = async (username) => {
 
 const findUserById = async (userId) => {
   const [rows] = await pool.execute(
-    "SELECT user_id, username, email, is_verified, created_at, updated_at FROM users WHERE user_id = ?",
+    `SELECT
+      user_id,
+      username,
+      email,
+      is_verified,
+      status,
+      is_online,
+      last_seen_at,
+      created_at,
+      updated_at
+     FROM users
+     WHERE user_id = ?`,
     [userId]
   );
+
   return rows[0];
 };
 
@@ -118,6 +130,29 @@ const updateUserPassword = async (userId, passwordHash) => {
   return result;
 };
 
+const updateUserPresenceStatus = async (userId, status) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET status = ?
+     WHERE user_id = ?`,
+    [status, userId]
+  );
+
+  return result;
+};
+
+const setUserOnlineState = async (userId, isOnline, lastSeenAt = null) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET is_online = ?,
+         last_seen_at = ?
+     WHERE user_id = ?`,
+    [isOnline ? 1 : 0, lastSeenAt, userId]
+  );
+
+  return result;
+};
+
 module.exports = {
   findUserByEmail,
   findUserByUsername,
@@ -129,5 +164,7 @@ module.exports = {
   markUserAsVerified,
   setPasswordResetToken,
   findUserByPasswordResetToken,
-  updateUserPassword
+  updateUserPassword,
+  updateUserPresenceStatus,
+  setUserOnlineState
 };

@@ -385,7 +385,10 @@ const getMe = async (req, res, next) => {
       user_id: user.user_id,
       username: user.username,
       email: user.email,
-      is_verified: user.is_verified
+      is_verified: user.is_verified,
+      status: user.status || "online",
+      is_online: Boolean(user.is_online),
+      last_seen_at: user.last_seen_at
     });
   } catch (error) {
     next(error);

@@ -96,6 +96,17 @@ const getMemberEmail = (member) => member?.email || "";
 const getMemberUserId = (member) =>
   member?.user_id || member?.userId || member?.id || null;
 
+const getMemberPresenceStatus = (member) =>
+  member?.presence_status || member?.presenceStatus || "offline";
+
+const getReadablePresenceStatus = (status) => {
+  return status === "online" ? "Online" : "Offline";
+};
+
+const getPresenceColor = (status) => {
+  return status === "online" ? "#23a55a" : "#f23f43";
+};
+
 const getServerOwnerId = (server) =>
   server?.owner_id || server?.ownerId || null;
 
@@ -299,8 +310,18 @@ const ServerPage = () => {
   }, [serverId, navigate]);
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
     const socket = io(SOCKET_URL, {
-      transports: ["websocket", "polling"]
+      transports: ["websocket", "polling"],
+      auth: {
+        token
+      }
     });
 
     socketRef.current = socket;
@@ -309,7 +330,57 @@ const ServerPage = () => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [navigate]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+
+    if (!socket || !serverId) {
+      return;
+    }
+
+    const serverIdString = String(serverId);
+
+    socket.emit("join_server", serverIdString);
+
+    return () => {
+      socket.emit("leave_server", serverIdString);
+    };
+  }, [serverId]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+
+    if (!socket) {
+      return;
+    }
+
+    const handlePresenceUpdate = (presenceData) => {
+      if (!presenceData?.user_id) {
+        return;
+      }
+
+      setMembers((prevMembers) =>
+        prevMembers.map((member) => {
+          if (String(getMemberUserId(member)) !== String(presenceData.user_id)) {
+            return member;
+          }
+
+          return {
+            ...member,
+            presence_status: presenceData.status,
+            last_seen_at: presenceData.last_seen_at ?? member.last_seen_at
+          };
+        })
+      );
+    };
+
+    socket.on("presence_update", handlePresenceUpdate);
+
+    return () => {
+      socket.off("presence_update", handlePresenceUpdate);
+    };
+  }, [serverId]);
 
   useEffect(() => {
     const fetchServerPageData = async () => {
@@ -1050,9 +1121,11 @@ const ServerPage = () => {
                       >
                         {getInviteCode(invite)}
                       </button>
+
                       <p className="server-invite-meta">
                         Expires: {formatInviteExpiry(getInviteExpiresAt(invite))}
                       </p>
+
                       {copiedInviteId === getInviteId(invite) && (
                         <p className="auth-success server-inline-success">
                           Copied to clipboard.
@@ -1141,6 +1214,7 @@ const ServerPage = () => {
                           </span>
                         )}
                       </div>
+
                       <p className="server-message-content">
                         {getMessageContent(message)}
                       </p>
@@ -1192,20 +1266,47 @@ const ServerPage = () => {
             <p className="server-members-empty">No members found.</p>
           ) : (
             <div className="server-members-list">
-              {members.map((member) => (
-                <div
-                  key={getMemberId(member)}
-                  className="server-member-item"
-                >
-                  <div className="server-member-name">
-                    {getMemberName(member)}
-                    {isOwner(member) ? " (Owner)" : ""}
+              {members.map((member) => {
+                const presenceStatus = getMemberPresenceStatus(member);
+
+                return (
+                  <div
+                    key={getMemberId(member)}
+                    className="server-member-item"
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "999px",
+                          backgroundColor: getPresenceColor(presenceStatus),
+                          flexShrink: 0
+                        }}
+                      />
+
+                      <div className="server-member-name">
+                        {getMemberName(member)}
+                        {isOwner(member) ? " (Owner)" : ""}
+                      </div>
+                    </div>
+
+                    <div className="server-member-email">
+                      {getMemberEmail(member)}
+                    </div>
+
+                    <div className="server-member-email">
+                      {getReadablePresenceStatus(presenceStatus)}
+                    </div>
                   </div>
-                  <div className="server-member-email">
-                    {getMemberEmail(member)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </aside>

@@ -18,6 +18,11 @@ const getMembersByServerId = async (serverId) => {
       sm.joined_at,
       u.username,
       u.email,
+      u.last_seen_at,
+      CASE
+        WHEN u.is_online = 1 THEN 'online'
+        ELSE 'offline'
+      END AS presence_status,
       CASE
         WHEN s.owner_id = u.user_id THEN 1
         ELSE 0
@@ -28,6 +33,17 @@ const getMembersByServerId = async (serverId) => {
      WHERE sm.server_id = ?
      ORDER BY is_owner DESC, u.username ASC`,
     [serverId]
+  );
+
+  return rows;
+};
+
+const getServerIdsByUserId = async (userId) => {
+  const [rows] = await pool.execute(
+    `SELECT server_id
+     FROM server_members
+     WHERE user_id = ?`,
+    [userId]
   );
 
   return rows;
@@ -54,6 +70,7 @@ const removeServerMember = async (serverId, userId) => {
 module.exports = {
   addServerMember,
   getMembersByServerId,
+  getServerIdsByUserId,
   isUserMemberOfServer,
   removeServerMember
 };

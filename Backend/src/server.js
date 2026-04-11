@@ -1,8 +1,11 @@
 require("dotenv").config();
 const http = require("http");
+const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
+const { setUserOnlineState } = require("./models/userModel");
+const { getServerIdsByUserId } = require("./models/serverMemberModel");
 
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -21,8 +24,111 @@ const io = new Server(httpServer, {
 
 app.set("io", io);
 
-io.on("connection", (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
+const activeUserSockets = new Map();
+
+const getSocketToken = (socket) => {
+  const authToken = socket.handshake?.auth?.token;
+
+  if (authToken) {
+    return authToken.startsWith("Bearer ")
+      ? authToken.split(" ")[1]
+      : authToken;
+  }
+
+  const authHeader = socket.handshake?.headers?.authorization;
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return authHeader.split(" ")[1];
+  }
+
+  return null;
+};
+
+const addActiveSocket = (userId, socketId) => {
+  const userKey = String(userId);
+  const existingSockets = activeUserSockets.get(userKey) || new Set();
+
+  existingSockets.add(socketId);
+  activeUserSockets.set(userKey, existingSockets);
+};
+
+const removeActiveSocket = (userId, socketId) => {
+  const userKey = String(userId);
+  const existingSockets = activeUserSockets.get(userKey);
+
+  if (!existingSockets) {
+    return;
+  }
+
+  existingSockets.delete(socketId);
+
+  if (existingSockets.size === 0) {
+    activeUserSockets.delete(userKey);
+    return;
+  }
+
+  activeUserSockets.set(userKey, existingSockets);
+};
+
+const getActiveSocketCount = (userId) => {
+  const userKey = String(userId);
+  const existingSockets = activeUserSockets.get(userKey);
+
+  return existingSockets ? existingSockets.size : 0;
+};
+
+const emitPresenceUpdateToServers = async (
+  userId,
+  username,
+  isOnline,
+  lastSeenAt = null
+) => {
+  const serverMemberships = await getServerIdsByUserId(userId);
+
+  const payload = {
+    user_id: userId,
+    username,
+    status: isOnline ? "online" : "offline",
+    last_seen_at: lastSeenAt || null
+  };
+
+  serverMemberships.forEach((membership) => {
+    io.to(`server_${membership.server_id}`).emit("presence_update", payload);
+  });
+};
+
+io.use((socket, next) => {
+  try {
+    const token = getSocketToken(socket);
+
+    if (!token) {
+      return next(new Error("Not authorized, no token"));
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = decoded;
+
+    next();
+  } catch (error) {
+    next(new Error("Not authorized, invalid token"));
+  }
+});
+
+io.on("connection", async (socket) => {
+  const userId = socket.user.user_id;
+  const username = socket.user.username;
+
+  console.log(`Socket connected: ${socket.id} (user ${userId})`);
+
+  addActiveSocket(userId, socket.id);
+  socket.join(`user_${userId}`);
+
+  try {
+    await setUserOnlineState(userId, true, null);
+    await emitPresenceUpdateToServers(userId, username, true, null);
+  } catch (error) {
+    console.error("Failed to mark user online:", error.message);
+  }
 
   socket.on("join_server", (serverId) => {
     if (!serverId) return;
@@ -44,8 +150,23 @@ io.on("connection", (socket) => {
     socket.leave(`channel_${channelId}`);
   });
 
-  socket.on("disconnect", () => {
-    console.log(`Socket disconnected: ${socket.id}`);
+  socket.on("disconnect", async () => {
+    console.log(`Socket disconnected: ${socket.id} (user ${userId})`);
+
+    removeActiveSocket(userId, socket.id);
+
+    if (getActiveSocketCount(userId) > 0) {
+      return;
+    }
+
+    try {
+      const lastSeenAt = new Date();
+
+      await setUserOnlineState(userId, false, lastSeenAt);
+      await emitPresenceUpdateToServers(userId, username, false, lastSeenAt);
+    } catch (error) {
+      console.error("Failed to mark user offline:", error.message);
+    }
   });
 });
 
