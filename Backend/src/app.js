@@ -15,6 +15,7 @@ const serverMemberRoutes = require("./routes/serverMemberRoutes");
 const serverInviteRoutes = require("./routes/serverInviteRoutes");
 const emailRoutes = require("./routes/emailRoutes");
 const friendRequestRoutes = require("./routes/friendRequestRoutes");
+const directMessageRoutes = require("./routes/directMessageRoutes");
 
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
@@ -35,6 +36,7 @@ app.use("/api/server-members", serverMemberRoutes);
 app.use("/api/server-invites", serverInviteRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/friends", friendRequestRoutes);
+app.use("/api/direct-messages", directMessageRoutes);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
