@@ -1,0 +1,174 @@
+const { pool } = require("../config/db");
+
+const findUserByUsernameOrEmail = async (value) => {
+  const [rows] = await pool.execute(
+    `SELECT user_id, username, email
+     FROM users
+     WHERE username = ? OR email = ?
+     LIMIT 1`,
+    [value, value]
+  );
+
+  return rows[0];
+};
+
+const getPendingFriendRequestBetweenUsers = async (userAId, userBId) => {
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM friend_requests
+     WHERE (
+       (sender_id = ? AND receiver_id = ?)
+       OR
+       (sender_id = ? AND receiver_id = ?)
+     )
+     AND status = 'pending'
+     LIMIT 1`,
+    [userAId, userBId, userBId, userAId]
+  );
+
+  return rows[0];
+};
+
+const createFriendRequest = async (senderId, receiverId) => {
+  const [result] = await pool.execute(
+    `INSERT INTO friend_requests (sender_id, receiver_id)
+     VALUES (?, ?)`,
+    [senderId, receiverId]
+  );
+
+  return result;
+};
+
+const getIncomingPendingRequestsByUserId = async (userId) => {
+  const [rows] = await pool.execute(
+    `SELECT
+      fr.request_id,
+      fr.sender_id,
+      fr.receiver_id,
+      fr.status,
+      fr.created_at,
+      u.username AS sender_username,
+      u.email AS sender_email
+     FROM friend_requests fr
+     JOIN users u ON fr.sender_id = u.user_id
+     WHERE fr.receiver_id = ?
+       AND fr.status = 'pending'
+     ORDER BY fr.created_at DESC`,
+    [userId]
+  );
+
+  return rows;
+};
+
+const getOutgoingPendingRequestsByUserId = async (userId) => {
+  const [rows] = await pool.execute(
+    `SELECT
+      fr.request_id,
+      fr.sender_id,
+      fr.receiver_id,
+      fr.status,
+      fr.created_at,
+      u.username AS receiver_username,
+      u.email AS receiver_email
+     FROM friend_requests fr
+     JOIN users u ON fr.receiver_id = u.user_id
+     WHERE fr.sender_id = ?
+       AND fr.status = 'pending'
+     ORDER BY fr.created_at DESC`,
+    [userId]
+  );
+
+  return rows;
+};
+
+const getFriendRequestById = async (requestId) => {
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM friend_requests
+     WHERE request_id = ?
+     LIMIT 1`,
+    [requestId]
+  );
+
+  return rows[0];
+};
+
+const updateFriendRequestStatus = async (requestId, status) => {
+  const [result] = await pool.execute(
+    `UPDATE friend_requests
+     SET status = ?,
+         responded_at = NOW()
+     WHERE request_id = ?`,
+    [status, requestId]
+  );
+
+  return result;
+};
+
+const createFriendship = async (userAId, userBId) => {
+  const userOneId = Math.min(Number(userAId), Number(userBId));
+  const userTwoId = Math.max(Number(userAId), Number(userBId));
+
+  const [result] = await pool.execute(
+    `INSERT INTO friendships (user_one_id, user_two_id)
+     VALUES (?, ?)`,
+    [userOneId, userTwoId]
+  );
+
+  return result;
+};
+
+const getFriendshipBetweenUsers = async (userAId, userBId) => {
+  const userOneId = Math.min(Number(userAId), Number(userBId));
+  const userTwoId = Math.max(Number(userAId), Number(userBId));
+
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM friendships
+     WHERE user_one_id = ?
+       AND user_two_id = ?
+     LIMIT 1`,
+    [userOneId, userTwoId]
+  );
+
+  return rows[0];
+};
+
+const getFriendsByUserId = async (userId) => {
+  const [rows] = await pool.execute(
+    `SELECT
+      f.friendship_id,
+      f.created_at,
+      u.user_id,
+      u.username,
+      u.email,
+      CASE
+        WHEN u.is_online = 1 THEN 'online'
+        ELSE 'offline'
+      END AS presence_status
+     FROM friendships f
+     JOIN users u
+       ON u.user_id = CASE
+         WHEN f.user_one_id = ? THEN f.user_two_id
+         ELSE f.user_one_id
+       END
+     WHERE f.user_one_id = ? OR f.user_two_id = ?
+     ORDER BY u.username ASC`,
+    [userId, userId, userId]
+  );
+
+  return rows;
+};
+
+module.exports = {
+  findUserByUsernameOrEmail,
+  getPendingFriendRequestBetweenUsers,
+  createFriendRequest,
+  getIncomingPendingRequestsByUserId,
+  getOutgoingPendingRequestsByUserId,
+  getFriendRequestById,
+  updateFriendRequestStatus,
+  createFriendship,
+  getFriendshipBetweenUsers,
+  getFriendsByUserId
+};

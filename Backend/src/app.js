@@ -14,6 +14,7 @@ const memberRoleRoutes = require("./routes/memberRoleRoutes");
 const serverMemberRoutes = require("./routes/serverMemberRoutes");
 const serverInviteRoutes = require("./routes/serverInviteRoutes");
 const emailRoutes = require("./routes/emailRoutes");
+const friendRequestRoutes = require("./routes/friendRequestRoutes");
 
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
@@ -33,6 +34,7 @@ app.use("/api/member-roles", memberRoleRoutes);
 app.use("/api/server-members", serverMemberRoutes);
 app.use("/api/server-invites", serverInviteRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/friends", friendRequestRoutes);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
