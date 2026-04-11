@@ -11,6 +11,13 @@ const createMessage = async (req, res, next) => {
       throw new Error("Channel ID and content are required");
     }
 
+    const trimmedContent = content.trim();
+
+    if (!trimmedContent) {
+      res.status(400);
+      throw new Error("Channel ID and content are required");
+    }
+
     const isMember = await messageModel.isUserMemberOfChannelServer(channelId, userId);
 
     if (!isMember) {
@@ -18,16 +25,26 @@ const createMessage = async (req, res, next) => {
       throw new Error("You are not a member of this channel's server");
     }
 
-    const result = await messageModel.createMessage(channelId, userId, content);
+    const result = await messageModel.createMessage(channelId, userId, trimmedContent);
+
+    const createdMessage = {
+      message_id: result.insertId,
+      channel_id: Number(channelId),
+      user_id: userId,
+      username: req.user.username,
+      content: trimmedContent,
+      created_at: new Date().toISOString()
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`channel_${channelId}`).emit("new_message", createdMessage);
+    }
 
     res.status(201).json({
       message: "Message created successfully",
-      data: {
-        message_id: result.insertId,
-        channel_id: Number(channelId),
-        user_id: userId,
-        content
-      }
+      data: createdMessage
     });
   } catch (error) {
     next(error);

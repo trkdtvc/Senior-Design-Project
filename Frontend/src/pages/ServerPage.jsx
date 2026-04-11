@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { io } from "socket.io-client";
 import { getUserServers, deleteServer } from "../services/serverService";
 import {
   getServerChannels,
@@ -17,6 +18,10 @@ import {
 } from "../services/serverInviteService";
 import "../styles/auth.css";
 import { getMe } from "../services/authService";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 const normalizeServers = (data) => {
   if (Array.isArray(data)) return data;
@@ -149,6 +154,7 @@ const ServerPage = () => {
   const messagesContainerRef = useRef(null);
   const messageInputRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
+  const socketRef = useRef(null);
 
   const [server, setServer] = useState(null);
   const [channels, setChannels] = useState([]);
@@ -293,6 +299,19 @@ const ServerPage = () => {
   }, [serverId, navigate]);
 
   useEffect(() => {
+    const socket = io(SOCKET_URL, {
+      transports: ["websocket", "polling"]
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     const fetchServerPageData = async () => {
       const token = localStorage.getItem("token");
 
@@ -397,17 +416,68 @@ const ServerPage = () => {
       showError: true,
       clearMessagesOnError: true
     });
-
-    const intervalId = setInterval(() => {
-      loadMessages(activeChannelId, {
-        showLoader: false,
-        showError: false,
-        clearMessagesOnError: false
-      });
-    }, 3000);
-
-    return () => clearInterval(intervalId);
   }, [activeChannelId, loadMessages]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+
+    if (!socket || !activeChannelId) {
+      return;
+    }
+
+    const channelIdString = String(activeChannelId);
+
+    socket.emit("join_channel", channelIdString);
+
+    return () => {
+      socket.emit("leave_channel", channelIdString);
+    };
+  }, [activeChannelId]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+
+    if (!socket) {
+      return;
+    }
+
+    const handleNewMessage = (incomingMessage) => {
+      if (
+        !incomingMessage ||
+        String(
+          incomingMessage.channel_id ||
+            incomingMessage.channelId ||
+            incomingMessage.channel?.channel_id ||
+            incomingMessage.channel?.id
+        ) !== String(activeChannelId)
+      ) {
+        return;
+      }
+
+      shouldAutoScrollRef.current = true;
+
+      setMessages((prevMessages) => {
+        const incomingMessageId = getMessageId(incomingMessage);
+
+        if (
+          incomingMessageId &&
+          prevMessages.some(
+            (message) => String(getMessageId(message)) === String(incomingMessageId)
+          )
+        ) {
+          return prevMessages;
+        }
+
+        return [...prevMessages, incomingMessage];
+      });
+    };
+
+    socket.on("new_message", handleNewMessage);
+
+    return () => {
+      socket.off("new_message", handleNewMessage);
+    };
+  }, [activeChannelId]);
 
   useEffect(() => {
     if (!activeChannelId || isSendingMessage || !messageInputRef.current) {
@@ -565,48 +635,48 @@ const ServerPage = () => {
   };
 
   const handleCreateInvite = async () => {
-  const token = localStorage.getItem("token");
-  
-  if (!token) {
-    navigate("/login");
-    return;
-  }
+    const token = localStorage.getItem("token");
 
-  try {
-    setIsCreatingInvite(true);
-    setInviteError("");
-    setInviteSuccess("");
-    setCopiedInviteId(null);
+    if (!token) {
+      navigate("/login");
+      return;
+    }
 
-    const payload = inviteExpiryDays
-      ? { expires_in_days: Number(inviteExpiryDays) }
-      : {};
+    try {
+      setIsCreatingInvite(true);
+      setInviteError("");
+      setInviteSuccess("");
+      setCopiedInviteId(null);
 
-    const response = await createServerInvite(serverId, token, payload);
+      const payload = inviteExpiryDays
+        ? { expires_in_days: Number(inviteExpiryDays) }
+        : {};
 
-    setInviteSuccess(
-      response?.invite_code
-        ? `Invite created: ${response.invite_code}`
-        : "Invite created successfully."
-    );
+      const response = await createServerInvite(serverId, token, payload);
 
-    await loadInvites();
-  } catch (error) {
-    setInviteError(error.message || "Failed to create invite.");
-  } finally {
-    setIsCreatingInvite(false);
-  }
-};
+      setInviteSuccess(
+        response?.invite_code
+          ? `Invite created: ${response.invite_code}`
+          : "Invite created successfully."
+      );
 
-const handleCopyInvite = async (inviteCode, inviteId) => {
-  try {
-    await navigator.clipboard.writeText(inviteCode);
-    setCopiedInviteId(inviteId);
-    setInviteSuccess(`Invite code copied: ${inviteCode}`);
-  } catch (error) {
-    setInviteError("Failed to copy invite code.");
-  }
-};
+      await loadInvites();
+    } catch (error) {
+      setInviteError(error.message || "Failed to create invite.");
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  };
+
+  const handleCopyInvite = async (inviteCode, inviteId) => {
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      setCopiedInviteId(inviteId);
+      setInviteSuccess(`Invite code copied: ${inviteCode}`);
+    } catch (error) {
+      setInviteError("Failed to copy invite code.");
+    }
+  };
 
   const handleSendMessage = async (e) => {
     if (e) {
@@ -648,12 +718,6 @@ const handleCopyInvite = async (inviteCode, inviteId) => {
         if (messageInputRef.current) {
           messageInputRef.current.focus();
         }
-      });
-
-      await loadMessages(activeChannelId, {
-        showLoader: false,
-        showError: true,
-        clearMessagesOnError: false
       });
     } catch (error) {
       setMessageCreateError(error.message || "Failed to send message.");
@@ -704,48 +768,48 @@ const handleCopyInvite = async (inviteCode, inviteId) => {
   };
 
   const handleLeaveServer = async () => {
-  const token = localStorage.getItem("token");
+    const token = localStorage.getItem("token");
 
-  if (!token) {
-    navigate("/login");
-    return;
-  }
-
-  const confirmed = window.confirm(
-    `Are you sure you want to leave "${getServerName(server)}"?`
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  try {
-    setIsDeleting(true);
-    setDeleteError("");
-
-    const response = await fetch(
-      `http://localhost:5000/api/server-members/${serverId}/leave`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || "Failed to leave server.");
+    if (!token) {
+      navigate("/login");
+      return;
     }
 
-    navigate("/dashboard");
-  } catch (error) {
-    setDeleteError(error.message || "Failed to leave server.");
-  } finally {
-    setIsDeleting(false);
-  }
-};
+    const confirmed = window.confirm(
+      `Are you sure you want to leave "${getServerName(server)}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      setDeleteError("");
+
+      const response = await fetch(
+        `http://localhost:5000/api/server-members/${serverId}/leave`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to leave server.");
+      }
+
+      navigate("/dashboard");
+    } catch (error) {
+      setDeleteError(error.message || "Failed to leave server.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const activeChannel = channels.find(
     (channel) => String(getChannelId(channel)) === String(activeChannelId)
@@ -760,17 +824,17 @@ const handleCopyInvite = async (inviteCode, inviteId) => {
 
   const canDeleteSelectedChannel =
     !!activeChannel && channels.length > 1 && !isGeneralChannelSelected;
-    
-    const currentUserId = currentUser?.user_id || currentUser?.id || null;
-    
-    const currentUserIsOwner = 
-     (server && currentUserId
+
+  const currentUserId = currentUser?.user_id || currentUser?.id || null;
+
+  const currentUserIsOwner =
+    (server && currentUserId
       ? String(getServerOwnerId(server)) === String(currentUserId)
       : false) ||
-      members.some(
-        (member) =>
-          String(getMemberUserId(member)) === String(currentUserId) && isOwner(member)
-      );
+    members.some(
+      (member) =>
+        String(getMemberUserId(member)) === String(currentUserId) && isOwner(member)
+    );
 
   if (isLoading) {
     return (
@@ -857,23 +921,23 @@ const handleCopyInvite = async (inviteCode, inviteId) => {
                   {deleteChannelError}
                 </p>
               )}
-              
+
               {activeChannel && isGeneralChannelSelected && (
                 <p className="server-empty-text">
                   The "general" channel cannot be deleted.
                 </p>
               )}
-              
+
               {activeChannel && !isGeneralChannelSelected && (
                 <button
-                 type="button"
-                 className="auth-button auth-button-danger"
-                 onClick={handleDeleteChannel}
-                 disabled={!canDeleteSelectedChannel || isDeletingChannel}
+                  type="button"
+                  className="auth-button auth-button-danger"
+                  onClick={handleDeleteChannel}
+                  disabled={!canDeleteSelectedChannel || isDeletingChannel}
                 >
                   {isDeletingChannel
-                   ? "Deleting..."
-                   : `Delete #${getChannelName(activeChannel)}`}
+                    ? "Deleting..."
+                    : `Delete #${getChannelName(activeChannel)}`}
                 </button>
               )}
             </div>
@@ -936,10 +1000,10 @@ const handleCopyInvite = async (inviteCode, inviteId) => {
                   Expiration
                 </label>
                 <select
-                 id="inviteExpiryDays"
-                 className="auth-input"
-                 value={inviteExpiryDays}
-                 onChange={(e) => setInviteExpiryDays(e.target.value)}
+                  id="inviteExpiryDays"
+                  className="auth-input"
+                  value={inviteExpiryDays}
+                  onChange={(e) => setInviteExpiryDays(e.target.value)}
                 >
                   <option value="1">1 day</option>
                   <option value="3">3 days</option>
@@ -967,26 +1031,33 @@ const handleCopyInvite = async (inviteCode, inviteId) => {
                       className="server-invite-item"
                     >
                       <button
-                       type="button"
-                      className="server-invite-code"
-                      onClick={() => handleCopyInvite(getInviteCode(invite), getInviteId(invite))}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        padding: 0,
-                        cursor: "pointer",
-                        textAlign: "left",
-                        width: "100%"
+                        type="button"
+                        className="server-invite-code"
+                        onClick={() =>
+                          handleCopyInvite(
+                            getInviteCode(invite),
+                            getInviteId(invite)
+                          )
+                        }
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          textAlign: "left",
+                          width: "100%"
                         }}
                       >
                         {getInviteCode(invite)}
-                        </button>
-                         <p className="server-invite-meta">
-                          Expires: {formatInviteExpiry(getInviteExpiresAt(invite))}
+                      </button>
+                      <p className="server-invite-meta">
+                        Expires: {formatInviteExpiry(getInviteExpiresAt(invite))}
+                      </p>
+                      {copiedInviteId === getInviteId(invite) && (
+                        <p className="auth-success server-inline-success">
+                          Copied to clipboard.
                         </p>
-                         {copiedInviteId === getInviteId(invite) && (
-                          <p className="auth-success server-inline-success">Copied to clipboard.</p>
-                          )}
+                      )}
                     </div>
                   ))}
                 </div>
@@ -996,22 +1067,22 @@ const handleCopyInvite = async (inviteCode, inviteId) => {
             {deleteError && (
               <p className="auth-error server-inline-error">{deleteError}</p>
             )}
-            
+
             {currentUserIsOwner ? (
               <button
-               type="button"
-               className="auth-button auth-button-danger"
-               onClick={handleDeleteServer}
-               disabled={isDeleting}
+                type="button"
+                className="auth-button auth-button-danger"
+                onClick={handleDeleteServer}
+                disabled={isDeleting}
               >
                 {isDeleting ? "Deleting..." : "Delete server"}
               </button>
             ) : (
               <button
-               type="button"
-               className="auth-button auth-button-danger"
-               onClick={handleLeaveServer}
-               disabled={isDeleting}
+                type="button"
+                className="auth-button auth-button-danger"
+                onClick={handleLeaveServer}
+                disabled={isDeleting}
               >
                 {isDeleting ? "Leaving..." : "Leave server"}
               </button>
