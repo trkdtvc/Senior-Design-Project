@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { io } from "socket.io-client";
 import { getUserServers, deleteServer } from "../services/serverService";
 import {
   getServerChannels,
@@ -16,12 +15,12 @@ import {
   createServerInvite,
   getServerInvites
 } from "../services/serverInviteService";
-import "../styles/auth.css";
+import { connectSocket } from "../services/socket";
 import { getMe } from "../services/authService";
+import "../styles/auth.css";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 const normalizeServers = (data) => {
   if (Array.isArray(data)) return data;
@@ -168,6 +167,7 @@ const ServerPage = () => {
   const socketRef = useRef(null);
 
   const [server, setServer] = useState(null);
+  const [isSocketReady, setIsSocketReady] = useState(false);
   const [channels, setChannels] = useState([]);
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -259,7 +259,9 @@ const ServerPage = () => {
       }
     },
     [navigate]
-  );
+  )
+  
+  ;
 
   const loadMembers = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -310,48 +312,9 @@ const ServerPage = () => {
   }, [serverId, navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    const socket = io(SOCKET_URL, {
-      transports: ["websocket", "polling"],
-      auth: {
-        token
-      }
-    });
-
-    socketRef.current = socket;
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [navigate]);
-
-  useEffect(() => {
     const socket = socketRef.current;
 
-    if (!socket || !serverId) {
-      return;
-    }
-
-    const serverIdString = String(serverId);
-
-    socket.emit("join_server", serverIdString);
-
-    return () => {
-      socket.emit("leave_server", serverIdString);
-    };
-  }, [serverId]);
-
-  useEffect(() => {
-    const socket = socketRef.current;
-
-    if (!socket) {
+    if (!socket || !isSocketReady) {
       return;
     }
 
@@ -380,7 +343,7 @@ const ServerPage = () => {
     return () => {
       socket.off("presence_update", handlePresenceUpdate);
     };
-  }, [serverId]);
+  }, [isSocketReady]);
 
   useEffect(() => {
     const fetchServerPageData = async () => {
@@ -490,25 +453,61 @@ const ServerPage = () => {
   }, [activeChannelId, loadMessages]);
 
   useEffect(() => {
-    const socket = socketRef.current;
+  const token = localStorage.getItem("token");
 
-    if (!socket || !activeChannelId) {
-      return;
+  if (!token) {
+    navigate("/login");
+    return;
+  }
+
+  const socket = connectSocket(token);
+  socketRef.current = socket;
+
+  const handleConnect = () => {
+    setIsSocketReady(true);
+
+    if (serverId) {
+      socket.emit("join_server", String(serverId));
     }
 
-    const channelIdString = String(activeChannelId);
+    if (activeChannelId) {
+      socket.emit("join_channel", String(activeChannelId));
+    }
+  };
 
-    socket.emit("join_channel", channelIdString);
+  const handleDisconnect = () => {
+    setIsSocketReady(false);
+  };
 
-    return () => {
-      socket.emit("leave_channel", channelIdString);
-    };
-  }, [activeChannelId]);
+  socket.on("connect", handleConnect);
+  socket.on("disconnect", handleDisconnect);
+
+  if (socket.connected) {
+    handleConnect();
+  }
+
+  return () => {
+    if (socket.connected) {
+      if (activeChannelId) {
+        socket.emit("leave_channel", String(activeChannelId));
+      }
+
+      if (serverId) {
+        socket.emit("leave_server", String(serverId));
+      }
+    }
+
+    socket.off("connect", handleConnect);
+    socket.off("disconnect", handleDisconnect);
+    socketRef.current = null;
+    setIsSocketReady(false);
+  };
+}, [navigate, serverId, activeChannelId]);
 
   useEffect(() => {
     const socket = socketRef.current;
 
-    if (!socket) {
+    if (!socket || !isSocketReady) {
       return;
     }
 
@@ -548,7 +547,7 @@ const ServerPage = () => {
     return () => {
       socket.off("new_message", handleNewMessage);
     };
-  }, [activeChannelId]);
+  }, [activeChannelId, isSocketReady]);
 
   useEffect(() => {
     if (!activeChannelId || isSendingMessage || !messageInputRef.current) {
@@ -859,7 +858,7 @@ const ServerPage = () => {
       setDeleteError("");
 
       const response = await fetch(
-        `http://localhost:5000/api/server-members/${serverId}/leave`,
+        `${API_BASE_URL}/server-members/${serverId}/leave`,
         {
           method: "DELETE",
           headers: {

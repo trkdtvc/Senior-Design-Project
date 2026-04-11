@@ -10,13 +10,6 @@ const {
 } = require("../models/directMessageModel");
 
 const areUsersFriends = async (userAId, userBId) => {
-  console.log("DM friendship check:", {
-    userAId,
-    userBId,
-    typeA: typeof userAId,
-    typeB: typeof userBId,
-  });
-
   const [rows] = await pool.execute(
     `
       SELECT friendship_id, user_one_id, user_two_id
@@ -27,8 +20,6 @@ const areUsersFriends = async (userAId, userBId) => {
     `,
     [userAId, userBId, userBId, userAId]
   );
-
-  console.log("DM friendship result rows:", rows);
 
   return !!rows[0];
 };
@@ -51,12 +42,6 @@ const getOrCreateDirectConversation = async (req, res, next) => {
   try {
     const currentUserId = req.user.user_id;
     const { friendId } = req.body;
-
-    console.log("DM create request:", {
-        currentUserId,
-        friendId,
-        body: req.body,
-    });
 
     if (!friendId) {
       res.status(400);
@@ -193,6 +178,24 @@ const sendDirectMessageToConversation = async (req, res, next) => {
       currentUserId,
       content.trim()
     );
+
+    const io = req.app.get("io");
+    const otherUserId =
+      Number(conversation.user_one_id) === Number(currentUserId)
+        ? Number(conversation.user_two_id)
+        : Number(conversation.user_one_id);
+
+    const socketPayload = {
+      conversation_id: Number(conversationId),
+      sender_user_id: Number(currentUserId),
+      recipient_user_id: otherUserId,
+      directMessage: newMessage,
+    };
+
+    if (io) {
+      io.to(`user_${currentUserId}`).emit("direct_message", socketPayload);
+      io.to(`user_${otherUserId}`).emit("direct_message", socketPayload);
+    }
 
     res.status(201).json({
       message: "Direct message sent successfully",

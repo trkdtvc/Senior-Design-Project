@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getMe } from "../services/authService";
 import { getUserServers, createServer } from "../services/serverService";
 import "../styles/auth.css";
+import { connectSocket, disconnectSocket } from "../services/socket";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -42,6 +43,7 @@ const DashboardPage = () => {
   const [isJoining, setIsJoining] = useState(false);
 
   const handleLogout = () => {
+    disconnectSocket();
     localStorage.removeItem("token");
     navigate("/login");
   };
@@ -54,31 +56,33 @@ const DashboardPage = () => {
   };
 
   const loadDashboardData = async () => {
-    const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token");
 
-    if (!token) {
-      navigate("/login");
-      return;
-    }
+  if (!token) {
+    navigate("/login");
+    return;
+  }
 
-    try {
-      setIsLoading(true);
-      setError("");
+  try {
+    setIsLoading(true);
+    setError("");
 
-      const userData = await getMe(token);
-      setUser(userData);
+    connectSocket(token);
 
-      await loadServers(token);
-    } catch (error) {
-      localStorage.removeItem("token");
-      setError(
-        error.message || "Failed to load dashboard data. Please log in again."
-      );
-      navigate("/login");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    const userData = await getMe(token);
+    setUser(userData);
+
+    await loadServers(token);
+  } catch (error) {
+    localStorage.removeItem("token");
+    setError(
+      error.message || "Failed to load dashboard data. Please log in again."
+    );
+    navigate("/login");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   useEffect(() => {
     loadDashboardData();
