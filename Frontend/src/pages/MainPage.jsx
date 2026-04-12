@@ -16,7 +16,6 @@ import {
   createMessage
 } from "../services/messageService";
 import { getServerMembers } from "../services/serverMemberService";
-import { joinServerByInvite } from "../services/serverInviteService";
 import {
   getDirectConversations,
   getOrCreateDirectConversation,
@@ -91,6 +90,21 @@ const normalizeFriends = (data) => {
   return [];
 };
 
+const normalizeFriendRequests = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.requests)) return data.requests;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const normalizePresenceStatus = (value) => {
+  if (value === 1 || value === true || value === "online") {
+    return "online";
+  }
+
+  return "offline";
+};
+
 const getServerId = (server) =>
   server?.server_id || server?.id || server?.serverId || null;
 
@@ -133,7 +147,7 @@ const getMemberUserId = (member) =>
   member?.user_id || member?.userId || member?.id || null;
 
 const getMemberPresenceStatus = (member) =>
-  member?.presence_status || member?.presenceStatus || "offline";
+  normalizePresenceStatus(member?.presence_status || member?.presenceStatus);
 
 const isOwner = (member) =>
   member?.is_owner === 1 || member?.is_owner === true || false;
@@ -147,7 +161,9 @@ const getFriendName = (friend) =>
 const getFriendEmail = (friend) => friend?.email || "";
 
 const getFriendPresenceStatus = (friend) =>
-  friend?.presence_status || friend?.presenceStatus || "offline";
+  normalizePresenceStatus(
+    friend?.presence_status ?? friend?.presenceStatus ?? friend?.is_online
+  );
 
 const getConversationId = (conversation) =>
   conversation?.conversation_id ||
@@ -173,19 +189,13 @@ const getConversationOtherEmail = (conversation) =>
   conversation?.otherUser?.email ||
   "";
 
-const getConversationPresenceStatus = (conversation) => {
-  const rawValue =
+const getConversationPresenceStatus = (conversation) =>
+  normalizePresenceStatus(
     conversation?.other_user?.is_online ??
-    conversation?.other_is_online ??
-    conversation?.otherUser?.is_online ??
-    conversation?.presence_status;
-
-  if (rawValue === 1 || rawValue === true || rawValue === "online") {
-    return "online";
-  }
-
-  return "offline";
-};
+      conversation?.other_is_online ??
+      conversation?.otherUser?.is_online ??
+      conversation?.presence_status
+  );
 
 const getConversationLastMessage = (conversation) =>
   conversation?.last_message_content ||
@@ -223,6 +233,48 @@ const getDirectMessageContent = (message) =>
 const getDirectMessageTimestamp = (message) =>
   message?.created_at || message?.createdAt || null;
 
+const getFriendRequestId = (request) =>
+  request?.request_id || request?.id || request?.friend_request_id || null;
+
+const getFriendRequestSenderName = (request) =>
+  request?.sender?.username ||
+  request?.requester?.username ||
+  request?.from_user?.username ||
+  request?.sender_username ||
+  request?.requester_username ||
+  request?.from_username ||
+  "Unknown user";
+
+const getFriendRequestSenderEmail = (request) =>
+  request?.sender?.email ||
+  request?.requester?.email ||
+  request?.from_user?.email ||
+  request?.sender_email ||
+  request?.requester_email ||
+  request?.from_email ||
+  "";
+
+const getFriendRequestReceiverName = (request) =>
+  request?.receiver?.username ||
+  request?.recipient?.username ||
+  request?.to_user?.username ||
+  request?.receiver_username ||
+  request?.recipient_username ||
+  request?.to_username ||
+  "Unknown user";
+
+const getFriendRequestReceiverEmail = (request) =>
+  request?.receiver?.email ||
+  request?.recipient?.email ||
+  request?.to_user?.email ||
+  request?.receiver_email ||
+  request?.recipient_email ||
+  request?.to_email ||
+  "";
+
+const getFriendRequestTimestamp = (request) =>
+  request?.created_at || request?.createdAt || null;
+
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return "";
 
@@ -241,7 +293,9 @@ const formatTimestamp = (timestamp) => {
 };
 
 const getPresenceColorClass = (status) => {
-  return status === "online" ? "status-online" : "status-offline";
+  return normalizePresenceStatus(status) === "online"
+    ? "status-online"
+    : "status-offline";
 };
 
 const getInitial = (value) => {
@@ -261,6 +315,15 @@ const MainPage = () => {
   const previousChannelIdRef = useRef(null);
 
   const [user, setUser] = useState(null);
+  const [incomingFriendRequests, setIncomingFriendRequests] = useState([]);
+  const [outgoingFriendRequests, setOutgoingFriendRequests] = useState([]);
+  const [friendRequestsError, setFriendRequestsError] = useState("");
+  const [isFriendRequestsLoading, setIsFriendRequestsLoading] = useState(false);
+  const [processingFriendRequestId, setProcessingFriendRequestId] = useState(null);
+  const [friendUsername, setFriendUsername] = useState("");
+  const [addFriendError, setAddFriendError] = useState("");
+  const [addFriendSuccess, setAddFriendSuccess] = useState("");
+  const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [servers, setServers] = useState([]);
   const [friends, setFriends] = useState([]);
   const [directConversations, setDirectConversations] = useState([]);
@@ -272,12 +335,13 @@ const MainPage = () => {
   const [activeServerId, setActiveServerId] = useState(null);
   const [activeChannelId, setActiveChannelId] = useState(null);
   const [activeConversationId, setActiveConversationId] = useState(null);
+  const [activeDmSection, setActiveDmSection] = useState("friends");
 
   const [isSocketReady, setIsSocketReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const [isCreatingServer, setIsCreatingServer] = useState(false);
-  const [isJoiningServer, setIsJoiningServer] = useState(false);
+  const [isCreateServerModalOpen, setIsCreateServerModalOpen] = useState(false);
   const [isCreatingChannel, setIsCreatingChannel] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isDeletingServer, setIsDeletingServer] = useState(false);
@@ -289,14 +353,12 @@ const MainPage = () => {
   const [channelError, setChannelError] = useState("");
   const [membersError, setMembersError] = useState("");
   const [createServerError, setCreateServerError] = useState("");
-  const [joinServerError, setJoinServerError] = useState("");
   const [createChannelError, setCreateChannelError] = useState("");
   const [deleteChannelError, setDeleteChannelError] = useState("");
   const [deleteServerError, setDeleteServerError] = useState("");
 
   const [messageContent, setMessageContent] = useState("");
   const [channelName, setChannelName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [serverFormData, setServerFormData] = useState({
     server_name: "",
@@ -327,9 +389,7 @@ const MainPage = () => {
       }
     : null;
 
-  const selectedChannelName = activeChannel
-    ? getChannelName(activeChannel)
-    : "";
+  const selectedChannelName = activeChannel ? getChannelName(activeChannel) : "";
 
   const isGeneralChannelSelected =
     selectedChannelName.trim().toLowerCase() === "general";
@@ -358,6 +418,7 @@ const MainPage = () => {
   const filteredFriends = friends.filter((friend) => {
     const name = getFriendName(friend).toLowerCase();
     const email = getFriendEmail(friend).toLowerCase();
+
     return (
       name.includes(normalizedSidebarSearch) ||
       email.includes(normalizedSidebarSearch)
@@ -383,6 +444,13 @@ const MainPage = () => {
   const offlineMembers = members.filter(
     (member) => getMemberPresenceStatus(member) !== "online"
   );
+
+  const currentUserPresence = isSocketReady
+    ? "online"
+    : normalizePresenceStatus(user?.presence_status ?? user?.is_online);
+
+  const showDmHomeView = isDmView && !activeConversationId;
+  const showComposer = !isDmView || !!activeConversationId;
 
   const resetMessageInputHeight = () => {
     if (!messageInputRef.current) {
@@ -414,42 +482,91 @@ const MainPage = () => {
     return normalizedConversations;
   }, []);
 
-  const loadServerChannels = useCallback(
-    async (token, serverId) => {
-      if (!serverId) {
-        setChannels([]);
-        setActiveChannelId(null);
-        return [];
-      }
-
-      const channelData = await getServerChannels(token, serverId);
-      const normalizedChannels = normalizeChannels(channelData);
-
-      setChannels(normalizedChannels);
-
-      if (normalizedChannels.length === 0) {
-        setActiveChannelId(null);
-        setChannelMessages([]);
-        return [];
-      }
-
-      setActiveChannelId((prevActiveChannelId) => {
-        const stillExists = normalizedChannels.some(
-          (channel) =>
-            String(getChannelId(channel)) === String(prevActiveChannelId)
-        );
-
-        if (stillExists) {
-          return prevActiveChannelId;
+  const loadFriendRequests = useCallback(async (token) => {
+    const [incomingResponse, outgoingResponse] = await Promise.all([
+      fetch(`${API_BASE_URL}/friends/requests/incoming`, {
+        headers: {
+          Authorization: `Bearer ${token}`
         }
+      }),
+      fetch(`${API_BASE_URL}/friends/requests/outgoing`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+    ]);
 
-        return getChannelId(normalizedChannels[0]);
-      });
+    const incomingData = await incomingResponse.json().catch(() => null);
+    const outgoingData = await outgoingResponse.json().catch(() => null);
 
-      return normalizedChannels;
+    if (!incomingResponse.ok) {
+      throw new Error(
+        incomingData?.message || "Failed to load incoming friend requests."
+      );
+    }
+
+    if (!outgoingResponse.ok) {
+      throw new Error(
+        outgoingData?.message || "Failed to load outgoing friend requests."
+      );
+    }
+
+    setIncomingFriendRequests(normalizeFriendRequests(incomingData));
+    setOutgoingFriendRequests(normalizeFriendRequests(outgoingData));
+  }, []);
+
+  const fetchFriendRequests = useCallback(
+    async (token) => {
+      try {
+        setIsFriendRequestsLoading(true);
+        setFriendRequestsError("");
+        await loadFriendRequests(token);
+      } catch (error) {
+        setIncomingFriendRequests([]);
+        setOutgoingFriendRequests([]);
+        setFriendRequestsError(
+          error.message || "Failed to load friend requests."
+        );
+      } finally {
+        setIsFriendRequestsLoading(false);
+      }
     },
-    []
+    [loadFriendRequests]
   );
+
+  const loadServerChannels = useCallback(async (token, serverId) => {
+    if (!serverId) {
+      setChannels([]);
+      setActiveChannelId(null);
+      return [];
+    }
+
+    const channelData = await getServerChannels(token, serverId);
+    const normalizedChannels = normalizeChannels(channelData);
+
+    setChannels(normalizedChannels);
+
+    if (normalizedChannels.length === 0) {
+      setActiveChannelId(null);
+      setChannelMessages([]);
+      return [];
+    }
+
+    setActiveChannelId((prevActiveChannelId) => {
+      const stillExists = normalizedChannels.some(
+        (channel) =>
+          String(getChannelId(channel)) === String(prevActiveChannelId)
+      );
+
+      if (stillExists) {
+        return prevActiveChannelId;
+      }
+
+      return getChannelId(normalizedChannels[0]);
+    });
+
+    return normalizedChannels;
+  }, []);
 
   const loadServerMembers = useCallback(async (token, serverId) => {
     if (!serverId) {
@@ -463,37 +580,31 @@ const MainPage = () => {
     return normalizedMembers;
   }, []);
 
-  const loadChannelMessageList = useCallback(
-    async (token, channelId) => {
-      if (!channelId) {
-        setChannelMessages([]);
-        setMessageError("");
-        return [];
-      }
+  const loadChannelMessageList = useCallback(async (token, channelId) => {
+    if (!channelId) {
+      setChannelMessages([]);
+      setMessageError("");
+      return [];
+    }
 
-      const messageData = await getChannelMessages(token, channelId);
-      const normalizedMessageData = normalizeMessages(messageData);
-      setChannelMessages(normalizedMessageData);
-      return normalizedMessageData;
-    },
-    []
-  );
+    const messageData = await getChannelMessages(token, channelId);
+    const normalizedMessageData = normalizeMessages(messageData);
+    setChannelMessages(normalizedMessageData);
+    return normalizedMessageData;
+  }, []);
 
-  const loadDirectMessageList = useCallback(
-    async (token, conversationId) => {
-      if (!conversationId) {
-        setDirectMessages([]);
-        setMessageError("");
-        return [];
-      }
+  const loadDirectMessageList = useCallback(async (token, conversationId) => {
+    if (!conversationId) {
+      setDirectMessages([]);
+      setMessageError("");
+      return [];
+    }
 
-      const messageData = await getDirectMessages(token, conversationId);
-      const normalizedMessageData = normalizeMessages(messageData);
-      setDirectMessages(normalizedMessageData);
-      return normalizedMessageData;
-    },
-    []
-  );
+    const messageData = await getDirectMessages(token, conversationId);
+    const normalizedMessageData = normalizeMessages(messageData);
+    setDirectMessages(normalizedMessageData);
+    return normalizedMessageData;
+  }, []);
 
   useEffect(() => {
     const loadMainPageData = async () => {
@@ -512,7 +623,6 @@ const MainPage = () => {
         setMembersError("");
         setMessageError("");
         setCreateServerError("");
-        setJoinServerError("");
         setCreateChannelError("");
         setDeleteChannelError("");
         setDeleteServerError("");
@@ -539,6 +649,20 @@ const MainPage = () => {
 
     loadMainPageData();
   }, [navigate, loadServers, loadFriends, loadDirectConversationList]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token || !isDmView) {
+      return;
+    }
+
+    if (activeDmSection !== "requests" && activeDmSection !== "add-friend") {
+      return;
+    }
+
+    fetchFriendRequests(token);
+  }, [isDmView, activeDmSection, fetchFriendRequests]);
 
   useEffect(() => {
     if (!routeServerId) {
@@ -801,8 +925,7 @@ const MainPage = () => {
         return;
       }
 
-      const nextPresenceStatus =
-        presenceData.status === "online" ? "online" : "offline";
+      const nextPresenceStatus = normalizePresenceStatus(presenceData.status);
 
       setMembers((prevMembers) =>
         prevMembers.map((member) => {
@@ -977,10 +1100,31 @@ const MainPage = () => {
     shouldAutoScrollRef.current = true;
     setActiveServerId(null);
     setActiveConversationId(null);
+    setActiveDmSection("friends");
     setSidebarSearch("");
     setMessageContent("");
     setServerError("");
     setMessageError("");
+    setAddFriendError("");
+    setAddFriendSuccess("");
+    setFriendRequestsError("");
+    navigate("/dashboard");
+
+    requestAnimationFrame(() => {
+      resetMessageInputHeight();
+    });
+  };
+
+  const handleSelectDmSection = (section) => {
+    shouldAutoScrollRef.current = true;
+    setActiveServerId(null);
+    setActiveConversationId(null);
+    setActiveDmSection(section);
+    setMessageContent("");
+    setMessageError("");
+    setAddFriendError("");
+    setAddFriendSuccess("");
+    setFriendRequestsError("");
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -995,6 +1139,10 @@ const MainPage = () => {
     setMessageContent("");
     setServerError("");
     setMessageError("");
+    setAddFriendError("");
+    setAddFriendSuccess("");
+    setFriendRequestsError("");
+    setIsCreateServerModalOpen(false);
     navigate(`/server/${serverId}`);
 
     requestAnimationFrame(() => {
@@ -1018,8 +1166,12 @@ const MainPage = () => {
     shouldAutoScrollRef.current = true;
     setActiveServerId(null);
     setActiveConversationId(conversationId);
+    setActiveDmSection("friends");
     setMessageError("");
     setMessageContent("");
+    setAddFriendError("");
+    setAddFriendSuccess("");
+    setFriendRequestsError("");
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -1044,6 +1196,7 @@ const MainPage = () => {
 
       setActiveServerId(null);
       setActiveConversationId(conversationId);
+      setActiveDmSection("friends");
       setMessageContent("");
       navigate("/dashboard");
 
@@ -1052,6 +1205,97 @@ const MainPage = () => {
       });
     } catch (error) {
       setError(error.message || "Failed to start direct conversation.");
+    }
+  };
+
+  const handleAddFriend = async (e) => {
+    e.preventDefault();
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!friendUsername.trim()) {
+      setAddFriendError("Username is required.");
+      setAddFriendSuccess("");
+      return;
+    }
+
+    try {
+      setIsAddingFriend(true);
+      setAddFriendError("");
+      setAddFriendSuccess("");
+
+      const response = await fetch(`${API_BASE_URL}/friends/requests`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username: friendUsername.trim()
+        })
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Failed to send friend request.");
+      }
+
+      setAddFriendSuccess(data?.message || "Friend request sent.");
+      setFriendUsername("");
+      await fetchFriendRequests(token);
+    } catch (error) {
+      setAddFriendError(error.message || "Failed to send friend request.");
+      setAddFriendSuccess("");
+    } finally {
+      setIsAddingFriend(false);
+    }
+  };
+
+  const handleRespondToFriendRequest = async (requestId, action) => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setProcessingFriendRequestId(requestId);
+      setFriendRequestsError("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/friends/requests/${requestId}/${action}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Failed to ${action === "accept" ? "accept" : "reject"} friend request.`
+        );
+      }
+
+      await loadFriends(token);
+      await fetchFriendRequests(token);
+    } catch (error) {
+      setFriendRequestsError(
+        error.message || "Failed to update friend request."
+      );
+    } finally {
+      setProcessingFriendRequestId(null);
     }
   };
 
@@ -1088,6 +1332,8 @@ const MainPage = () => {
         description: ""
       });
 
+      setIsCreateServerModalOpen(false);
+
       await loadServers(token);
 
       const newServerId =
@@ -1106,41 +1352,6 @@ const MainPage = () => {
       );
     } finally {
       setIsCreatingServer(false);
-    }
-  };
-
-  const handleJoinServer = async (e) => {
-    e.preventDefault();
-
-    const token = localStorage.getItem("token");
-    const trimmedInviteCode = inviteCode.trim();
-
-    if (!trimmedInviteCode) {
-      setJoinServerError("Invite code is required.");
-      return;
-    }
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      setIsJoiningServer(true);
-      setJoinServerError("");
-
-      const data = await joinServerByInvite(trimmedInviteCode, token);
-
-      setInviteCode("");
-      await loadServers(token);
-
-      if (data.server_id) {
-        handleSelectServer(data.server_id);
-      }
-    } catch (error) {
-      setJoinServerError(error.message || "Failed to join server.");
-    } finally {
-      setIsJoiningServer(false);
     }
   };
 
@@ -1409,48 +1620,97 @@ const MainPage = () => {
                   </button>
                 );
               })}
-            </div>
 
-            <button
-              type="button"
-              className="discord-logout-button"
-              onClick={handleLogout}
-              title="Log out"
-            >
-              Out
-            </button>
+              <button
+                type="button"
+                className="discord-guild-button discord-guild-create-button"
+                onClick={() => {
+                  setCreateServerError("");
+                  setIsCreateServerModalOpen(true);
+                }}
+                title="Create Server"
+              >
+                <span className="discord-guild-create-plus">+</span>
+              </button>
+            </div>
           </div>
 
           <div className="discord-sidebar-pane">
-            <div className="discord-pane-header">
-              <div>
-                <p className="discord-pane-label">
-                  {isDmView ? "Direct Messages" : "Server"}
-                </p>
-                <h1 className="discord-pane-title">
-                  {isDmView ? "Messages" : getServerName(activeServer)}
-                </h1>
-                {!isDmView && activeServer ? (
+            {isDmView ? (
+              <div className="discord-sidebar-pane-top">
+                <div className="discord-search-wrap">
+                  <input
+                    type="text"
+                    className="discord-search-input"
+                    value={sidebarSearch}
+                    onChange={(e) => setSidebarSearch(e.target.value)}
+                    placeholder="Find or start a conversation"
+                  />
+                </div>
+
+                <div className="discord-dm-nav">
+                  <button
+                    type="button"
+                    className={`discord-dm-nav-button${
+                      showDmHomeView && activeDmSection === "friends"
+                        ? " discord-dm-nav-button-active"
+                        : ""
+                    }`}
+                    onClick={() => handleSelectDmSection("friends")}
+                  >
+                    Friends
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`discord-dm-nav-button${
+                      showDmHomeView && activeDmSection === "add-friend"
+                        ? " discord-dm-nav-button-active"
+                        : ""
+                    }`}
+                    onClick={() => handleSelectDmSection("add-friend")}
+                  >
+                    Add Friend
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`discord-dm-nav-button${
+                      showDmHomeView && activeDmSection === "requests"
+                        ? " discord-dm-nav-button-active"
+                        : ""
+                    }`}
+                    onClick={() => handleSelectDmSection("requests")}
+                  >
+                    Friend Requests
+                  </button>
+                </div>
+
+                <div className="discord-sidebar-divider" />
+              </div>
+            ) : (
+              <div className="discord-sidebar-pane-top">
+                <div className="discord-pane-header">
+                  <p className="discord-pane-label">Server</p>
+                  <h1 className="discord-pane-title">
+                    {getServerName(activeServer)}
+                  </h1>
                   <p className="discord-pane-subtitle">
                     {getServerDescription(activeServer) || "No description provided."}
                   </p>
-                ) : null}
-              </div>
-            </div>
+                </div>
 
-            <div className="discord-search-wrap">
-              <input
-                type="text"
-                className="discord-search-input"
-                value={sidebarSearch}
-                onChange={(e) => setSidebarSearch(e.target.value)}
-                placeholder={
-                  isDmView
-                    ? "Find or start a conversation"
-                    : "Search channels"
-                }
-              />
-            </div>
+                <div className="discord-search-wrap">
+                  <input
+                    type="text"
+                    className="discord-search-input"
+                    value={sidebarSearch}
+                    onChange={(e) => setSidebarSearch(e.target.value)}
+                    placeholder="Search channels"
+                  />
+                </div>
+              </div>
+            )}
 
             {error && <p className="auth-error server-inline-error">{error}</p>}
             {serverError && !isDmView && (
@@ -1462,192 +1722,61 @@ const MainPage = () => {
 
             <div className="discord-sidebar-scroll">
               {isDmView ? (
-                <>
-                  <section className="discord-section-block">
-                    <div className="discord-section-heading">Direct Messages</div>
+                <section className="discord-section-block">
+                  <div className="discord-section-heading">Direct Messages</div>
 
-                    {filteredDirectConversations.length === 0 ? (
-                      <p className="discord-helper-text">No direct conversations yet.</p>
-                    ) : (
-                      <div className="discord-dm-list">
-                        {filteredDirectConversations.map((conversation) => {
-                          const conversationId = getConversationId(conversation);
-                          const isActive =
-                            String(conversationId) === String(activeConversationId);
-                          const presenceStatus =
-                            getConversationPresenceStatus(conversation);
+                  {filteredDirectConversations.length === 0 ? (
+                    <p className="discord-helper-text">No direct conversations yet.</p>
+                  ) : (
+                    <div className="discord-dm-list">
+                      {filteredDirectConversations.map((conversation) => {
+                        const conversationId = getConversationId(conversation);
+                        const isActive =
+                          String(conversationId) === String(activeConversationId);
+                        const presenceStatus =
+                          getConversationPresenceStatus(conversation);
 
-                          return (
-                            <button
-                              key={conversationId}
-                              type="button"
-                              onClick={() => handleSelectConversation(conversationId)}
-                              className={`discord-dm-item${
-                                isActive ? " discord-dm-item-active" : ""
-                              }`}
-                            >
-                              <div className="discord-dm-avatar">
-                                {getInitial(getConversationOtherUsername(conversation))}
-                                <span
-                                  className={`discord-status-dot ${getPresenceColorClass(
-                                    presenceStatus
-                                  )}`}
-                                />
+                        return (
+                          <button
+                            key={conversationId}
+                            type="button"
+                            onClick={() => handleSelectConversation(conversationId)}
+                            className={`discord-dm-item${
+                              isActive ? " discord-dm-item-active" : ""
+                            }`}
+                          >
+                            <div className="discord-dm-avatar">
+                              {getInitial(getConversationOtherUsername(conversation))}
+                              <span
+                                className={`discord-status-dot ${getPresenceColorClass(
+                                  presenceStatus
+                                )}`}
+                              />
+                            </div>
+
+                            <div className="discord-dm-content">
+                              <div className="discord-dm-name-row">
+                                <span className="discord-dm-name">
+                                  {getConversationOtherUsername(conversation)}
+                                </span>
+                                <span className="discord-dm-time">
+                                  {formatTimestamp(
+                                    getConversationLastTimestamp(conversation)
+                                  )}
+                                </span>
                               </div>
 
-                              <div className="discord-dm-content">
-                                <div className="discord-dm-name-row">
-                                  <span className="discord-dm-name">
-                                    {getConversationOtherUsername(conversation)}
-                                  </span>
-                                  <span className="discord-dm-time">
-                                    {formatTimestamp(
-                                      getConversationLastTimestamp(conversation)
-                                    )}
-                                  </span>
-                                </div>
-
-                                <p className="discord-dm-preview">
-                                  {getConversationLastMessage(conversation) ||
-                                    "No messages yet."}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </section>
-
-                  <section className="discord-section-block">
-                    <div className="discord-section-heading">Friends</div>
-
-                    {filteredFriends.length === 0 ? (
-                      <p className="discord-helper-text">No friends found.</p>
-                    ) : (
-                      <div className="discord-dm-list">
-                        {filteredFriends.map((friend) => {
-                          const presenceStatus = getFriendPresenceStatus(friend);
-
-                          return (
-                            <button
-                              key={getFriendId(friend)}
-                              type="button"
-                              onClick={() => handleStartDirectConversation(friend)}
-                              className="discord-dm-item"
-                            >
-                              <div className="discord-dm-avatar">
-                                {getInitial(getFriendName(friend))}
-                                <span
-                                  className={`discord-status-dot ${getPresenceColorClass(
-                                    presenceStatus
-                                  )}`}
-                                />
-                              </div>
-
-                              <div className="discord-dm-content">
-                                <div className="discord-dm-name-row">
-                                  <span className="discord-dm-name">
-                                    {getFriendName(friend)}
-                                  </span>
-                                </div>
-                                <p className="discord-dm-preview">
-                                  {getFriendEmail(friend)}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </section>
-
-                  <section className="discord-section-block discord-utility-section">
-                    <div className="discord-section-heading">Join a Server</div>
-                    {joinServerError && (
-                      <p className="auth-error server-inline-error">{joinServerError}</p>
-                    )}
-
-                    <form onSubmit={handleJoinServer} className="discord-form-stack">
-                      <input
-                        id="invite_code"
-                        type="text"
-                        className="auth-input compact-input"
-                        value={inviteCode}
-                        onChange={(e) => {
-                          setInviteCode(e.target.value);
-                          setJoinServerError("");
-                        }}
-                        placeholder="Enter invite code"
-                      />
-
-                      <button
-                        type="submit"
-                        className="auth-button compact-button"
-                        disabled={isJoiningServer}
-                      >
-                        {isJoiningServer ? "Joining..." : "Join server"}
-                      </button>
-                    </form>
-                  </section>
-
-                  <section className="discord-section-block discord-utility-section">
-                    <div className="discord-section-heading">Create a Server</div>
-                    {createServerError && (
-                      <p className="auth-error server-inline-error">
-                        {createServerError}
-                      </p>
-                    )}
-
-                    <form onSubmit={handleCreateServer} className="discord-form-stack">
-                      <input
-                        id="server_name"
-                        name="server_name"
-                        type="text"
-                        className="auth-input compact-input"
-                        value={serverFormData.server_name}
-                        onChange={(e) => {
-                          const { name, value } = e.target;
-
-                          setServerFormData((prevData) => ({
-                            ...prevData,
-                            [name]: value
-                          }));
-
-                          setCreateServerError("");
-                        }}
-                        placeholder="Server name"
-                      />
-
-                      <textarea
-                        id="description"
-                        name="description"
-                        className="auth-input compact-input compact-textarea"
-                        value={serverFormData.description}
-                        onChange={(e) => {
-                          const { name, value } = e.target;
-
-                          setServerFormData((prevData) => ({
-                            ...prevData,
-                            [name]: value
-                          }));
-
-                          setCreateServerError("");
-                        }}
-                        placeholder="Server description"
-                        rows="3"
-                      />
-
-                      <button
-                        type="submit"
-                        className="auth-button compact-button"
-                        disabled={isCreatingServer}
-                      >
-                        {isCreatingServer ? "Creating..." : "Create server"}
-                      </button>
-                    </form>
-                  </section>
-                </>
+                              <p className="discord-dm-preview">
+                                {getConversationLastMessage(conversation) ||
+                                  "No messages yet."}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
               ) : (
                 <>
                   <section className="discord-section-block">
@@ -1684,6 +1813,7 @@ const MainPage = () => {
 
                   <section className="discord-section-block discord-utility-section">
                     <div className="discord-section-heading">Create Channel</div>
+
                     {createChannelError && (
                       <p className="auth-error server-inline-error">
                         {createChannelError}
@@ -1745,13 +1875,34 @@ const MainPage = () => {
               )}
             </div>
 
-            <div className="discord-current-user-bar">
-              <div className="discord-current-user-avatar">
-                {getInitial(user?.username)}
+            <div className="discord-account-panel">
+              <div className="discord-account-panel-user">
+                <div className="discord-account-avatar">
+                  {getInitial(user?.username)}
+                  <span
+                    className={`discord-status-dot ${getPresenceColorClass(
+                      currentUserPresence
+                    )}`}
+                  />
+                </div>
+
+                <div className="discord-account-meta">
+                  <div className="discord-account-name">{user?.username}</div>
+                  <div className="discord-account-status">
+                    {currentUserPresence === "online" ? "Online" : "Offline"}
+                  </div>
+                </div>
               </div>
-              <div className="discord-current-user-meta">
-                <div className="discord-current-user-name">{user?.username}</div>
-                <div className="discord-current-user-email">{user?.email}</div>
+
+              <div className="discord-account-actions">
+                <button
+                  type="button"
+                  className="discord-account-action"
+                  onClick={handleLogout}
+                  title="Log out"
+                >
+                  Log out
+                </button>
               </div>
             </div>
           </div>
@@ -1761,27 +1912,44 @@ const MainPage = () => {
           <div className="server-main-header discord-chat-header">
             <div className="discord-chat-header-left">
               {isDmView ? (
-                <>
-                  <span
-                    className={`discord-status-dot discord-header-status ${getPresenceColorClass(
-                      activeConversationUser?.presence_status
-                    )}`}
-                  />
+                activeConversationUser ? (
+                  <>
+                    <span
+                      className={`discord-status-dot discord-header-status ${getPresenceColorClass(
+                        activeConversationUser.presence_status
+                      )}`}
+                    />
+                    <div>
+                      <h2 className="server-main-title discord-chat-title">
+                        {activeConversationUser.username}
+                      </h2>
+                      <p className="discord-chat-subtitle">
+                        {activeConversationUser.presence_status === "online"
+                          ? "Online"
+                          : "Offline"}
+                      </p>
+                    </div>
+                  </>
+                ) : (
                   <div>
                     <h2 className="server-main-title discord-chat-title">
-                      {activeConversationUser
-                        ? activeConversationUser.username
-                        : "Direct Messages"}
+                      {activeDmSection === "requests"
+                        ? "Friend Requests"
+                        : activeDmSection === "add-friend"
+                          ? "Add Friend"
+                          : "Friends"}
                     </h2>
                     <p className="discord-chat-subtitle">
-                      {activeConversationUser
-                        ? activeConversationUser.presence_status === "online"
-                          ? "Online"
-                          : "Offline"
-                        : "Choose a conversation"}
+                      {activeDmSection === "requests"
+                        ? "Manage incoming and outgoing requests"
+                        : activeDmSection === "add-friend"
+                          ? "Send a friend request by username"
+                          : `${filteredFriends.length} friend${
+                              filteredFriends.length === 1 ? "" : "s"
+                            }`}
                     </p>
                   </div>
-                </>
+                )
               ) : (
                 <>
                   <span className="discord-channel-symbol">#</span>
@@ -1801,17 +1969,257 @@ const MainPage = () => {
           </div>
 
           <section className="server-messages-panel discord-messages-panel">
-            {isMessagesLoading ? (
+            {showDmHomeView ? (
+              <div className="discord-home-panel">
+                {activeDmSection === "friends" ? (
+                  <>
+                    <div className="discord-home-header">
+                      <p className="discord-home-section-label">Friends</p>
+                      <h3 className="discord-home-title">All Friends</h3>
+                      <p className="discord-home-subtitle-large">
+                        Start a direct message by clicking on a friend below.
+                      </p>
+                    </div>
+
+                    {filteredFriends.length === 0 ? (
+                      <div className="discord-home-empty-card">
+                        No friends found.
+                      </div>
+                    ) : (
+                      <div className="discord-friends-home-list">
+                        {filteredFriends.map((friend) => {
+                          const presenceStatus = getFriendPresenceStatus(friend);
+
+                          return (
+                            <div
+                              key={getFriendId(friend)}
+                              className="discord-friend-home-card"
+                            >
+                              <div className="discord-friend-home-main">
+                                <div className="discord-dm-avatar">
+                                  {getInitial(getFriendName(friend))}
+                                  <span
+                                    className={`discord-status-dot ${getPresenceColorClass(
+                                      presenceStatus
+                                    )}`}
+                                  />
+                                </div>
+
+                                <div className="discord-friend-home-info">
+                                  <div className="discord-friend-home-name">
+                                    {getFriendName(friend)}
+                                  </div>
+                                  <div className="discord-friend-home-email">
+                                    {getFriendEmail(friend)}
+                                  </div>
+                                  <div className="discord-friend-home-status">
+                                    {presenceStatus === "online"
+                                      ? "Online"
+                                      : "Offline"}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="auth-button discord-friend-home-action"
+                                onClick={() => handleStartDirectConversation(friend)}
+                              >
+                                Message
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : activeDmSection === "add-friend" ? (
+                  <>
+                    <div className="discord-home-header">
+                      <p className="discord-home-section-label">Add Friend</p>
+                      <h3 className="discord-home-title">Add Friend by Username</h3>
+                      <p className="discord-home-subtitle-large">
+                        Usernames are unique, so enter the exact username to send a request.
+                      </p>
+                    </div>
+
+                    <div className="discord-home-empty-card discord-add-friend-card">
+                      <form onSubmit={handleAddFriend} className="discord-add-friend-form">
+                        {addFriendError && (
+                          <p className="auth-error server-inline-error">{addFriendError}</p>
+                        )}
+
+                        {addFriendSuccess && (
+                          <p className="auth-success discord-inline-success">
+                            {addFriendSuccess}
+                          </p>
+                        )}
+
+                        <input
+                          type="text"
+                          className="auth-input compact-input"
+                          value={friendUsername}
+                          onChange={(e) => {
+                            setFriendUsername(e.target.value);
+                            setAddFriendError("");
+                            setAddFriendSuccess("");
+                          }}
+                          placeholder="Enter username"
+                        />
+
+                        <button
+                          type="submit"
+                          className="auth-button compact-button"
+                          disabled={isAddingFriend}
+                        >
+                          {isAddingFriend ? "Sending..." : "Send friend request"}
+                        </button>
+                      </form>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="discord-home-header">
+                      <p className="discord-home-section-label">Friend Requests</p>
+                      <h3 className="discord-home-title">Incoming and Outgoing Requests</h3>
+                      <p className="discord-home-subtitle-large">
+                        Review incoming requests and track the ones you already sent.
+                      </p>
+                    </div>
+
+                    {friendRequestsError ? (
+                      <p className="auth-error server-inline-error">
+                        {friendRequestsError}
+                      </p>
+                    ) : null}
+
+                    {isFriendRequestsLoading ? (
+                      <div className="discord-home-empty-card">
+                        Loading friend requests...
+                      </div>
+                    ) : (
+                      <div className="discord-friends-home-list">
+                        <div className="discord-home-header">
+                          <p className="discord-home-section-label">
+                            Incoming — {incomingFriendRequests.length}
+                          </p>
+                        </div>
+
+                        {incomingFriendRequests.length === 0 ? (
+                          <div className="discord-home-empty-card">
+                            No incoming friend requests.
+                          </div>
+                        ) : (
+                          incomingFriendRequests.map((request) => {
+                            const requestId = getFriendRequestId(request);
+                            const isProcessing =
+                              String(processingFriendRequestId) === String(requestId);
+
+                            return (
+                              <div
+                                key={requestId}
+                                className="discord-friend-home-card"
+                              >
+                                <div className="discord-friend-home-main">
+                                  <div className="discord-dm-avatar">
+                                    {getInitial(getFriendRequestSenderName(request))}
+                                  </div>
+
+                                  <div className="discord-friend-home-info">
+                                    <div className="discord-friend-home-name">
+                                      {getFriendRequestSenderName(request)}
+                                    </div>
+                                    <div className="discord-friend-home-email">
+                                      {getFriendRequestSenderEmail(request)}
+                                    </div>
+                                    <div className="discord-friend-home-status">
+                                      Received{" "}
+                                      {formatTimestamp(
+                                        getFriendRequestTimestamp(request)
+                                      ) || "recently"}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                                  <button
+                                    type="button"
+                                    className="auth-button discord-friend-home-action"
+                                    onClick={() =>
+                                      handleRespondToFriendRequest(requestId, "accept")
+                                    }
+                                    disabled={isProcessing}
+                                  >
+                                    {isProcessing ? "Working..." : "Accept"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="auth-button auth-button-danger discord-friend-home-action"
+                                    onClick={() =>
+                                      handleRespondToFriendRequest(requestId, "reject")
+                                    }
+                                    disabled={isProcessing}
+                                  >
+                                    {isProcessing ? "Working..." : "Reject"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+
+                        <div className="discord-home-header">
+                          <p className="discord-home-section-label">
+                            Outgoing — {outgoingFriendRequests.length}
+                          </p>
+                        </div>
+
+                        {outgoingFriendRequests.length === 0 ? (
+                          <div className="discord-home-empty-card">
+                            No outgoing friend requests.
+                          </div>
+                        ) : (
+                          outgoingFriendRequests.map((request) => (
+                            <div
+                              key={getFriendRequestId(request)}
+                              className="discord-friend-home-card"
+                            >
+                              <div className="discord-friend-home-main">
+                                <div className="discord-dm-avatar">
+                                  {getInitial(getFriendRequestReceiverName(request))}
+                                </div>
+
+                                <div className="discord-friend-home-info">
+                                  <div className="discord-friend-home-name">
+                                    {getFriendRequestReceiverName(request)}
+                                  </div>
+                                  <div className="discord-friend-home-email">
+                                    {getFriendRequestReceiverEmail(request)}
+                                  </div>
+                                  <div className="discord-friend-home-status">
+                                    Pending{" "}
+                                    {formatTimestamp(
+                                      getFriendRequestTimestamp(request)
+                                    ) || ""}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : isMessagesLoading ? (
               <div className="server-state-message discord-empty-state">
                 Loading messages...
               </div>
             ) : messageError ? (
               <div className="server-state-message server-state-error discord-empty-state">
                 {messageError}
-              </div>
-            ) : isDmView && !activeConversationId ? (
-              <div className="server-state-message discord-empty-state">
-                Select a friend or a direct conversation to start chatting.
               </div>
             ) : !isDmView && !activeChannelId ? (
               <div className="server-state-message discord-empty-state">
@@ -1874,55 +2282,59 @@ const MainPage = () => {
             )}
           </section>
 
-          <form onSubmit={handleSendMessage} className="server-message-form discord-composer">
-            {messageError && (
-              <p className="auth-error server-inline-error server-inline-error-tight">
-                {messageError}
-              </p>
-            )}
+          {showComposer ? (
+            <form onSubmit={handleSendMessage} className="server-message-form discord-composer">
+              {messageError && (
+                <p className="auth-error server-inline-error server-inline-error-tight">
+                  {messageError}
+                </p>
+              )}
 
-            <div className="discord-composer-shell">
-              <textarea
-                ref={messageInputRef}
-                className="message-input discord-composer-input"
-                placeholder={
-                  isDmView
-                    ? activeConversationUser
-                      ? `Message @${activeConversationUser.username}`
-                      : "Select a direct conversation"
-                    : activeChannel
-                      ? `Message #${getChannelName(activeChannel)}`
-                      : "Select a channel"
-                }
-                value={messageContent}
-                onChange={handleMessageInputChange}
-                onKeyDown={handleMessageKeyDown}
-                disabled={
-                  (isDmView && !activeConversationId) ||
-                  (!isDmView && !activeChannelId)
-                }
-              />
+              <div className="discord-composer-shell">
+                <textarea
+                  ref={messageInputRef}
+                  className="message-input discord-composer-input"
+                  placeholder={
+                    isDmView
+                      ? activeConversationUser
+                        ? `Message @${activeConversationUser.username}`
+                        : "Select a direct conversation"
+                      : activeChannel
+                        ? `Message #${getChannelName(activeChannel)}`
+                        : "Select a channel"
+                  }
+                  value={messageContent}
+                  onChange={handleMessageInputChange}
+                  onKeyDown={handleMessageKeyDown}
+                  disabled={
+                    (isDmView && !activeConversationId) ||
+                    (!isDmView && !activeChannelId)
+                  }
+                />
 
-              <button
-                type="submit"
-                className="auth-button discord-send-button"
-                disabled={
-                  isSendingMessage ||
-                  (isDmView && !activeConversationId) ||
-                  (!isDmView && !activeChannelId)
-                }
-              >
-                {isSendingMessage ? "Sending..." : "Send"}
-              </button>
-            </div>
-          </form>
+                <button
+                  type="submit"
+                  className="auth-button discord-send-button"
+                  disabled={
+                    isSendingMessage ||
+                    (isDmView && !activeConversationId) ||
+                    (!isDmView && !activeChannelId)
+                  }
+                >
+                  {isSendingMessage ? "Sending..." : "Send"}
+                </button>
+              </div>
+            </form>
+          ) : null}
         </main>
 
         <aside className="server-members-panel discord-right-pane">
           {isDmView ? (
             <>
               <div className="discord-right-pane-header">
-                <h2 className="server-members-title">Profile</h2>
+                <h2 className="server-members-title">
+                  {activeConversationUser ? "Profile" : "Account"}
+                </h2>
               </div>
 
               {activeConversationUser ? (
@@ -1952,6 +2364,9 @@ const MainPage = () => {
                 <div className="discord-profile-card compact-profile-card">
                   <div className="discord-profile-name">{user?.username}</div>
                   <div className="discord-profile-meta">{user?.email}</div>
+                  <div className="discord-profile-meta">
+                    Status: {currentUserPresence === "online" ? "Online" : "Offline"}
+                  </div>
                   <div className="discord-profile-meta">Friends: {friends.length}</div>
                   <div className="discord-profile-meta">
                     Direct conversations: {directConversations.length}
@@ -1980,7 +2395,10 @@ const MainPage = () => {
                   ) : (
                     <div className="server-members-list discord-member-list">
                       {onlineMembers.map((member) => (
-                        <div key={getMemberId(member)} className="server-member-item discord-member-item">
+                        <div
+                          key={getMemberId(member)}
+                          className="server-member-item discord-member-item"
+                        >
                           <div className="discord-member-row-top">
                             <div className="discord-profile-avatar member-avatar">
                               {getInitial(getMemberName(member))}
@@ -2017,7 +2435,10 @@ const MainPage = () => {
                   ) : (
                     <div className="server-members-list discord-member-list">
                       {offlineMembers.map((member) => (
-                        <div key={getMemberId(member)} className="server-member-item discord-member-item">
+                        <div
+                          key={getMemberId(member)}
+                          className="server-member-item discord-member-item"
+                        >
                           <div className="discord-member-row-top">
                             <div className="discord-profile-avatar member-avatar">
                               {getInitial(getMemberName(member))}
@@ -2071,6 +2492,87 @@ const MainPage = () => {
           )}
         </aside>
       </div>
+
+      {isCreateServerModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={() => setIsCreateServerModalOpen(false)}
+        >
+          <div
+            className="discord-create-server-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 className="discord-modal-title">Create a Server</h2>
+              <p className="discord-modal-subtitle">
+                Make a new server and start organizing your chats.
+              </p>
+            </div>
+
+            {createServerError ? (
+              <p className="auth-error server-inline-error">{createServerError}</p>
+            ) : null}
+
+            <form onSubmit={handleCreateServer} className="discord-form-stack">
+              <input
+                id="server_name"
+                name="server_name"
+                type="text"
+                className="auth-input compact-input"
+                value={serverFormData.server_name}
+                onChange={(e) => {
+                  const { name, value } = e.target;
+
+                  setServerFormData((prevData) => ({
+                    ...prevData,
+                    [name]: value
+                  }));
+
+                  setCreateServerError("");
+                }}
+                placeholder="Server name"
+              />
+
+              <textarea
+                id="description"
+                name="description"
+                className="auth-input compact-input compact-textarea"
+                value={serverFormData.description}
+                onChange={(e) => {
+                  const { name, value } = e.target;
+
+                  setServerFormData((prevData) => ({
+                    ...prevData,
+                    [name]: value
+                  }));
+
+                  setCreateServerError("");
+                }}
+                placeholder="Server description"
+                rows="3"
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={() => setIsCreateServerModalOpen(false)}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isCreatingServer}
+                >
+                  {isCreatingServer ? "Creating..." : "Create server"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

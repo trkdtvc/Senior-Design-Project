@@ -65,7 +65,9 @@ const LoginPage = () => {
         <h1 className="auth-logo">YFNC</h1>
         <p className="auth-subtitle">Welcome back. Sign in to continue.</p>
 
-        {error && <p className="auth-error auth-error-login">{error}</p>}
+        {error && (
+          <p className="auth-error auth-error-login auth-login-warning">{error}</p>
+          )}
         {success && <p className="auth-success">{success}</p>}
 
         <form className="auth-form" onSubmit={handleSubmit}>

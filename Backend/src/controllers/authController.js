@@ -169,14 +169,14 @@ const loginUser = async (req, res, next) => {
 
     if (!user) {
       res.status(401);
-      throw new Error("Invalid credentials");
+      throw new Error("User does not exist.");
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
       res.status(401);
-      throw new Error("Invalid credentials");
+      throw new Error("Incorrect password.");
     }
 
     if (!user.is_verified) {

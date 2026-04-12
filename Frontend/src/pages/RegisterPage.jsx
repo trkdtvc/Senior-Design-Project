@@ -168,14 +168,17 @@ const RegisterPage = () => {
             onChange={handleChange}
           />
 
-          {isUsernameError && <p className="auth-error">{error}</p>}
-
+          {isUsernameError && (
+            <p className="auth-error auth-error-username">{error}</p>
+          )}
+          
           <input
-            type="text"
-            name="username"
-            placeholder="Username"
-            value={formData.username}
-            onChange={handleChange}
+           type="text"
+           name="username"
+           placeholder="Username"
+           value={formData.username}
+           onChange={handleChange}
+           className={isUsernameError ? "auth-input auth-input-error" : "auth-input"}
           />
 
           <input
