@@ -9,9 +9,14 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 
 function App() {
+  const token = localStorage.getItem("token");
+
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route
+        path="/"
+        element={<Navigate to={token ? "/dashboard" : "/login"} replace />}
+      />
 
       <Route element={<PublicRoute />}>
         <Route path="/login" element={<LoginPage />} />
@@ -26,6 +31,11 @@ function App() {
         <Route path="/dashboard" element={<MainPage />} />
         <Route path="/server/:serverId" element={<MainPage />} />
       </Route>
+
+      <Route
+        path="*"
+        element={<Navigate to={token ? "/dashboard" : "/login"} replace />}
+      />
     </Routes>
   );
 }
