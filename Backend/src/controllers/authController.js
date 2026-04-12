@@ -36,7 +36,7 @@ const sendVerificationEmailToUser = async (
   verificationToken,
   expiresInHours = 24
 ) => {
-  const verificationLink = `${getFrontendBaseUrl()}/verify-email?token=${verificationToken}`;
+  const verificationLink = `${getFrontendBaseUrl()}/verify-email?token=${verificationToken}&email=${encodeURIComponent(user.email)}`;
 
   await sendEmail({
     to: user.email,
@@ -109,25 +109,32 @@ const registerUser = async (req, res, next) => {
       throw new Error("Passwords do not match");
     }
 
-    const existingEmail = await findUserByEmail(email);
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUsername = username.trim();
+
+    const existingEmail = await findUserByEmail(normalizedEmail);
     if (existingEmail) {
       res.status(400);
       throw new Error("Email already exists");
     }
 
-    const existingUsername = await findUserByUsername(username);
+    const existingUsername = await findUserByUsername(normalizedUsername);
     if (existingUsername) {
       res.status(400);
       throw new Error("Username already exists");
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const result = await createUser(username, email, passwordHash);
+    const result = await createUser(
+      normalizedUsername,
+      normalizedEmail,
+      passwordHash
+    );
 
     const user = {
       user_id: result.insertId,
-      username,
-      email,
+      username: normalizedUsername,
+      email: normalizedEmail,
       is_verified: 0
     };
 
@@ -143,7 +150,8 @@ const registerUser = async (req, res, next) => {
     await sendVerificationEmailToUser(user, verificationToken, 24);
 
     return res.status(201).json({
-      message: "User registered successfully. Please verify your email before logging in.",
+      message: "Registration successful. Check your email to verify your account.",
+      email: user.email,
       user
     });
   } catch (error) {
@@ -154,14 +162,15 @@ const registerUser = async (req, res, next) => {
 const loginUser = async (req, res, next) => {
   try {
     const { login, identity, password } = req.body || {};
-    const loginValue = login || identity;
+    const rawLoginValue = login || identity;
+    const loginValue = rawLoginValue ? rawLoginValue.trim() : "";
 
     if (!loginValue || !password) {
       res.status(400);
       throw new Error("Login and password are required");
     }
 
-    let user = await findUserByEmail(loginValue);
+    let user = await findUserByEmail(loginValue.toLowerCase());
 
     if (!user) {
       user = await findUserByUsername(loginValue);
@@ -217,12 +226,6 @@ const verifyEmail = async (req, res, next) => {
       throw new Error("Invalid verification token.");
     }
 
-    if (user.is_verified) {
-      return res.status(200).json({
-        message: "Email already verified."
-      });
-    }
-
     const isExpired =
       !user.verification_token_expires ||
       new Date(user.verification_token_expires) < new Date();
@@ -232,10 +235,28 @@ const verifyEmail = async (req, res, next) => {
       throw new Error("Verification token has expired.");
     }
 
-    await markUserAsVerified(user.user_id);
+    if (!user.is_verified) {
+      await markUserAsVerified(user.user_id);
+    }
+
+    const freshUser = await findUserById(user.user_id);
+
+    if (!freshUser) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const authToken = generateToken(freshUser);
 
     return res.status(200).json({
-      message: "Successfully verified."
+      message: "Email verified successfully. Redirecting you into the app...",
+      token: authToken,
+      user: {
+        user_id: freshUser.user_id,
+        username: freshUser.username,
+        email: freshUser.email,
+        is_verified: freshUser.is_verified
+      }
     });
   } catch (error) {
     next(error);
@@ -245,13 +266,14 @@ const verifyEmail = async (req, res, next) => {
 const resendVerificationEmail = async (req, res, next) => {
   try {
     const { email } = req.body || {};
+    const normalizedEmail = email ? email.trim().toLowerCase() : "";
 
-    if (!email) {
+    if (!normalizedEmail) {
       res.status(400);
       throw new Error("Email is required");
     }
 
-    const user = await findUserByEmail(email);
+    const user = await findUserByEmail(normalizedEmail);
 
     if (!user) {
       return res.status(200).json({
@@ -286,13 +308,14 @@ const resendVerificationEmail = async (req, res, next) => {
 const requestPasswordReset = async (req, res, next) => {
   try {
     const { email } = req.body || {};
+    const normalizedEmail = email ? email.trim().toLowerCase() : "";
 
-    if (!email) {
+    if (!normalizedEmail) {
       res.status(400);
       throw new Error("Email is required");
     }
 
-    const user = await findUserByEmail(email);
+    const user = await findUserByEmail(normalizedEmail);
 
     if (user) {
       const resetToken = crypto.randomBytes(32).toString("hex");
