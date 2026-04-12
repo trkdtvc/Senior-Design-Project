@@ -5,13 +5,16 @@ const {
   getActiveInvitesByServerId,
   isInviteCodeInUse,
   deactivateInvite,
-  deactivateInvitesByServerId
-} = require("../models/serverInviteModel")
+  deactivateInvitesByServerId,
+  deactivateExpiredInvitesByServerId
+} = require("../models/serverInviteModel");
 
 const {
   isUserMemberOfServer,
   addServerMember
 } = require("../models/serverMemberModel");
+
+const INVITE_DURATION_MINUTES = 10;
 
 const generateInviteCode = async () => {
   let inviteCode = "";
@@ -29,7 +32,6 @@ const createInvite = async (req, res, next) => {
   try {
     const { serverId } = req.params;
     const userId = req.user.user_id;
-    const { expires_in_days } = req.body;
 
     const isMember = await isUserMemberOfServer(serverId, userId);
 
@@ -38,31 +40,21 @@ const createInvite = async (req, res, next) => {
       throw new Error("Access denied. You are not a member of this server.");
     }
 
-    let expiresAt = null;
-
-    if (expires_in_days) {
-      const parsedDays = Number(expires_in_days);
-
-      if (Number.isNaN(parsedDays) || parsedDays <= 0) {
-        res.status(400);
-        throw new Error("expires_in_days must be a positive number.");
-      }
-
-      const expirationDate = new Date();
-      expirationDate.setDate(expirationDate.getDate() + parsedDays);
-      expiresAt = expirationDate;
-    }
+    const expiresAt = new Date(
+      Date.now() + INVITE_DURATION_MINUTES * 60 * 1000
+    );
 
     await deactivateInvitesByServerId(serverId);
-    
+
     const inviteCode = await generateInviteCode();
 
     await createServerInvite(serverId, userId, inviteCode, expiresAt);
 
     res.status(201).json({
-      message: "Invite created successfully.",
+      message: `Invite created successfully. It will expire in ${INVITE_DURATION_MINUTES} minutes.`,
       invite_code: inviteCode,
-      expires_at: expiresAt
+      expires_at: expiresAt,
+      expires_in_minutes: INVITE_DURATION_MINUTES
     });
   } catch (error) {
     next(error);
@@ -80,6 +72,8 @@ const getServerInvites = async (req, res, next) => {
       res.status(403);
       throw new Error("Access denied. You are not a member of this server.");
     }
+
+    await deactivateExpiredInvitesByServerId(serverId);
 
     const invites = await getActiveInvitesByServerId(serverId);
 

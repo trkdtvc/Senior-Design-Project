@@ -51,6 +51,7 @@ router.post("/join", protect, joinServerByInvite);
  * /api/server-invites/{serverId}:
  *   post:
  *     summary: Create a new invite for a server
+ *     description: Creates one active invite that always expires after 10 minutes. Creating a new invite deactivates any previous active invite for that server.
  *     tags: [Server Invites]
  *     security:
  *       - bearerAuth: []
@@ -61,21 +62,9 @@ router.post("/join", protect, joinServerByInvite);
  *         schema:
  *           type: integer
  *         description: Server ID
- *     requestBody:
- *       required: false
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               expires_in_days:
- *                 type: integer
- *                 example: 7
  *     responses:
  *       201:
  *         description: Invite created successfully
- *       400:
- *         description: Invalid request
  *       401:
  *         description: Unauthorized
  *       403:

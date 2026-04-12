@@ -10,14 +10,12 @@ const handleResponse = async (response) => {
   return data;
 };
 
-export const createServerInvite = async (serverId, token, payload = {}) => {
+export const createServerInvite = async (serverId, token) => {
   const response = await fetch(`${API_BASE_URL}/server-invites/${serverId}`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify(payload)
+    }
   });
 
   return handleResponse(response);

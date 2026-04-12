@@ -47,7 +47,9 @@ const getActiveInvitesByServerId = async (serverId) => {
       is_active,
       created_at
      FROM server_invites
-     WHERE server_id = ? AND is_active = 1
+     WHERE server_id = ?
+       AND is_active = 1
+       AND (expires_at IS NULL OR expires_at > NOW())
      ORDER BY created_at DESC`,
     [serverId]
   );
@@ -82,11 +84,26 @@ const deactivateInvitesByServerId = async (serverId) => {
   return result;
 };
 
+const deactivateExpiredInvitesByServerId = async (serverId) => {
+  const [result] = await pool.execute(
+    `UPDATE server_invites
+     SET is_active = 0
+     WHERE server_id = ?
+       AND is_active = 1
+       AND expires_at IS NOT NULL
+       AND expires_at <= NOW()`,
+    [serverId]
+  );
+
+  return result;
+};
+
 module.exports = {
   createServerInvite,
   getInviteByCode,
   getActiveInvitesByServerId,
   isInviteCodeInUse,
   deactivateInvite,
-  deactivateInvitesByServerId
+  deactivateInvitesByServerId,
+  deactivateExpiredInvitesByServerId
 };
