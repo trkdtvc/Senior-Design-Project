@@ -1,8 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import DashboardPage from "./pages/DashboardPage";
-import ServerPage from "./pages/ServerPage";
+import MainPage from "./pages/MainPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -24,8 +23,8 @@ function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/server/:serverId" element={<ServerPage />} />
+        <Route path="/dashboard" element={<MainPage />} />
+        <Route path="/server/:serverId" element={<MainPage />} />
       </Route>
     </Routes>
   );

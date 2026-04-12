@@ -15,7 +15,7 @@ import {
   createServerInvite,
   getServerInvites
 } from "../services/serverInviteService";
-import { connectSocket } from "../services/socket";
+import { connectSocket, disconnectSocket } from "../services/socket";
 import { getMe } from "../services/authService";
 import "../styles/auth.css";
 
@@ -165,6 +165,7 @@ const ServerPage = () => {
   const messageInputRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
   const socketRef = useRef(null);
+  const previousChannelIdRef = useRef(null);
 
   const [server, setServer] = useState(null);
   const [isSocketReady, setIsSocketReady] = useState(false);
@@ -426,6 +427,7 @@ const ServerPage = () => {
         await loadMembers();
         await loadInvites();
       } catch (error) {
+        disconnectSocket();
         localStorage.removeItem("token");
         navigate("/login");
       } finally {
@@ -469,10 +471,6 @@ const ServerPage = () => {
     if (serverId) {
       socket.emit("join_server", String(serverId));
     }
-
-    if (activeChannelId) {
-      socket.emit("join_channel", String(activeChannelId));
-    }
   };
 
   const handleDisconnect = () => {
@@ -488,8 +486,8 @@ const ServerPage = () => {
 
   return () => {
     if (socket.connected) {
-      if (activeChannelId) {
-        socket.emit("leave_channel", String(activeChannelId));
+      if (previousChannelIdRef.current) {
+        socket.emit("leave_channel", String(previousChannelIdRef.current));
       }
 
       if (serverId) {
@@ -500,9 +498,45 @@ const ServerPage = () => {
     socket.off("connect", handleConnect);
     socket.off("disconnect", handleDisconnect);
     socketRef.current = null;
+    previousChannelIdRef.current = null;
     setIsSocketReady(false);
   };
-}, [navigate, serverId, activeChannelId]);
+}, [navigate, serverId]);
+
+useEffect(() => {
+  const socket = socketRef.current;
+
+  if (!socket || !isSocketReady) {
+    return;
+  }
+
+  const previousChannelId = previousChannelIdRef.current;
+
+  if (
+    previousChannelId &&
+    String(previousChannelId) !== String(activeChannelId)
+  ) {
+    socket.emit("leave_channel", String(previousChannelId));
+  }
+
+  if (activeChannelId) {
+    socket.emit("join_channel", String(activeChannelId));
+    previousChannelIdRef.current = activeChannelId;
+  } else {
+    previousChannelIdRef.current = null;
+  }
+
+  return () => {
+    if (
+      socket.connected &&
+      activeChannelId &&
+      String(previousChannelIdRef.current) === String(activeChannelId)
+    ) {
+      socket.emit("leave_channel", String(activeChannelId));
+      previousChannelIdRef.current = null;
+    }
+  };
+}, [activeChannelId, isSocketReady]);
 
   useEffect(() => {
     const socket = socketRef.current;

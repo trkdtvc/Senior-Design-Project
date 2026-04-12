@@ -67,13 +67,14 @@ const DashboardPage = () => {
     setIsLoading(true);
     setError("");
 
-    connectSocket(token);
-
     const userData = await getMe(token);
     setUser(userData);
 
+    connectSocket(token);
+
     await loadServers(token);
   } catch (error) {
+    disconnectSocket();
     localStorage.removeItem("token");
     setError(
       error.message || "Failed to load dashboard data. Please log in again."
