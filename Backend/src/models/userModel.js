@@ -153,6 +153,48 @@ const setUserOnlineState = async (userId, isOnline, lastSeenAt = null) => {
   return result;
 };
 
+const createEmailVerificationToken = async (userId, token, expiresAt) => {
+  const [result] = await pool.execute(
+    `INSERT INTO email_verification_tokens (user_id, token, expires_at)
+     VALUES (?, ?, ?)`,
+    [userId, token, expiresAt]
+  );
+
+  return result;
+};
+
+const findEmailVerificationTokenRecord = async (token) => {
+  const [rows] = await pool.execute(
+    `SELECT
+       evt.verification_id,
+       evt.user_id,
+       evt.token,
+       evt.expires_at,
+       evt.used_at,
+       u.username,
+       u.email,
+       u.is_verified
+     FROM email_verification_tokens evt
+     INNER JOIN users u ON u.user_id = evt.user_id
+     WHERE evt.token = ?
+     LIMIT 1`,
+    [token]
+  );
+
+  return rows[0] || null;
+};
+
+const markEmailVerificationTokenAsUsed = async (verificationId) => {
+  const [result] = await pool.execute(
+    `UPDATE email_verification_tokens
+     SET used_at = NOW()
+     WHERE verification_id = ?`,
+    [verificationId]
+  );
+
+  return result;
+};
+
 module.exports = {
   findUserByEmail,
   findUserByUsername,
@@ -166,5 +208,8 @@ module.exports = {
   findUserByPasswordResetToken,
   updateUserPassword,
   updateUserPresenceStatus,
-  setUserOnlineState
+  setUserOnlineState,
+  createEmailVerificationToken,
+  findEmailVerificationTokenRecord,
+  markEmailVerificationTokenAsUsed
 };

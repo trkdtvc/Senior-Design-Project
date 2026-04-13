@@ -6,6 +6,7 @@ const {
   verifyEmail,
   resendVerificationEmail,
   forgotPassword,
+  validatePasswordResetToken,
   resetPassword
 } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
@@ -47,11 +48,11 @@ const router = express.Router();
  *               password:
  *                 type: string
  *                 format: password
- *                 example: Password123
+ *                 example: Password123!
  *               confirmPassword:
  *                 type: string
  *                 format: password
- *                 example: Password123
+ *                 example: Password123!
  *     responses:
  *       201:
  *         description: User registered successfully
@@ -83,7 +84,7 @@ router.post("/register", registerUser);
  *               password:
  *                 type: string
  *                 format: password
- *                 example: Password123
+ *                 example: Password123!
  *     responses:
  *       200:
  *         description: Login successful
@@ -189,6 +190,27 @@ router.post("/forgot-password", forgotPassword);
 
 /**
  * @swagger
+ * /api/auth/reset-password/validate:
+ *   get:
+ *     summary: Validate a password reset token before showing the reset form
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Password reset token
+ *     responses:
+ *       200:
+ *         description: Password reset token is valid
+ *       400:
+ *         description: Invalid or expired password reset token
+ */
+router.get("/reset-password/validate", validatePasswordResetToken);
+
+/**
+ * @swagger
  * /api/auth/reset-password:
  *   post:
  *     summary: Reset a user's password using a reset token
@@ -210,11 +232,11 @@ router.post("/forgot-password", forgotPassword);
  *               newPassword:
  *                 type: string
  *                 format: password
- *                 example: NewPassword123
+ *                 example: NewPassword123!
  *               confirmPassword:
  *                 type: string
  *                 format: password
- *                 example: NewPassword123
+ *                 example: NewPassword123!
  *     responses:
  *       200:
  *         description: Password reset successfully

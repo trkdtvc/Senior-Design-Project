@@ -12,7 +12,10 @@ const {
   setPasswordResetToken,
   findUserByPasswordResetToken,
   updateUserPassword,
-  findUserByVerificationToken
+  findUserByVerificationToken,
+  createEmailVerificationToken,
+  findEmailVerificationTokenRecord,
+  markEmailVerificationTokenAsUsed
 } = require("../models/userModel");
 
 const generateToken = (user) => {
@@ -29,6 +32,20 @@ const generateToken = (user) => {
 
 const getFrontendBaseUrl = () => {
   return process.env.FRONTEND_URL || "http://localhost:5173";
+};
+
+const validatePasswordRules = (password) => {
+  const rules = {
+    minLength: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /\d/.test(password),
+    special: /[^A-Za-z0-9]/.test(password)
+  };
+
+  const isValid = Object.values(rules).every(Boolean);
+
+  return { isValid, rules };
 };
 
 const sendVerificationEmailToUser = async (
@@ -109,6 +126,15 @@ const registerUser = async (req, res, next) => {
       throw new Error("Passwords do not match");
     }
 
+    const passwordValidation = validatePasswordRules(password);
+
+    if (!passwordValidation.isValid) {
+      res.status(400);
+      throw new Error(
+        "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character."
+      );
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedUsername = username.trim();
 
@@ -142,6 +168,12 @@ const registerUser = async (req, res, next) => {
     const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await setVerificationToken(
+      user.user_id,
+      verificationToken,
+      verificationTokenExpires
+    );
+
+    await createEmailVerificationToken(
       user.user_id,
       verificationToken,
       verificationTokenExpires
@@ -216,30 +248,44 @@ const verifyEmail = async (req, res, next) => {
 
     if (!token) {
       res.status(400);
-      throw new Error("Invalid verification token.");
+      throw new Error("Invalid verification token");
     }
 
-    const user = await findUserByVerificationToken(token);
+    const verificationRecord = await findEmailVerificationTokenRecord(token);
 
-    if (!user) {
+    if (!verificationRecord) {
       res.status(400);
-      throw new Error("Invalid verification token.");
+      throw new Error("Invalid verification token");
+    }
+
+    if (verificationRecord.used_at) {
+      if (verificationRecord.is_verified) {
+        res.status(400);
+        throw new Error("This email is already verified");
+      }
+
+      res.status(400);
+      throw new Error("Verification token has already been used");
     }
 
     const isExpired =
-      !user.verification_token_expires ||
-      new Date(user.verification_token_expires) < new Date();
+      !verificationRecord.expires_at ||
+      new Date(verificationRecord.expires_at) < new Date();
 
     if (isExpired) {
       res.status(400);
-      throw new Error("Verification token has expired.");
+      throw new Error("Verification token has expired");
     }
 
-    if (!user.is_verified) {
-      await markUserAsVerified(user.user_id);
+    if (verificationRecord.is_verified) {
+      res.status(400);
+      throw new Error("This email is already verified");
     }
 
-    const freshUser = await findUserById(user.user_id);
+    await markUserAsVerified(verificationRecord.user_id);
+    await markEmailVerificationTokenAsUsed(verificationRecord.verification_id);
+
+    const freshUser = await findUserById(verificationRecord.user_id);
 
     if (!freshUser) {
       res.status(404);
@@ -295,6 +341,12 @@ const resendVerificationEmail = async (req, res, next) => {
       verificationTokenExpires
     );
 
+    await createEmailVerificationToken(
+      user.user_id,
+      verificationToken,
+      verificationTokenExpires
+    );
+
     await sendVerificationEmailToUser(user, verificationToken, 24);
 
     return res.status(200).json({
@@ -338,30 +390,20 @@ const requestPasswordReset = async (req, res, next) => {
   }
 };
 
-const resetPassword = async (req, res, next) => {
+const validatePasswordResetToken = async (req, res, next) => {
   try {
-    const { token, newPassword, confirmPassword } = req.body || {};
+    const { token } = req.query || {};
 
     if (!token) {
       res.status(400);
-      throw new Error("Invalid password reset token.");
-    }
-
-    if (!newPassword || !confirmPassword) {
-      res.status(400);
-      throw new Error("New password and confirm password are required.");
-    }
-
-    if (newPassword !== confirmPassword) {
-      res.status(400);
-      throw new Error("Passwords do not match.");
+      throw new Error("Invalid password reset token");
     }
 
     const user = await findUserByPasswordResetToken(token);
 
     if (!user) {
       res.status(400);
-      throw new Error("Invalid password reset token.");
+      throw new Error("Invalid password reset token");
     }
 
     const isExpired =
@@ -370,7 +412,59 @@ const resetPassword = async (req, res, next) => {
 
     if (isExpired) {
       res.status(400);
-      throw new Error("Password reset token has expired.");
+      throw new Error("Password reset token has expired");
+    }
+
+    return res.status(200).json({
+      message: "Password reset token is valid"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword, confirmPassword } = req.body || {};
+
+    if (!token) {
+      res.status(400);
+      throw new Error("Invalid password reset token");
+    }
+
+    if (!newPassword || !confirmPassword) {
+      res.status(400);
+      throw new Error("New password and confirm password are required");
+    }
+
+    if (newPassword !== confirmPassword) {
+      res.status(400);
+      throw new Error("Passwords do not match");
+    }
+
+    const passwordValidation = validatePasswordRules(newPassword);
+
+    if (!passwordValidation.isValid) {
+      res.status(400);
+      throw new Error(
+        "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character"
+      );
+    }
+
+    const user = await findUserByPasswordResetToken(token);
+
+    if (!user) {
+      res.status(400);
+      throw new Error("Invalid password reset token");
+    }
+
+    const isExpired =
+      !user.password_reset_token_expires ||
+      new Date(user.password_reset_token_expires) < new Date();
+
+    if (isExpired) {
+      res.status(400);
+      throw new Error("Password reset token has expired");
     }
 
     const isSamePassword = await bcrypt.compare(
@@ -425,5 +519,6 @@ module.exports = {
   verifyEmail,
   resendVerificationEmail,
   forgotPassword: requestPasswordReset,
+  validatePasswordResetToken,
   resetPassword
 };

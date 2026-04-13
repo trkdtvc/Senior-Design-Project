@@ -42,9 +42,17 @@ export const loginUser = async (userData) => {
   return handleResponse(response);
 };
 
-export const verifyEmail = async (token) => {
+export const verifyEmail = async (token, email = "") => {
+  const query = new URLSearchParams({
+    token: token || ""
+  });
+
+  if (email) {
+    query.set("email", email);
+  }
+
   const response = await fetch(
-    `${API_BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`
+    `${API_BASE_URL}/auth/verify-email?${query.toString()}`
   );
 
   return handleResponse(response);
@@ -70,6 +78,14 @@ export const forgotPassword = async (email) => {
     },
     body: JSON.stringify({ email })
   });
+
+  return handleResponse(response);
+};
+
+export const validateResetPasswordToken = async (token) => {
+  const response = await fetch(
+    `${API_BASE_URL}/auth/reset-password/validate?token=${encodeURIComponent(token)}`
+  );
 
   return handleResponse(response);
 };

@@ -1497,8 +1497,19 @@ const MainPage = () => {
       shouldAutoScrollRef.current = true;
 
       await deleteChannelById(token, channelIdToDelete);
-      await loadServerChannels(token, activeServerId);
+      const remainingChannels = await loadServerChannels(token, activeServerId);
       setMessageContent("");
+      setOpenChannelMenuId(null);
+
+      const fallbackChannelId = remainingChannels.length
+        ? getChannelId(remainingChannels[0])
+        : null;
+
+      if (fallbackChannelId) {
+        navigate(`/server/${activeServerId}/channel/${fallbackChannelId}`);
+      } else {
+        navigate(`/server/${activeServerId}`);
+      }
     } catch (error) {
       setDeleteChannelError(error.message || "Failed to delete channel.");
     } finally {
@@ -1697,7 +1708,8 @@ const MainPage = () => {
       setJoinInviteError("");
       setJoinInviteSuccess("");
 
-      const response = await joinServerByInvite(joinInviteCode.trim(), token);
+      const normalizedInviteCode = joinInviteCode.trim().toUpperCase();
+      const response = await joinServerByInvite(normalizedInviteCode, token);
 
       const joinedServerId =
         response?.server?.server_id ||
@@ -1711,6 +1723,7 @@ const MainPage = () => {
 
       setJoinInviteSuccess("Joined server successfully.");
       setJoinInviteCode("");
+      setIsJoinServerModalOpen(false);
 
       if (joinedServerId) {
         navigate(`/server/${joinedServerId}`);
@@ -2104,7 +2117,8 @@ const MainPage = () => {
                       <button
                         type="button"
                         onClick={handleCopyInviteCode}
-                        title="Copy"
+                        title="Copy code"
+                        aria-label="Copy code"
                         style={{
                           width: "100%",
                           border: "1px solid rgba(255, 255, 255, 0.08)",

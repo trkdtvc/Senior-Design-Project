@@ -11,14 +11,31 @@ const VerifyEmailPage = () => {
   const emailFromQuery = searchParams.get("email")?.trim() || "";
 
   const fallbackEmail = useMemo(() => {
-    return emailFromQuery || localStorage.getItem("pendingVerificationEmail") || "";
+    return (
+      emailFromQuery || localStorage.getItem("pendingVerificationEmail") || ""
+    );
   }, [emailFromQuery]);
 
   const [status, setStatus] = useState("loading");
+  const [errorType, setErrorType] = useState("");
   const [message, setMessage] = useState("Verifying your email...");
   const [isResending, setIsResending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
   const [resendError, setResendError] = useState("");
+
+  const pageSubtitle = useMemo(() => {
+    if (status === "loading") return "Email verification";
+    if (status === "success") return "Email verified";
+    if (errorType === "expired") return "Verification link expired";
+    if (errorType === "invalid") return "Invalid verification link";
+    if (errorType === "already_verified") return "Email already verified";
+    return "Email verification";
+  }, [status, errorType]);
+
+  const shouldShowResendButton =
+    status === "error" &&
+    fallbackEmail &&
+    errorType !== "already_verified";
 
   useEffect(() => {
     let isMounted = true;
@@ -26,21 +43,18 @@ const VerifyEmailPage = () => {
 
     const verifyUserEmail = async () => {
       if (!token) {
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
 
         setStatus("error");
-        setMessage("Invalid verification token.");
+        setErrorType("invalid");
+        setMessage("This verification link is invalid");
         return;
       }
 
       try {
-        const data = await verifyEmail(token);
+        const data = await verifyEmail(token, fallbackEmail);
 
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
 
         if (data.token) {
           localStorage.setItem("token", data.token);
@@ -51,6 +65,7 @@ const VerifyEmailPage = () => {
         }
 
         setStatus("success");
+        setErrorType("");
         setMessage(
           data.message || "Email verified successfully. Redirecting you into the app..."
         );
@@ -59,12 +74,43 @@ const VerifyEmailPage = () => {
           navigate("/dashboard", { replace: true });
         }, 3000);
       } catch (err) {
-        if (!isMounted) {
+        if (!isMounted) return;
+
+        const backendMessage =
+          err.response?.data?.message || err.message || "Verification failed";
+        const normalizedMessage = backendMessage.toLowerCase();
+
+        if (normalizedMessage.includes("expired")) {
+          setStatus("error");
+          setErrorType("expired");
+          setMessage("This verification link has expired");
+          return;
+        }
+
+        if (normalizedMessage.includes("expired")) {
+          setStatus("error");
+          setErrorType("expired");
+          setMessage("This verification link has expired");
+          return;
+        }
+
+        if (normalizedMessage.includes("already been used")) {
+          setStatus("error");
+          setErrorType("already_verified");
+          setMessage("This verification link has already been used");
+          return;
+        }
+
+        if (normalizedMessage.includes("already verified")) {
+          setStatus("error");
+          setErrorType("already_verified");
+          setMessage("This email is already verified");
           return;
         }
 
         setStatus("error");
-        setMessage(err.message || "Verification failed.");
+        setErrorType("invalid");
+        setMessage("This verification link is invalid");
       }
     };
 
@@ -77,11 +123,11 @@ const VerifyEmailPage = () => {
         clearTimeout(redirectTimeout);
       }
     };
-  }, [token, navigate]);
+  }, [token, fallbackEmail, navigate]);
 
   const handleResend = async () => {
     if (!fallbackEmail) {
-      setResendError("No email found for resending the verification link.");
+      setResendError("No email found for resending the verification link");
       return;
     }
 
@@ -93,10 +139,20 @@ const VerifyEmailPage = () => {
       const data = await resendVerificationEmail(fallbackEmail);
 
       setResendMessage(
-        data.message || "Verification email resent successfully."
+        data.message || "Verification email resent successfully"
       );
     } catch (err) {
-      setResendError(err.message || "Failed to resend verification email.");
+      const backendMessage =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to resend verification email";
+
+      if (backendMessage.toLowerCase().includes("already verified")) {
+        setErrorType("already_verified");
+        setResendError("This email is already verified");
+      } else {
+        setResendError(backendMessage.replace(/\.$/, ""));
+      }
     } finally {
       setIsResending(false);
     }
@@ -106,13 +162,13 @@ const VerifyEmailPage = () => {
     <div className="auth-page">
       <div className="auth-card">
         <h1 className="auth-logo">YFNC</h1>
-        <p className="auth-subtitle">Email verification</p>
+        <p className="auth-subtitle">{pageSubtitle}</p>
 
         {status === "loading" && <p className="auth-message loading">{message}</p>}
         {status === "success" && <p className="auth-success">{message}</p>}
         {status === "error" && <p className="auth-error">{message}</p>}
 
-        {status === "error" && fallbackEmail ? (
+        {shouldShowResendButton ? (
           <button
             type="button"
             className="auth-button auth-button-secondary"
@@ -128,7 +184,8 @@ const VerifyEmailPage = () => {
 
         {status === "success" ? (
           <p className="auth-footer">
-            Taking you into the app. If nothing happens, <Link to="/dashboard">continue</Link>.
+            Taking you into the app. If nothing happens,{" "}
+            <Link to="/dashboard">continue</Link>.
           </p>
         ) : (
           <p className="auth-footer">

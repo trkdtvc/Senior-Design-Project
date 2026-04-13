@@ -1,21 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { resetPassword as resetPasswordRequest } from "../services/authService";
+import {
+  resetPassword as resetPasswordRequest,
+  validateResetPasswordToken
+} from "../services/authService";
 import "../styles/auth.css";
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const token = searchParams.get("token") || "";
+  const token = searchParams.get("token")?.trim() || "";
 
   const [formData, setFormData] = useState({
     newPassword: "",
     confirmPassword: ""
   });
 
-  const [status, setStatus] = useState("idle");
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("checking");
+  const [message, setMessage] = useState("Checking your reset link...");
+  const [isTokenValid, setIsTokenValid] = useState(false);
 
   const passwordRules = {
     minLength: formData.newPassword.length >= 8,
@@ -26,6 +30,7 @@ const ResetPasswordPage = () => {
   };
 
   const passedRulesCount = Object.values(passwordRules).filter(Boolean).length;
+  const isPasswordValid = Object.values(passwordRules).every(Boolean);
 
   const getPasswordStrength = () => {
     if (!formData.newPassword) return "";
@@ -36,6 +41,47 @@ const ResetPasswordPage = () => {
 
   const passwordStrength = getPasswordStrength();
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const validateToken = async () => {
+      if (!token) {
+        if (!isMounted) return;
+
+        setIsTokenValid(false);
+        setStatus("error");
+        setMessage("Invalid password reset token");
+        return;
+      }
+
+      try {
+        await validateResetPasswordToken(token);
+
+        if (!isMounted) return;
+
+        setIsTokenValid(true);
+        setStatus("idle");
+        setMessage("");
+      } catch (error) {
+        if (!isMounted) return;
+
+        setIsTokenValid(false);
+        setStatus("error");
+        setMessage(
+          error.response?.data?.message ||
+          error.message ||
+          "Invalid or expired password reset token."
+        );
+      }
+    };
+
+    validateToken();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -44,16 +90,18 @@ const ResetPasswordPage = () => {
       [name]: value
     }));
 
-    setStatus("idle");
-    setMessage("");
+    if (status !== "checking") {
+      setStatus("idle");
+      setMessage("");
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!token) {
+    if (!token || !isTokenValid) {
       setStatus("error");
-      setMessage("Invalid password reset token.");
+      setMessage("Invalid or expired password reset token.");
       return;
     }
 
@@ -66,6 +114,14 @@ const ResetPasswordPage = () => {
     if (formData.newPassword !== formData.confirmPassword) {
       setStatus("error");
       setMessage("Passwords do not match.");
+      return;
+    }
+
+    if (!isPasswordValid) {
+      setStatus("error");
+      setMessage(
+        "Weak password can't be accepted"
+      );
       return;
     }
 
@@ -98,8 +154,8 @@ const ResetPasswordPage = () => {
       setStatus("error");
       setMessage(
         error.response?.data?.message ||
-          error.message ||
-          "Something went wrong. Please try again."
+        error.message ||
+        "Something went wrong. Please try again."
       );
     }
   };
@@ -108,96 +164,109 @@ const ResetPasswordPage = () => {
     <div className="auth-page">
       <div className="auth-card">
         <h1 className="auth-logo">YFNC</h1>
-        <p className="auth-subtitle">Set your new password</p>
 
-        {message && <div className={`auth-message ${status}`}>{message}</div>}
+        {(status !== "error" || isTokenValid) && (
+          <p className="auth-subtitle">Set your new password</p>
+        )}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="auth-form-group">
-            <label htmlFor="newPassword">New Password</label>
-            <input
-              id="newPassword"
-              name="newPassword"
-              type="password"
-              placeholder="Enter new password"
-              value={formData.newPassword}
-              onChange={handleChange}
-              disabled={status === "loading"}
-            />
+        {message && (
+          <div
+            className={`auth-message ${status} ${status === "error" && !isTokenValid ? "auth-message-centered" : ""}`}
+          >
+            {message}
           </div>
+        )}
 
-          {formData.newPassword && (
-            <div className="password-strength-wrapper">
-              <p className="password-strength-text">
-                Password strength:{" "}
-                <span
-                  className={
-                    passwordStrength === "Weak"
+        {status !== "error" || isTokenValid ? (
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <div className="auth-form-group">
+              <label htmlFor="newPassword">New Password</label>
+              <input
+                id="newPassword"
+                name="newPassword"
+                type="password"
+                placeholder="Enter new password"
+                value={formData.newPassword}
+                onChange={handleChange}
+                disabled={status === "loading" || status === "checking"}
+              />
+            </div>
+
+            {formData.newPassword && (
+              <div className="password-strength-wrapper">
+                <p
+                  className={`password-strength-text ${passwordStrength === "Weak"
                       ? "password-strength-weak"
                       : passwordStrength === "Medium"
                         ? "password-strength-medium"
                         : "password-strength-strong"
-                  }
+                    }`}
                 >
-                  {passwordStrength}
-                </span>
-              </p>
+                  Password strength: {passwordStrength}
+                </p>
 
-              <div className="password-rules">
-                <p
-                  className={`password-rule ${passwordRules.minLength ? "password-rule-valid" : ""}`}
-                >
-                  At least 8 characters
-                </p>
-                <p
-                  className={`password-rule ${passwordRules.uppercase ? "password-rule-valid" : ""}`}
-                >
-                  At least 1 uppercase letter
-                </p>
-                <p
-                  className={`password-rule ${passwordRules.lowercase ? "password-rule-valid" : ""}`}
-                >
-                  At least 1 lowercase letter
-                </p>
-                <p
-                  className={`password-rule ${passwordRules.number ? "password-rule-valid" : ""}`}
-                >
-                  At least 1 number
-                </p>
-                <p
-                  className={`password-rule ${passwordRules.special ? "password-rule-valid" : ""}`}
-                >
-                  At least 1 special character
-                </p>
+                <div className="password-rules">
+                  <p
+                    className={`password-rule ${passwordRules.minLength ? "password-rule-valid" : ""}`}
+                  >
+                    At least 8 characters
+                  </p>
+                  <p
+                    className={`password-rule ${passwordRules.uppercase ? "password-rule-valid" : ""}`}
+                  >
+                    At least 1 uppercase letter
+                  </p>
+                  <p
+                    className={`password-rule ${passwordRules.lowercase ? "password-rule-valid" : ""}`}
+                  >
+                    At least 1 lowercase letter
+                  </p>
+                  <p
+                    className={`password-rule ${passwordRules.number ? "password-rule-valid" : ""}`}
+                  >
+                    At least 1 number
+                  </p>
+                  <p
+                    className={`password-rule ${passwordRules.special ? "password-rule-valid" : ""}`}
+                  >
+                    At least 1 special character
+                  </p>
+                </div>
               </div>
+            )}
+
+            <div className="auth-form-group">
+              <label htmlFor="confirmPassword">Confirm Password</label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm new password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                disabled={status === "loading" || status === "checking"}
+              />
             </div>
-          )}
 
-          <div className="auth-form-group">
-            <label htmlFor="confirmPassword">Confirm Password</label>
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              placeholder="Confirm new password"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              disabled={status === "loading"}
-            />
-          </div>
+            <button
+              type="submit"
+              className="auth-button"
+              disabled={status === "loading" || status === "checking"}
+            >
+              {status === "checking"
+                ? "Checking..."
+                : status === "loading"
+                  ? "Resetting..."
+                  : "Reset password"}
+            </button>
+          </form>
+        ) : null}
 
-          <button
-            type="submit"
-            className="auth-button"
-            disabled={status === "loading"}
-          >
-            {status === "loading" ? "Resetting..." : "Reset password"}
-          </button>
-        </form>
-
-        <p className="auth-footer-text">
-          Back to <Link to="/login">login</Link>
-        </p>
+        {(status !== "error" || isTokenValid) && (
+          <p className="auth-footer-text">
+            Back to <Link to="/login">login</Link>
+          </p>
+        )}
       </div>
     </div>
   );
