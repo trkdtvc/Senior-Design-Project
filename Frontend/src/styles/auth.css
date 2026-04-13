@@ -53,7 +53,7 @@
 }
 
 .auth-card p {
-  color: #b5bac1;
+  color: inherit;
 }
 
 .auth-form {
@@ -247,7 +247,7 @@ textarea.auth-input {
 }
 
 .auth-error {
-  color: #fa777c;
+  color: #fa777c !important;
   font-size: 0.88rem;
   line-height: 1.4;
 }

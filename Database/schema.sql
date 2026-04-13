@@ -163,3 +163,17 @@ CREATE TABLE direct_messages (
   CONSTRAINT direct_messages_ibfk_1 FOREIGN KEY (conversation_id) REFERENCES direct_conversations (conversation_id) ON DELETE CASCADE,
   CONSTRAINT direct_messages_ibfk_2 FOREIGN KEY (sender_id) REFERENCES users (user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE email_verification_tokens (
+  verification_id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  token VARCHAR(255) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME DEFAULT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (verification_id),
+  UNIQUE KEY token (token),
+  KEY user_id (user_id),
+  CONSTRAINT email_verification_tokens_ibfk_1
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

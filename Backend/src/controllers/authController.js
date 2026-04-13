@@ -253,57 +253,97 @@ const verifyEmail = async (req, res, next) => {
 
     const verificationRecord = await findEmailVerificationTokenRecord(token);
 
-    if (!verificationRecord) {
-      res.status(400);
-      throw new Error("Invalid verification token");
-    }
+    if (verificationRecord) {
+      if (verificationRecord.used_at) {
+        if (verificationRecord.is_verified) {
+          res.status(400);
+          throw new Error("This email is already verified");
+        }
 
-    if (verificationRecord.used_at) {
+        res.status(400);
+        throw new Error("Verification token has already been used");
+      }
+
+      const isExpired =
+        !verificationRecord.expires_at ||
+        new Date(verificationRecord.expires_at) < new Date();
+
+      if (isExpired) {
+        res.status(400);
+        throw new Error("Verification token has expired");
+      }
+
       if (verificationRecord.is_verified) {
         res.status(400);
         throw new Error("This email is already verified");
       }
 
-      res.status(400);
-      throw new Error("Verification token has already been used");
-    }
+      await markUserAsVerified(verificationRecord.user_id);
+      await markEmailVerificationTokenAsUsed(verificationRecord.verification_id);
 
-    const isExpired =
-      !verificationRecord.expires_at ||
-      new Date(verificationRecord.expires_at) < new Date();
+      const freshUser = await findUserById(verificationRecord.user_id);
 
-    if (isExpired) {
-      res.status(400);
-      throw new Error("Verification token has expired");
-    }
-
-    if (verificationRecord.is_verified) {
-      res.status(400);
-      throw new Error("This email is already verified");
-    }
-
-    await markUserAsVerified(verificationRecord.user_id);
-    await markEmailVerificationTokenAsUsed(verificationRecord.verification_id);
-
-    const freshUser = await findUserById(verificationRecord.user_id);
-
-    if (!freshUser) {
-      res.status(404);
-      throw new Error("User not found");
-    }
-
-    const authToken = generateToken(freshUser);
-
-    return res.status(200).json({
-      message: "Email verified successfully. Redirecting you into the app...",
-      token: authToken,
-      user: {
-        user_id: freshUser.user_id,
-        username: freshUser.username,
-        email: freshUser.email,
-        is_verified: freshUser.is_verified
+      if (!freshUser) {
+        res.status(404);
+        throw new Error("User not found");
       }
-    });
+
+      const authToken = generateToken(freshUser);
+
+      return res.status(200).json({
+        message: "Email verified successfully. Redirecting you into the app...",
+        token: authToken,
+        user: {
+          user_id: freshUser.user_id,
+          username: freshUser.username,
+          email: freshUser.email,
+          is_verified: freshUser.is_verified
+        }
+      });
+    }
+
+    const legacyUser = await findUserByVerificationToken(token);
+
+    if (legacyUser) {
+      if (legacyUser.is_verified) {
+        res.status(400);
+        throw new Error("This email is already verified");
+      }
+
+      const isExpired =
+        !legacyUser.verification_token_expires ||
+        new Date(legacyUser.verification_token_expires) < new Date();
+
+      if (isExpired) {
+        res.status(400);
+        throw new Error("Verification token has expired");
+      }
+
+      await markUserAsVerified(legacyUser.user_id);
+
+      const freshUser = await findUserById(legacyUser.user_id);
+
+      if (!freshUser) {
+        res.status(404);
+        throw new Error("User not found");
+      }
+
+      const authToken = generateToken(freshUser);
+
+      return res.status(200).json({
+        message: "Email verified successfully. Redirecting you into the app...",
+        token: authToken,
+        user: {
+          user_id: freshUser.user_id,
+          username: freshUser.username,
+          email: freshUser.email,
+          is_verified: freshUser.is_verified
+        }
+      });
+    }
+
+    res.status(400);
+    throw new Error("Invalid verification token");
   } catch (error) {
     next(error);
   }
