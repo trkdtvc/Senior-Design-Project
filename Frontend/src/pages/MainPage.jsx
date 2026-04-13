@@ -22,7 +22,10 @@ import {
   getDirectMessages,
   sendDirectMessage
 } from "../services/directMessageService";
-import { createServerInvite } from "../services/serverInviteService";
+import {
+  createServerInvite,
+  joinServerByInvite
+} from "../services/serverInviteService";
 import { connectSocket, disconnectSocket } from "../services/socket";
 import "../styles/auth.css";
 
@@ -320,11 +323,17 @@ const MainPage = () => {
   const previousChannelIdRef = useRef(null);
 
   const [user, setUser] = useState(null);
+  const [hoveredChannelId, setHoveredChannelId] = useState(null);
   const [inviteError, setInviteError] = useState("");
   const [inviteSuccess, setInviteSuccess] = useState("");
+  const [openChannelMenuId, setOpenChannelMenuId] = useState(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [isInviteCopied, setIsInviteCopied] = useState(false);
+  const [joinInviteCode, setJoinInviteCode] = useState("");
+  const [joinInviteError, setJoinInviteError] = useState("");
+  const [joinInviteSuccess, setJoinInviteSuccess] = useState("");
+  const [isJoiningInvite, setIsJoiningInvite] = useState(false);
   const [incomingFriendRequests, setIncomingFriendRequests] = useState([]);
   const [outgoingFriendRequests, setOutgoingFriendRequests] = useState([]);
   const [friendRequestsError, setFriendRequestsError] = useState("");
@@ -346,6 +355,7 @@ const MainPage = () => {
   const [activeChannelId, setActiveChannelId] = useState(null);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [activeDmSection, setActiveDmSection] = useState("friends");
+  const [isJoinServerModalOpen, setIsJoinServerModalOpen] = useState(false);
 
   const [isSocketReady, setIsSocketReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -1642,6 +1652,55 @@ const MainPage = () => {
     }
   };
 
+  const handleJoinInvite = async (e) => {
+    e.preventDefault();
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!joinInviteCode.trim()) {
+      setJoinInviteError("Invite code is required.");
+      setJoinInviteSuccess("");
+      return;
+    }
+
+    try {
+      setIsJoiningInvite(true);
+      setJoinInviteError("");
+      setJoinInviteSuccess("");
+
+      const response = await joinServerByInvite(joinInviteCode.trim(), token);
+
+      const joinedServerId =
+        response?.server?.server_id ||
+        response?.server_id ||
+        response?.server?.id ||
+        response?.id ||
+        response?.serverId ||
+        null;
+
+      await loadServers(token);
+
+      setJoinInviteSuccess("Joined server successfully.");
+      setJoinInviteCode("");
+
+      if (joinedServerId) {
+        navigate(`/server/${joinedServerId}`);
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      setJoinInviteError(error.message || "Failed to join server.");
+      setJoinInviteSuccess("");
+    } finally {
+      setIsJoiningInvite(false);
+    }
+  };
+
   const handleCopyInviteCode = async () => {
     if (!inviteCode) {
       return;
@@ -1722,6 +1781,19 @@ const MainPage = () => {
                 title="Create Server"
               >
                 <span className="discord-guild-create-plus">+</span>
+              </button>
+              <button
+                type="button"
+                className="discord-guild-button"
+                onClick={() => {
+                  setJoinInviteError("");
+                  setJoinInviteSuccess("");
+                  setJoinInviteCode("");
+                  setIsJoinServerModalOpen(true);
+                }}
+                title="Join Server"
+              >
+                <span className="discord-guild-create-plus">→</span>
               </button>
             </div>
           </div>
@@ -1877,57 +1949,123 @@ const MainPage = () => {
                           const channelId = getChannelId(channel);
                           const isActive =
                             String(channelId) === String(activeChannelId);
+                          const isGeneralChannel =
+                            getChannelName(channel).trim().toLowerCase() === "general";
 
                           return (
-                            <button
+                            <div
                               key={channelId}
-                              type="button"
-                              onClick={() => handleSelectChannel(channelId)}
-                              className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
-                                }`}
+                              onMouseEnter={() => setHoveredChannelId(channelId)}
+                              onMouseLeave={() => setHoveredChannelId((current) =>
+                                String(current) === String(channelId) ? null : current
+                              )}
+                              style={{ position: "relative", display: "flex", alignItems: "center" }}
                             >
-                              <span className="channel-hash">#</span>
-                              <span className="channel-name">
-                                {getChannelName(channel)}
-                              </span>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSelectChannel(channelId);
+                                  setIsChannelMenuOpen(false);
+                                }}
+                                className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
+                                  }`}
+                                style={{ flex: 1 }}
+                              >
+                                <span className="channel-hash">#</span>
+                                <span className="channel-name">
+                                  {getChannelName(channel)}
+                                </span>
+                              </button>
+
+                              {currentUserIsOwner &&
+                                !isGeneralChannel &&
+                                (String(hoveredChannelId) === String(channelId) ||
+                                  String(openChannelMenuId) === String(channelId)) ? (
+                                <div style={{ position: "relative", marginLeft: "6px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setOpenChannelMenuId((current) =>
+                                        String(current) === String(channelId) ? null : channelId
+                                      )
+                                    }
+                                    className="discord-account-action"
+                                  >
+                                    ⋯
+                                  </button>
+
+                                  {String(openChannelMenuId) === String(channelId) ? (
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        top: "50%",
+                                        right: "calc(100% + 8px)",
+                                        transform: "translateY(-50%)",
+                                        minWidth: "120px",
+                                        background: "#111214",
+                                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                                        borderRadius: "8px",
+                                        padding: "4px",
+                                        zIndex: 20,
+                                        boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)"
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenChannelMenuId(null);
+                                          handleDeleteChannel();
+                                        }}
+                                        className="auth-button auth-button-danger compact-button"
+                                        style={{ width: "100%" }}
+                                        disabled={isDeletingChannel}
+                                      >
+                                        {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
                           );
                         })}
                       </div>
                     )}
                   </section>
 
-                  <section className="discord-section-block discord-utility-section">
-                    <div className="discord-section-heading">Create Channel</div>
+                  {currentUserIsOwner ? (
+                    <section className="discord-section-block discord-utility-section">
+                      <div className="discord-section-heading">Create Channel</div>
 
-                    {createChannelError && (
-                      <p className="auth-error server-inline-error">
-                        {createChannelError}
-                      </p>
-                    )}
+                      {createChannelError && (
+                        <p className="auth-error server-inline-error">
+                          {createChannelError}
+                        </p>
+                      )}
 
-                    <form onSubmit={handleCreateChannel} className="discord-form-stack">
-                      <input
-                        id="channelName"
-                        type="text"
-                        className="auth-input compact-input"
-                        value={channelName}
-                        onChange={(e) => {
-                          setChannelName(e.target.value);
-                          setCreateChannelError("");
-                        }}
-                        placeholder="Enter channel name"
-                      />
+                      <form onSubmit={handleCreateChannel} className="discord-form-stack">
+                        <input
+                          id="channelName"
+                          type="text"
+                          className="auth-input compact-input"
+                          value={channelName}
+                          onChange={(e) => {
+                            setChannelName(e.target.value);
+                            setCreateChannelError("");
+                          }}
+                          placeholder="Enter channel name"
+                        />
 
-                      <button
-                        type="submit"
-                        className="auth-button compact-button"
-                        disabled={isCreatingChannel}
-                      >
-                        {isCreatingChannel ? "Creating..." : "Create channel"}
-                      </button>
-                    </form>
-                  </section>
+                        <button
+                          type="submit"
+                          className="auth-button compact-button"
+                          disabled={isCreatingChannel}
+                        >
+                          {isCreatingChannel ? "Creating..." : "Create channel"}
+                        </button>
+                      </form>
+                    </section>
+                  ) : null}
 
                   <section className="discord-section-block discord-utility-section">
                     <div className="discord-section-heading">Create Invite</div>
@@ -1994,18 +2132,7 @@ const MainPage = () => {
 
 
 
-                    {activeChannel && !isGeneralChannelSelected ? (
-                      <button
-                        type="button"
-                        className="auth-button auth-button-danger compact-button"
-                        onClick={handleDeleteChannel}
-                        disabled={!canDeleteSelectedChannel || isDeletingChannel}
-                      >
-                        {isDeletingChannel
-                          ? "Deleting..."
-                          : `Delete #${getChannelName(activeChannel)}`}
-                      </button>
-                    ) : null}
+
                   </section>
                 </>
               )}
@@ -2115,6 +2242,8 @@ const MainPage = () => {
                         Start a direct message by clicking on a friend below.
                       </p>
                     </div>
+
+
 
                     {filteredFriends.length === 0 ? (
                       <div className="discord-home-empty-card">
@@ -2628,6 +2757,65 @@ const MainPage = () => {
         </aside>
       </div>
 
+      {isJoinServerModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={() => setIsJoinServerModalOpen(false)}
+        >
+          <div
+            className="discord-create-server-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 className="discord-modal-title">Join a Server</h2>
+              <p className="discord-modal-subtitle">
+                Enter an invite code to join a server.
+              </p>
+            </div>
+
+            {joinInviteError ? (
+              <p className="auth-error server-inline-error">{joinInviteError}</p>
+            ) : null}
+
+            {joinInviteSuccess ? (
+              <p className="auth-success discord-inline-success">{joinInviteSuccess}</p>
+            ) : null}
+
+            <form onSubmit={handleJoinInvite} className="discord-form-stack">
+              <input
+                type="text"
+                className="auth-input compact-input"
+                value={joinInviteCode}
+                onChange={(e) => {
+                  setJoinInviteCode(e.target.value);
+                  setJoinInviteError("");
+                  setJoinInviteSuccess("");
+                }}
+                placeholder="Enter server invite code"
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={() => setIsJoinServerModalOpen(false)}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isJoiningInvite}
+                >
+                  {isJoiningInvite ? "Joining..." : "Join server"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       {isCreateServerModalOpen ? (
         <div
           className="discord-create-server-backdrop"
@@ -2639,6 +2827,7 @@ const MainPage = () => {
           >
             <div className="discord-modal-header">
               <h2 className="discord-modal-title">Create a Server</h2>
+
               <p className="discord-modal-subtitle">
                 Make a new server and start organizing your chats.
               </p>
