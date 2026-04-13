@@ -5,7 +5,6 @@ const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
 const { setUserOnlineState } = require("./models/userModel");
-const { getServerIdsByUserId } = require("./models/serverMemberModel");
 
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -77,14 +76,7 @@ const getActiveSocketCount = (userId) => {
   return existingSockets ? existingSockets.size : 0;
 };
 
-const emitPresenceUpdateToServers = async (
-  userId,
-  username,
-  isOnline,
-  lastSeenAt = null
-) => {
-  const serverMemberships = await getServerIdsByUserId(userId);
-
+const emitPresenceUpdate = (userId, username, isOnline, lastSeenAt = null) => {
   const payload = {
     user_id: userId,
     username,
@@ -92,9 +84,7 @@ const emitPresenceUpdateToServers = async (
     last_seen_at: lastSeenAt || null
   };
 
-  serverMemberships.forEach((membership) => {
-    io.to(`server_${membership.server_id}`).emit("presence_update", payload);
-  });
+  io.emit("presence_update", payload);
 };
 
 io.use((socket, next) => {
@@ -121,11 +111,14 @@ io.on("connection", async (socket) => {
   console.log(`Socket connected: ${socket.id} (user ${userId})`);
 
   addActiveSocket(userId, socket.id);
+  console.log(
+    `Active sockets after connect for user ${userId}: ${getActiveSocketCount(userId)}`
+  );
   socket.join(`user_${userId}`);
 
   try {
     await setUserOnlineState(userId, true, null);
-    await emitPresenceUpdateToServers(userId, username, true, null);
+    emitPresenceUpdate(userId, username, true, null);
   } catch (error) {
     console.error("Failed to mark user online:", error.message);
   }
@@ -154,6 +147,9 @@ io.on("connection", async (socket) => {
     console.log(`Socket disconnected: ${socket.id} (user ${userId})`);
 
     removeActiveSocket(userId, socket.id);
+    console.log(
+      `Active sockets after disconnect for user ${userId}: ${getActiveSocketCount(userId)}`
+    );
 
     if (getActiveSocketCount(userId) > 0) {
       return;
@@ -163,7 +159,7 @@ io.on("connection", async (socket) => {
       const lastSeenAt = new Date();
 
       await setUserOnlineState(userId, false, lastSeenAt);
-      await emitPresenceUpdateToServers(userId, username, false, lastSeenAt);
+      emitPresenceUpdate(userId, username, false, lastSeenAt);
     } catch (error) {
       console.error("Failed to mark user offline:", error.message);
     }

@@ -30,6 +30,8 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<MainPage />} />
         <Route path="/server/:serverId" element={<MainPage />} />
+        <Route path="/server/:serverId/channel/:channelId" element={<MainPage />} />
+        <Route path="/dm/:conversationId" element={<MainPage />} />
       </Route>
 
       <Route

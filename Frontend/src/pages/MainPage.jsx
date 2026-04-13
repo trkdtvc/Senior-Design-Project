@@ -22,6 +22,7 @@ import {
   getDirectMessages,
   sendDirectMessage
 } from "../services/directMessageService";
+import { createServerInvite } from "../services/serverInviteService";
 import { connectSocket, disconnectSocket } from "../services/socket";
 import "../styles/auth.css";
 
@@ -192,9 +193,9 @@ const getConversationOtherEmail = (conversation) =>
 const getConversationPresenceStatus = (conversation) =>
   normalizePresenceStatus(
     conversation?.other_user?.is_online ??
-      conversation?.other_is_online ??
-      conversation?.otherUser?.is_online ??
-      conversation?.presence_status
+    conversation?.other_is_online ??
+    conversation?.otherUser?.is_online ??
+    conversation?.presence_status
   );
 
 const getConversationLastMessage = (conversation) =>
@@ -305,7 +306,11 @@ const getInitial = (value) => {
 
 const MainPage = () => {
   const navigate = useNavigate();
-  const { serverId: routeServerId } = useParams();
+  const {
+    serverId: routeServerId,
+    channelId: routeChannelId,
+    conversationId: routeConversationId
+  } = useParams();
 
   const messagesContainerRef = useRef(null);
   const messageInputRef = useRef(null);
@@ -315,6 +320,11 @@ const MainPage = () => {
   const previousChannelIdRef = useRef(null);
 
   const [user, setUser] = useState(null);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteSuccess, setInviteSuccess] = useState("");
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [isInviteCopied, setIsInviteCopied] = useState(false);
   const [incomingFriendRequests, setIncomingFriendRequests] = useState([]);
   const [outgoingFriendRequests, setOutgoingFriendRequests] = useState([]);
   const [friendRequestsError, setFriendRequestsError] = useState("");
@@ -382,11 +392,11 @@ const MainPage = () => {
 
   const activeConversationUser = activeConversation
     ? {
-        user_id: getConversationOtherUserId(activeConversation),
-        username: getConversationOtherUsername(activeConversation),
-        email: getConversationOtherEmail(activeConversation),
-        presence_status: getConversationPresenceStatus(activeConversation)
-      }
+      user_id: getConversationOtherUserId(activeConversation),
+      username: getConversationOtherUsername(activeConversation),
+      email: getConversationOtherEmail(activeConversation),
+      presence_status: getConversationPresenceStatus(activeConversation)
+    }
     : null;
 
   const selectedChannelName = activeChannel ? getChannelName(activeChannel) : "";
@@ -553,12 +563,23 @@ const MainPage = () => {
     }
 
     setActiveChannelId((prevActiveChannelId) => {
-      const stillExists = normalizedChannels.some(
+      const routeChannelStillExists = routeChannelId
+        ? normalizedChannels.some(
+          (channel) =>
+            String(getChannelId(channel)) === String(routeChannelId)
+        )
+        : false;
+
+      if (routeChannelStillExists) {
+        return routeChannelId;
+      }
+
+      const previousStillExists = normalizedChannels.some(
         (channel) =>
           String(getChannelId(channel)) === String(prevActiveChannelId)
       );
 
-      if (stillExists) {
+      if (previousStillExists) {
         return prevActiveChannelId;
       }
 
@@ -566,7 +587,7 @@ const MainPage = () => {
     });
 
     return normalizedChannels;
-  }, []);
+  }, [routeChannelId]);
 
   const loadServerMembers = useCallback(async (token, serverId) => {
     if (!serverId) {
@@ -630,8 +651,6 @@ const MainPage = () => {
         const userData = await getMe(token);
         setUser(userData);
 
-        connectSocket(token);
-
         await Promise.all([
           loadServers(token),
           loadFriends(token),
@@ -665,8 +684,16 @@ const MainPage = () => {
   }, [isDmView, activeDmSection, fetchFriendRequests]);
 
   useEffect(() => {
+    if (routeConversationId) {
+      setActiveServerId(null);
+      setActiveConversationId(routeConversationId);
+      setActiveDmSection("friends");
+      return;
+    }
+
     if (!routeServerId) {
       setActiveServerId(null);
+      setActiveConversationId(null);
       setChannels([]);
       setMembers([]);
       setActiveChannelId(null);
@@ -687,7 +714,7 @@ const MainPage = () => {
     if (!isLoading) {
       navigate("/dashboard");
     }
-  }, [routeServerId, servers, isLoading, navigate]);
+  }, [routeServerId, routeConversationId, servers, isLoading, navigate]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -967,9 +994,9 @@ const MainPage = () => {
             other_is_online: nextPresenceStatus === "online" ? 1 : 0,
             other_user: conversation?.other_user
               ? {
-                  ...conversation.other_user,
-                  is_online: nextPresenceStatus === "online" ? 1 : 0
-                }
+                ...conversation.other_user,
+                is_online: nextPresenceStatus === "online" ? 1 : 0
+              }
               : conversation?.other_user
           };
         })
@@ -982,9 +1009,9 @@ const MainPage = () => {
         !activeServerId ||
         String(
           incomingMessage.channel_id ||
-            incomingMessage.channelId ||
-            incomingMessage.channel?.channel_id ||
-            incomingMessage.channel?.id
+          incomingMessage.channelId ||
+          incomingMessage.channel?.channel_id ||
+          incomingMessage.channel?.id
         ) !== String(activeChannelId)
       ) {
         return;
@@ -1151,11 +1178,16 @@ const MainPage = () => {
   };
 
   const handleSelectChannel = (channelId) => {
+    if (!activeServerId) {
+      return;
+    }
+
     shouldAutoScrollRef.current = true;
     setActiveChannelId(channelId);
     setDeleteChannelError("");
     setMessageError("");
     setMessageContent("");
+    navigate(`/server/${activeServerId}/channel/${channelId}`);
 
     requestAnimationFrame(() => {
       resetMessageInputHeight();
@@ -1172,7 +1204,7 @@ const MainPage = () => {
     setAddFriendError("");
     setAddFriendSuccess("");
     setFriendRequestsError("");
-    navigate("/dashboard");
+    navigate(`/dm/${conversationId}`);
 
     requestAnimationFrame(() => {
       resetMessageInputHeight();
@@ -1198,7 +1230,7 @@ const MainPage = () => {
       setActiveConversationId(conversationId);
       setActiveDmSection("friends");
       setMessageContent("");
-      navigate("/dashboard");
+      navigate(`/dm/${conversationId}`);
 
       requestAnimationFrame(() => {
         resetMessageInputHeight();
@@ -1284,7 +1316,7 @@ const MainPage = () => {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            `Failed to ${action === "accept" ? "accept" : "reject"} friend request.`
+          `Failed to ${action === "accept" ? "accept" : "reject"} friend request.`
         );
       }
 
@@ -1393,6 +1425,7 @@ const MainPage = () => {
 
       if (createdChannelId) {
         setActiveChannelId(createdChannelId);
+        navigate(`/server/${activeServerId}/channel/${createdChannelId}`);
       }
 
       setChannelName("");
@@ -1569,6 +1602,66 @@ const MainPage = () => {
     }
   };
 
+  const handleCreateInvite = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!activeServerId) {
+      setInviteError("Select a server first.");
+      setInviteSuccess("");
+      return;
+    }
+
+    try {
+      setIsCreatingInvite(true);
+      setInviteError("");
+      setInviteSuccess("");
+
+      const response = await createServerInvite(activeServerId, token);
+      const inviteCode =
+        response?.invite?.invite_code ||
+        response?.invite_code ||
+        response?.code ||
+        "";
+
+      if (!inviteCode) {
+        throw new Error("Invite created, but no invite code was returned.");
+      }
+
+      setInviteCode(inviteCode);
+      setInviteSuccess("Invite created successfully.");
+    } catch (error) {
+      setInviteError(error.message || "Failed to create invite.");
+      setInviteSuccess("");
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  };
+
+  const handleCopyInviteCode = async () => {
+    if (!inviteCode) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      setIsInviteCopied(true);
+      setInviteSuccess("");
+      setInviteError("");
+
+      setTimeout(() => {
+        setIsInviteCopied(false);
+      }, 2500);
+    } catch (error) {
+      setInviteError("Failed to copy invite code.");
+      setInviteSuccess("");
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="auth-page">
@@ -1588,9 +1681,8 @@ const MainPage = () => {
             <button
               type="button"
               onClick={handleSelectHome}
-              className={`discord-guild-button discord-home-button${
-                isDmView ? " discord-guild-button-active" : ""
-              }`}
+              className={`discord-guild-button discord-home-button${isDmView ? " discord-guild-button-active" : ""
+                }`}
               title="Direct Messages"
             >
               <span className="discord-guild-initial">DM</span>
@@ -1609,9 +1701,8 @@ const MainPage = () => {
                     key={serverId}
                     type="button"
                     onClick={() => handleSelectServer(serverId)}
-                    className={`discord-guild-button${
-                      isActive ? " discord-guild-button-active" : ""
-                    }`}
+                    className={`discord-guild-button${isActive ? " discord-guild-button-active" : ""
+                      }`}
                     title={serverName}
                   >
                     <span className="discord-guild-initial">
@@ -1651,11 +1742,10 @@ const MainPage = () => {
                 <div className="discord-dm-nav">
                   <button
                     type="button"
-                    className={`discord-dm-nav-button${
-                      showDmHomeView && activeDmSection === "friends"
-                        ? " discord-dm-nav-button-active"
-                        : ""
-                    }`}
+                    className={`discord-dm-nav-button${showDmHomeView && activeDmSection === "friends"
+                      ? " discord-dm-nav-button-active"
+                      : ""
+                      }`}
                     onClick={() => handleSelectDmSection("friends")}
                   >
                     Friends
@@ -1663,11 +1753,10 @@ const MainPage = () => {
 
                   <button
                     type="button"
-                    className={`discord-dm-nav-button${
-                      showDmHomeView && activeDmSection === "add-friend"
-                        ? " discord-dm-nav-button-active"
-                        : ""
-                    }`}
+                    className={`discord-dm-nav-button${showDmHomeView && activeDmSection === "add-friend"
+                      ? " discord-dm-nav-button-active"
+                      : ""
+                      }`}
                     onClick={() => handleSelectDmSection("add-friend")}
                   >
                     Add Friend
@@ -1675,11 +1764,10 @@ const MainPage = () => {
 
                   <button
                     type="button"
-                    className={`discord-dm-nav-button${
-                      showDmHomeView && activeDmSection === "requests"
-                        ? " discord-dm-nav-button-active"
-                        : ""
-                    }`}
+                    className={`discord-dm-nav-button${showDmHomeView && activeDmSection === "requests"
+                      ? " discord-dm-nav-button-active"
+                      : ""
+                      }`}
                     onClick={() => handleSelectDmSection("requests")}
                   >
                     Friend Requests
@@ -1741,9 +1829,8 @@ const MainPage = () => {
                             key={conversationId}
                             type="button"
                             onClick={() => handleSelectConversation(conversationId)}
-                            className={`discord-dm-item${
-                              isActive ? " discord-dm-item-active" : ""
-                            }`}
+                            className={`discord-dm-item${isActive ? " discord-dm-item-active" : ""
+                              }`}
                           >
                             <div className="discord-dm-avatar">
                               {getInitial(getConversationOtherUsername(conversation))}
@@ -1796,9 +1883,8 @@ const MainPage = () => {
                               key={channelId}
                               type="button"
                               onClick={() => handleSelectChannel(channelId)}
-                              className={`channel-button discord-channel-button${
-                                isActive ? " channel-button-active" : ""
-                              }`}
+                              className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
+                                }`}
                             >
                               <span className="channel-hash">#</span>
                               <span className="channel-name">
@@ -1844,7 +1930,61 @@ const MainPage = () => {
                   </section>
 
                   <section className="discord-section-block discord-utility-section">
-                    <div className="discord-section-heading">Server Actions</div>
+                    <div className="discord-section-heading">Create Invite</div>
+
+                    {inviteError && (
+                      <p className="auth-error server-inline-error">{inviteError}</p>
+                    )}
+
+                    {inviteCode ? (
+                      <button
+                        type="button"
+                        onClick={handleCopyInviteCode}
+                        style={{
+                          width: "100%",
+                          border: "1px solid rgba(255, 255, 255, 0.08)",
+                          borderRadius: "12px",
+                          background: "rgba(255, 255, 255, 0.03)",
+                          padding: "14px 16px",
+                          textAlign: "center",
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            color: "rgba(255, 255, 255, 0.7)",
+                            marginBottom: "6px"
+                          }}
+                        >
+
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: "15px",
+                            fontWeight: 700,
+                            color: "#f2f3f5"
+                          }}
+                        >
+                          {isInviteCopied ? "✓" : inviteCode}
+                        </div>
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="auth-button compact-button"
+                      onClick={handleCreateInvite}
+                      disabled={isCreatingInvite || !activeServerId}
+                    >
+                      {isCreatingInvite ? "Generating code..." : "Generate code"}
+                    </button>
 
                     {deleteChannelError && (
                       <p className="auth-error server-inline-error">
@@ -1852,11 +1992,7 @@ const MainPage = () => {
                       </p>
                     )}
 
-                    {activeChannel && isGeneralChannelSelected ? (
-                      <p className="discord-helper-text">
-                        The general channel cannot be deleted.
-                      </p>
-                    ) : null}
+
 
                     {activeChannel && !isGeneralChannelSelected ? (
                       <button
@@ -1944,9 +2080,8 @@ const MainPage = () => {
                         ? "Manage incoming and outgoing requests"
                         : activeDmSection === "add-friend"
                           ? "Send a friend request by username"
-                          : `${filteredFriends.length} friend${
-                              filteredFriends.length === 1 ? "" : "s"
-                            }`}
+                          : `${filteredFriends.length} friend${filteredFriends.length === 1 ? "" : "s"
+                          }`}
                     </p>
                   </div>
                 )
