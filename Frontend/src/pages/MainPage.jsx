@@ -679,6 +679,8 @@ const MainPage = () => {
     loadMainPageData();
   }, [navigate, loadServers, loadFriends, loadDirectConversationList]);
 
+
+
   useEffect(() => {
     const token = localStorage.getItem("token");
 
@@ -1114,6 +1116,18 @@ const MainPage = () => {
     container.scrollTop = container.scrollHeight;
   }, [displayedMessages]);
 
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setOpenChannelMenuId(null);
+    };
+
+    window.addEventListener("click", handleGlobalClick);
+
+    return () => {
+      window.removeEventListener("click", handleGlobalClick);
+    };
+  }, []);
+
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current;
 
@@ -1446,7 +1460,7 @@ const MainPage = () => {
     }
   };
 
-  const handleDeleteChannel = async () => {
+  const handleDeleteChannel = async (channelToDelete) => {
     const token = localStorage.getItem("token");
 
     if (!token) {
@@ -1454,13 +1468,23 @@ const MainPage = () => {
       return;
     }
 
-    if (!activeChannel) {
+    if (!channelToDelete) {
       setDeleteChannelError("Select a channel first.");
       return;
     }
 
+    const channelIdToDelete = getChannelId(channelToDelete);
+    const channelNameToDelete = getChannelName(channelToDelete);
+    const isGeneralChannel =
+      channelNameToDelete.trim().toLowerCase() === "general";
+
+    if (isGeneralChannel) {
+      setDeleteChannelError("The general channel cannot be deleted.");
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Are you sure you want to delete #${getChannelName(activeChannel)}? This cannot be undone.`
+      `Are you sure you want to delete #${channelNameToDelete}? This cannot be undone.`
     );
 
     if (!confirmed) {
@@ -1472,7 +1496,7 @@ const MainPage = () => {
       setDeleteChannelError("");
       shouldAutoScrollRef.current = true;
 
-      await deleteChannelById(token, getChannelId(activeChannel));
+      await deleteChannelById(token, channelIdToDelete);
       await loadServerChannels(token, activeServerId);
       setMessageContent("");
     } catch (error) {
@@ -1965,7 +1989,7 @@ const MainPage = () => {
                                 type="button"
                                 onClick={() => {
                                   handleSelectChannel(channelId);
-                                  setIsChannelMenuOpen(false);
+                                  setIsChannelMenuOpen(null);
                                 }}
                                 className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
                                   }`}
@@ -1984,11 +2008,12 @@ const MainPage = () => {
                                 <div style={{ position: "relative", marginLeft: "6px" }}>
                                   <button
                                     type="button"
-                                    onClick={() =>
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setOpenChannelMenuId((current) =>
                                         String(current) === String(channelId) ? null : channelId
-                                      )
-                                    }
+                                      );
+                                    }}
                                     className="discord-account-action"
                                   >
                                     ⋯
@@ -2012,9 +2037,10 @@ const MainPage = () => {
                                     >
                                       <button
                                         type="button"
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           setOpenChannelMenuId(null);
-                                          handleDeleteChannel();
+                                          handleDeleteChannel(channel);
                                         }}
                                         className="auth-button auth-button-danger compact-button"
                                         style={{ width: "100%" }}
@@ -2078,6 +2104,7 @@ const MainPage = () => {
                       <button
                         type="button"
                         onClick={handleCopyInviteCode}
+                        title="Copy"
                         style={{
                           width: "100%",
                           border: "1px solid rgba(255, 255, 255, 0.08)",
