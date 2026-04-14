@@ -285,6 +285,54 @@ textarea.auth-input {
   color: #dbdee1;
 }
 
+.auth-verify-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.auth-verify-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.auth-verify-status {
+  margin: 0;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.auth-verify-status-loading {
+  color: #f2f3f5;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.auth-verify-status-success {
+  color: #23a55a;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.auth-verify-status-error {
+  color: #fa777c !important;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.auth-verify-button {
+  margin-top: 4px;
+  max-width: 280px;
+}
+
+.auth-verify-footer {
+  margin-top: 0;
+}
+
 .server-page {
   min-height: 100vh;
   background: #313338;
@@ -1278,7 +1326,6 @@ textarea.auth-input {
 }
 
 @media (max-width: 1180px) {
-
   .server-layout,
   .main-layout-grid {
     grid-template-columns: 340px minmax(0, 1fr);
@@ -1290,7 +1337,6 @@ textarea.auth-input {
 }
 
 @media (max-width: 860px) {
-
   .server-layout,
   .main-layout-grid {
     grid-template-columns: 72px minmax(0, 1fr);
@@ -1302,7 +1348,6 @@ textarea.auth-input {
 }
 
 @media (max-width: 640px) {
-
   .discord-composer-shell,
   .discord-modal-actions,
   .discord-friend-home-card {
@@ -1362,4 +1407,54 @@ textarea.auth-input {
   color: #ff8e93;
   font-weight: 600;
   text-align: center;
+}
+
+.auth-verify-status-success {
+  color: #23a55a !important;
+}
+
+.auth-resend-block {
+  margin: -4px 0 14px;
+  text-align: center;
+}
+
+.auth-resend-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #00a8fc;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-resend-link:hover {
+  text-decoration: underline;
+}
+
+.auth-resend-link:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.auth-resend-success {
+  margin-top: 8px;
+  color: #23a55a !important;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.auth-resend-error {
+  margin-top: 8px;
+  color: #fa777c;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.auth-error-login-inline {
+  margin: -6px 0 -4px;
+  text-align: left;
 }

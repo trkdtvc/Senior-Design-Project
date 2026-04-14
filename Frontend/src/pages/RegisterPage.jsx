@@ -47,6 +47,8 @@ const RegisterPage = () => {
     [passwordChecks]
   );
 
+  const isEmptyFieldsError = error === "Please fill in all fields.";
+
   const isEmailError =
     error === "Email already exists" ||
     error === "Please enter a valid email address.";
@@ -62,10 +64,26 @@ const RegisterPage = () => {
 
   const isGeneralError =
     !!error &&
+    !isEmptyFieldsError &&
     !isEmailError &&
     !isUsernameError &&
     !isPasswordRequirementError &&
     !isPasswordMismatchError;
+
+  const emailInputError =
+    isEmailError || (isEmptyFieldsError && !formData.email.trim());
+
+  const usernameInputError =
+    isUsernameError || (isEmptyFieldsError && !formData.username.trim());
+
+  const passwordInputError =
+    isPasswordRequirementError ||
+    isPasswordMismatchError ||
+    (isEmptyFieldsError && !formData.password);
+
+  const confirmPasswordInputError =
+    isPasswordMismatchError ||
+    (isEmptyFieldsError && !formData.confirmPassword);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -121,10 +139,7 @@ const RegisterPage = () => {
         confirmPassword
       });
 
-      localStorage.setItem(
-        "pendingVerificationEmail",
-        data.email || email
-      );
+      localStorage.setItem("pendingVerificationEmail", data.email || email);
 
       setSuccess(
         data.message ||
@@ -150,7 +165,10 @@ const RegisterPage = () => {
         <h1 className="auth-logo">YFNC</h1>
         <p className="auth-subtitle">Create an account to get started.</p>
 
-        {isGeneralError && <p className="auth-error">{error}</p>}
+        {(isEmptyFieldsError || isGeneralError) && (
+          <p className="auth-error auth-error-register-top">{error}</p>
+        )}
+
         {success && <p className="auth-success">{success}</p>}
 
         {isEmailError && (
@@ -164,11 +182,10 @@ const RegisterPage = () => {
             placeholder="Email"
             value={formData.email}
             onChange={handleChange}
+            className={emailInputError ? "auth-input auth-input-error" : "auth-input"}
           />
 
-          {isUsernameError && (
-            <p className="auth-error auth-error-username">{error}</p>
-          )}
+          {isUsernameError && <p className="auth-error">{error}</p>}
 
           <input
             type="text"
@@ -177,9 +194,7 @@ const RegisterPage = () => {
             value={formData.username}
             onChange={handleChange}
             className={
-              isUsernameError
-                ? "auth-input auth-input-error"
-                : "auth-input"
+              usernameInputError ? "auth-input auth-input-error" : "auth-input"
             }
           />
 
@@ -189,6 +204,9 @@ const RegisterPage = () => {
             placeholder="Password"
             value={formData.password}
             onChange={handleChange}
+            className={
+              passwordInputError ? "auth-input auth-input-error" : "auth-input"
+            }
           />
 
           {formData.password && (
@@ -256,6 +274,11 @@ const RegisterPage = () => {
             placeholder="Confirm Password"
             value={formData.confirmPassword}
             onChange={handleChange}
+            className={
+              confirmPasswordInputError
+                ? "auth-input auth-input-error"
+                : "auth-input"
+            }
           />
 
           <button type="submit" disabled={isLoading}>

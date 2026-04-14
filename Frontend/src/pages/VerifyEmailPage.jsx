@@ -1,20 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { resendVerificationEmail, verifyEmail } from "../services/authService";
 import "../styles/auth.css";
 
 const VerifyEmailPage = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const token = searchParams.get("token")?.trim() || "";
   const emailFromQuery = searchParams.get("email")?.trim() || "";
+  const attemptedTokenRef = useRef("");
 
-  const fallbackEmail = useMemo(() => {
-    return (
-      emailFromQuery || localStorage.getItem("pendingVerificationEmail") || ""
-    );
-  }, [emailFromQuery]);
+  const fallbackEmail =
+    emailFromQuery || localStorage.getItem("pendingVerificationEmail") || "";
 
   const [status, setStatus] = useState("loading");
   const [errorType, setErrorType] = useState("");
@@ -23,59 +20,28 @@ const VerifyEmailPage = () => {
   const [resendMessage, setResendMessage] = useState("");
   const [resendError, setResendError] = useState("");
 
-  const pageSubtitle = useMemo(() => {
-    if (status === "loading") return "Email verification";
-    if (status === "success") return "Email verified";
-    if (errorType === "expired") return "Verification link expired";
-    if (errorType === "invalid") return "Invalid verification link";
-    if (errorType === "already_verified") return "Email already verified";
-    return "Email verification";
-  }, [status, errorType]);
-
   const shouldShowResendButton =
     status === "error" &&
     fallbackEmail &&
     errorType !== "already_verified";
 
   useEffect(() => {
-    let isMounted = true;
-    let redirectTimeout;
-
     const verifyUserEmail = async () => {
       if (!token) {
-        if (!isMounted) return;
-
         setStatus("error");
         setErrorType("invalid");
-        setMessage("This verification link is invalid");
+        setMessage("This verification link is invalid.");
         return;
       }
 
       try {
-        const data = await verifyEmail(token, fallbackEmail);
+        await verifyEmail(token, fallbackEmail);
 
-        if (!isMounted) return;
-
-        if (data.token) {
-          localStorage.setItem("token", data.token);
-        }
-
-        if (data.user?.email) {
-          localStorage.removeItem("pendingVerificationEmail");
-        }
-
+        localStorage.removeItem("pendingVerificationEmail");
         setStatus("success");
         setErrorType("");
-        setMessage(
-          data.message || "Email verified successfully. Redirecting you into the app..."
-        );
-
-        redirectTimeout = setTimeout(() => {
-          navigate("/dashboard", { replace: true });
-        }, 3000);
+        setMessage("Email successfully verified");
       } catch (err) {
-        if (!isMounted) return;
-
         const backendMessage =
           err.response?.data?.message || err.message || "Verification failed";
         const normalizedMessage = backendMessage.toLowerCase();
@@ -83,21 +49,14 @@ const VerifyEmailPage = () => {
         if (normalizedMessage.includes("expired")) {
           setStatus("error");
           setErrorType("expired");
-          setMessage("This verification link has expired");
-          return;
-        }
-
-        if (normalizedMessage.includes("expired")) {
-          setStatus("error");
-          setErrorType("expired");
-          setMessage("This verification link has expired");
+          setMessage("This verification link has expired.");
           return;
         }
 
         if (normalizedMessage.includes("already been used")) {
           setStatus("error");
           setErrorType("already_verified");
-          setMessage("This verification link has already been used");
+          setMessage("This verification link has already been used.");
           return;
         }
 
@@ -110,24 +69,24 @@ const VerifyEmailPage = () => {
 
         setStatus("error");
         setErrorType("invalid");
-        setMessage("This verification link is invalid");
+        setMessage("This verification link is invalid.");
       }
     };
+
+    if (token && attemptedTokenRef.current === token) {
+      return;
+    }
+
+    if (token) {
+      attemptedTokenRef.current = token;
+    }
 
     verifyUserEmail();
-
-    return () => {
-      isMounted = false;
-
-      if (redirectTimeout) {
-        clearTimeout(redirectTimeout);
-      }
-    };
-  }, [token, fallbackEmail, navigate]);
+  }, [token, fallbackEmail]);
 
   const handleResend = async () => {
     if (!fallbackEmail) {
-      setResendError("No email found for resending the verification link");
+      setResendError("No email found for resending the verification link.");
       return;
     }
 
@@ -139,19 +98,19 @@ const VerifyEmailPage = () => {
       const data = await resendVerificationEmail(fallbackEmail);
 
       setResendMessage(
-        data.message || "Verification email resent successfully"
+        data.message || "Verification email resent successfully."
       );
     } catch (err) {
       const backendMessage =
         err.response?.data?.message ||
         err.message ||
-        "Failed to resend verification email";
+        "Failed to resend verification email.";
 
       if (backendMessage.toLowerCase().includes("already verified")) {
         setErrorType("already_verified");
         setResendError("This email is already verified");
       } else {
-        setResendError(backendMessage.replace(/\.$/, ""));
+        setResendError(backendMessage);
       }
     } finally {
       setIsResending(false);
@@ -160,38 +119,59 @@ const VerifyEmailPage = () => {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="auth-card auth-verify-card">
         <h1 className="auth-logo">YFNC</h1>
-        <p className="auth-subtitle">{pageSubtitle}</p>
 
-        {status === "loading" && <p className="auth-message loading">{message}</p>}
-        {status === "success" && <p className="auth-success">{message}</p>}
-        {status === "error" && <p className="auth-error">{message}</p>}
-
-        {shouldShowResendButton ? (
-          <button
-            type="button"
-            className="auth-button auth-button-secondary"
-            onClick={handleResend}
-            disabled={isResending}
-          >
-            {isResending ? "Resending..." : "Resend verification email"}
-          </button>
+        {status !== "success" && status !== "error" ? (
+          <p className="auth-subtitle">Email verification</p>
         ) : null}
 
-        {resendMessage ? <p className="auth-success">{resendMessage}</p> : null}
-        {resendError ? <p className="auth-error">{resendError}</p> : null}
+        <div className="auth-verify-stack">
+          {status === "loading" ? (
+            <p className="auth-verify-status auth-verify-status-loading">
+              {message}
+            </p>
+          ) : null}
 
-        {status === "success" ? (
-          <p className="auth-footer">
-            Taking you into the app. If nothing happens,{" "}
-            <Link to="/dashboard">continue</Link>.
+          {status === "success" ? (
+            <p className="auth-verify-status auth-verify-status-success">
+              {message}
+            </p>
+          ) : null}
+
+          {status === "error" ? (
+            <p className="auth-verify-status auth-verify-status-error">
+              {message}
+            </p>
+          ) : null}
+
+          {shouldShowResendButton ? (
+            <button
+              type="button"
+              className="auth-button auth-button-secondary auth-verify-button"
+              onClick={handleResend}
+              disabled={isResending}
+            >
+              {isResending ? "Resending..." : "Resend verification email"}
+            </button>
+          ) : null}
+
+          {resendMessage ? (
+            <p className="auth-verify-status auth-verify-status-success">
+              {resendMessage}
+            </p>
+          ) : null}
+
+          {resendError ? (
+            <p className="auth-verify-status auth-verify-status-error">
+              {resendError}
+            </p>
+          ) : null}
+
+          <p className="auth-footer auth-verify-footer">
+            Go back to <Link to="/login">login</Link>
           </p>
-        ) : (
-          <p className="auth-footer">
-            Go back to <Link to="/login">login</Link>.
-          </p>
-        )}
+        </div>
       </div>
     </div>
   );
