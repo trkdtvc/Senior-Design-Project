@@ -80,7 +80,7 @@ const sendPasswordResetEmailToUser = async (
   resetToken,
   expiresInHours = 1
 ) => {
-  const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}`;
+  const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
 
   await sendEmail({
     to: user.email,
@@ -92,22 +92,13 @@ We received a request to reset your password.
 Use the link below to reset it:
 ${resetLink}
 
-If you are testing the backend without a frontend yet, use this token in your reset-password request:
-${resetToken}
-
-This link/token expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.
-
-If you did not request this, you can ignore this email.`,
+This link expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.`,
     html: `
-      <h2>Reset your password</h2>
       <p>Hello ${user.username},</p>
       <p>We received a request to reset your password.</p>
       <p>Use the link below to reset it:</p>
       <a href="${resetLink}">${resetLink}</a>
-      <p>If you are testing the backend without a frontend yet, use this token in your reset-password request:</p>
-      <p><strong>${resetToken}</strong></p>
-      <p>This link/token expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.</p>
-      <p>If you did not request this, you can ignore this email.</p>
+      <p>This link expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.</p>
     `
   });
 };
