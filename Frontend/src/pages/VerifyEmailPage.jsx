@@ -98,7 +98,7 @@ const VerifyEmailPage = () => {
       const data = await resendVerificationEmail(fallbackEmail);
 
       setResendMessage(
-        data.message || "Verification email resent successfully."
+        data.message || "Verification email resent successfully"
       );
     } catch (err) {
       const backendMessage =
@@ -117,55 +117,57 @@ const VerifyEmailPage = () => {
     }
   };
 
+  const getMessageClassName = () => {
+    if (status === "success") {
+      return "auth-feedback auth-feedback-success auth-feedback-center";
+    }
+
+    if (status === "loading") {
+      return "auth-feedback auth-feedback-neutral auth-feedback-center";
+    }
+
+    if (errorType === "expired" || errorType === "already_verified") {
+      return "auth-feedback auth-feedback-warning auth-feedback-center";
+    }
+
+    return "auth-feedback auth-feedback-error auth-feedback-center";
+  };
+
   return (
     <div className="auth-page">
       <div className="auth-card auth-verify-card">
         <h1 className="auth-logo">YFNC</h1>
 
-        {status !== "success" && status !== "error" ? (
+        {status === "loading" ? (
           <p className="auth-subtitle">Email verification</p>
         ) : null}
 
         <div className="auth-verify-stack">
-          {status === "loading" ? (
-            <p className="auth-verify-status auth-verify-status-loading">
-              {message}
-            </p>
-          ) : null}
-
-          {status === "success" ? (
-            <p className="auth-verify-status auth-verify-status-success">
-              {message}
-            </p>
-          ) : null}
-
-          {status === "error" ? (
-            <p className="auth-verify-status auth-verify-status-error">
-              {message}
-            </p>
-          ) : null}
+          <p className={getMessageClassName()}>{message}</p>
 
           {shouldShowResendButton ? (
-            <button
-              type="button"
-              className="auth-button auth-button-secondary auth-verify-button"
-              onClick={handleResend}
-              disabled={isResending}
-            >
-              {isResending ? "Resending..." : "Resend verification email"}
-            </button>
-          ) : null}
+            <div className="auth-verify-resend-wrap">
+              <button
+                type="button"
+                className="auth-feedback auth-feedback-link auth-resend-link auth-verify-resend-link"
+                onClick={handleResend}
+                disabled={isResending}
+              >
+                {isResending ? "Resending..." : "Resend verification email"}
+              </button>
 
-          {resendMessage ? (
-            <p className="auth-verify-status auth-verify-status-success">
-              {resendMessage}
-            </p>
-          ) : null}
+              {resendMessage ? (
+                <p className="auth-feedback auth-feedback-success auth-feedback-center">
+                  {resendMessage}
+                </p>
+              ) : null}
 
-          {resendError ? (
-            <p className="auth-verify-status auth-verify-status-error">
-              {resendError}
-            </p>
+              {resendError ? (
+                <p className="auth-feedback auth-feedback-error auth-feedback-center">
+                  {resendError}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           <p className="auth-footer auth-verify-footer">

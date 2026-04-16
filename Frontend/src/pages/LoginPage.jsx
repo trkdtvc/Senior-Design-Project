@@ -19,10 +19,14 @@ const LoginPage = () => {
   const [resendError, setResendError] = useState("");
 
   const normalizedError = error.replace(/\.$/, "");
+  const typedLogin = formData.login.trim();
+  const isEmailLogin = typedLogin.includes("@");
 
   const friendlyError =
     normalizedError === "User does not exist"
-      ? "No user found with that username"
+      ? isEmailLogin
+        ? "No user found with that email"
+        : "No user found with that username"
       : normalizedError;
 
   const isUnverifiedError =
@@ -30,21 +34,26 @@ const LoginPage = () => {
 
   const isIncorrectPasswordError = friendlyError === "Incorrect password";
 
-  const resendTarget = useMemo(() => {
-    const typedLogin = formData.login.trim().toLowerCase();
+  const isUserNotFoundError =
+    friendlyError === "No user found with that username" ||
+    friendlyError === "No user found with that email";
 
-    if (typedLogin.includes("@")) {
-      return typedLogin;
+  const resendTarget = useMemo(() => {
+    const currentLogin = formData.login.trim().toLowerCase();
+
+    if (currentLogin.includes("@")) {
+      return currentLogin;
     }
 
     return localStorage.getItem("pendingVerificationEmail") || "";
   }, [formData.login]);
 
   const isEmptyFieldsError = error === "Please fill in all fields.";
-  const isSimpleLoginError =
-    !!friendlyError && !isUnverifiedError;
+  const isSimpleLoginError = !!friendlyError && !isUnverifiedError;
 
-  const loginInputError = isEmptyFieldsError && !formData.login.trim();
+  const loginInputError =
+    (isEmptyFieldsError && !formData.login.trim()) || isUserNotFoundError;
+
   const passwordInputError =
     (isEmptyFieldsError && !formData.password.trim()) || isIncorrectPasswordError;
 
@@ -136,35 +145,45 @@ const LoginPage = () => {
         <p className="auth-subtitle">Welcome back. Sign in to continue.</p>
 
         {isUnverifiedError && (
-          <p className="auth-error auth-error-login auth-login-warning">
-            {friendlyError}
-          </p>
-        )}
+          <div className="auth-status-stack">
+            <p className="auth-feedback auth-feedback-warning">
+              Please verify your email before logging in.
+            </p>
 
-        {isUnverifiedError && (
-          <div className="auth-resend-block">
-            <button
-              type="button"
-              className="auth-resend-link"
-              onClick={handleResendVerification}
-              disabled={isResending}
-            >
-              {isResending ? "Resending..." : "Resend verification email"}
-            </button>
+            <div className="auth-resend-block">
+              <button
+                type="button"
+                className="auth-feedback auth-feedback-link auth-resend-link"
+                onClick={handleResendVerification}
+                disabled={isResending}
+              >
+                {isResending ? "Resending..." : "Resend verification email"}
+              </button>
 
-            {resendMessage && (
-              <p className="auth-resend-success">{resendMessage}</p>
-            )}
+              {resendMessage && (
+                <p className="auth-feedback auth-feedback-success">
+                  {resendMessage}
+                </p>
+              )}
 
-            {resendError && <p className="auth-resend-error">{resendError}</p>}
+              {resendError && (
+                <p className="auth-feedback auth-feedback-error">
+                  {resendError}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
-        {success && <p className="auth-success">{success}</p>}
+        {success && (
+          <p className="auth-feedback auth-feedback-success auth-feedback-center">
+            {success}
+          </p>
+        )}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           {isSimpleLoginError && (
-            <p className="auth-error auth-error-login-inline">
+            <p className="auth-feedback auth-feedback-error">
               {friendlyError}
             </p>
           )}
@@ -175,6 +194,7 @@ const LoginPage = () => {
             placeholder="Email or username"
             value={formData.login}
             onChange={handleChange}
+            autoComplete="username"
             className={loginInputError ? "auth-input auth-input-error" : "auth-input"}
           />
 
@@ -184,6 +204,7 @@ const LoginPage = () => {
             placeholder="Password"
             value={formData.password}
             onChange={handleChange}
+            autoComplete="current-password"
             className={
               passwordInputError ? "auth-input auth-input-error" : "auth-input"
             }
@@ -193,7 +214,7 @@ const LoginPage = () => {
             <Link to="/forgot-password">Forgot password?</Link>
           </p>
 
-          <button type="submit" disabled={isLoading}>
+          <button type="submit" className="auth-submit-button" disabled={isLoading}>
             {isLoading ? "Signing in..." : "Login"}
           </button>
         </form>

@@ -1,27 +1,58 @@
+:root {
+  --app-bg: #0a1020;
+  --app-bg-deep: #0f172d;
+  --app-bg-elevated: #151f38;
+  --app-bg-elevated-2: #1b2744;
+  --app-bg-elevated-3: #223154;
+  --app-bg-soft: #26385f;
+  --app-border: rgba(137, 157, 255, 0.16);
+  --app-border-strong: rgba(137, 157, 255, 0.28);
+  --app-text: #f5f7ff;
+  --app-text-soft: #c8d2ec;
+  --app-text-muted: #93a0c4;
+  --app-accent: #7080ff;
+  --app-accent-hover: #5f70f4;
+  --app-accent-soft: rgba(112, 128, 255, 0.18);
+  --app-link: #78d7ff;
+  --app-success: #35d4a0;
+  --app-success-soft: rgba(53, 212, 160, 0.15);
+  --app-danger: #ff7387;
+  --app-danger-soft: rgba(255, 115, 135, 0.14);
+  --app-warning: #ffba63;
+  --app-warning-soft: rgba(255, 186, 99, 0.12);
+  --app-warning-border: rgba(255, 186, 99, 0.26);
+  --app-shadow: 0 28px 80px rgba(3, 7, 18, 0.52);
+  --app-card-shadow: 0 24px 60px rgba(3, 7, 18, 0.42);
+  --app-copy-size: 0.98rem;
+}
+
 .auth-page {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 32px 16px;
-  background: radial-gradient(circle at top, rgba(88, 101, 242, 0.2), transparent 32%),
-    linear-gradient(180deg, #1e1f22 0%, #111214 100%);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(112, 128, 255, 0.2), transparent 26%),
+    radial-gradient(circle at 18% 88%, rgba(120, 215, 255, 0.1), transparent 24%),
+    linear-gradient(180deg, #0c1224 0%, #090d18 100%);
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
 
 .auth-card {
   width: 100%;
   max-width: 430px;
-  padding: 40px 32px 44px;
-  border-radius: 18px;
-  background: #2b2d31;
-  border: 1px solid #1f2023;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-  color: #f2f3f5;
+  padding: 38px 32px 40px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(23, 31, 54, 0.96) 0%, rgba(17, 24, 42, 0.98) 100%);
+  border: 1px solid var(--app-border-strong);
+  box-shadow: var(--app-shadow);
+  color: var(--app-text);
+  backdrop-filter: blur(16px);
 }
 
 .auth-logo {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   text-align: center;
   font-size: 3rem;
   font-weight: 800;
@@ -29,20 +60,35 @@
   color: #ffffff;
 }
 
+.auth-subtitle,
+.auth-description,
+.auth-footer,
+.auth-footer-text,
+.auth-form input,
+.auth-input,
+.auth-form textarea,
+.auth-form button,
+.auth-button,
+.auth-forgot-password,
+.auth-feedback {
+  font-size: var(--app-copy-size);
+  font-family: inherit;
+}
+
 .auth-subtitle {
-  margin: 0 0 10px;
+  margin: 0 0 18px;
   text-align: center;
-  font-size: 1.1rem;
-  line-height: 1.5;
-  color: #dbdee1;
+  line-height: 1.45;
+  color: var(--app-text-soft);
+  font-weight: 500;
 }
 
 .auth-description {
   margin: 0 0 24px;
   text-align: center;
-  font-size: 0.98rem;
-  line-height: 1.5;
-  color: #b5bac1;
+  line-height: 1.45;
+  color: var(--app-text-muted);
+  font-weight: 500;
 }
 
 .auth-card h2 {
@@ -59,7 +105,7 @@
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .auth-form-group {
@@ -75,35 +121,38 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: #b5bac1;
+  color: var(--app-text-muted);
 }
 
 .auth-form input,
 .auth-input,
 .auth-form textarea {
   width: 100%;
-  padding: 11px 12px;
-  border-radius: 8px;
-  border: 1px solid #1f2023;
-  background: #1e1f22;
-  color: #f2f3f5;
-  font-size: 0.95rem;
+  padding: 12px 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(145, 163, 255, 0.1);
+  background: rgba(8, 13, 26, 0.72);
+  color: var(--app-text);
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .auth-form input::placeholder,
 .auth-input::placeholder,
 .auth-form textarea::placeholder {
-  color: #878b91;
+  color: var(--app-text-muted);
 }
 
 .auth-form input:focus,
 .auth-input:focus,
 .auth-form textarea:focus {
-  border-color: #5865f2;
-  box-shadow: 0 0 0 1px #5865f2;
-  background: #1a1b1e;
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 1px var(--app-accent), 0 0 0 6px rgba(112, 128, 255, 0.12);
+  background: rgba(10, 16, 31, 0.9);
 }
 
 .auth-form textarea,
@@ -118,18 +167,22 @@ textarea.auth-input {
   width: 100%;
   padding: 12px 14px;
   border: none;
-  border-radius: 8px;
-  background: #5865f2;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--app-accent) 0%, #7f8cff 100%);
   color: #ffffff;
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+  box-shadow: 0 16px 32px rgba(80, 95, 255, 0.24);
 }
 
 .auth-form button:hover,
 .auth-button:hover {
-  background: #4752c4;
+  background: linear-gradient(135deg, var(--app-accent-hover) 0%, #7382ff 100%);
 }
 
 .auth-form button:active,
@@ -141,33 +194,39 @@ textarea.auth-input {
 .auth-button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+.auth-submit-button {
+  margin-top: -4px;
 }
 
 .auth-button-secondary {
   background: transparent;
-  border: 1px solid #4f545c;
-  color: #dcddde;
+  border: 1px solid var(--app-border-strong);
+  color: var(--app-text-soft);
   text-decoration: none;
+  box-shadow: none;
 }
 
 .auth-button-secondary:hover {
-  background: #3a3c43;
-  border-color: #6d7178;
+  background: rgba(112, 128, 255, 0.08);
+  border-color: rgba(137, 157, 255, 0.38);
   color: #ffffff;
 }
 
 .auth-button-danger {
-  background: #da373c;
+  background: linear-gradient(135deg, #ff6f83 0%, #ff4d66 100%);
 }
 
 .auth-button-danger:hover {
-  background: #b52d31;
+  background: linear-gradient(135deg, #f15d73 0%, #f2435d 100%);
 }
 
 .auth-link {
   display: inline-block;
   margin-top: 8px;
-  color: #00a8fc;
+  color: var(--app-link);
   text-decoration: none;
   font-weight: 500;
 }
@@ -175,37 +234,42 @@ textarea.auth-input {
 .auth-link:hover,
 .auth-footer a:hover,
 .auth-footer-text a:hover,
-.auth-forgot-password a:hover {
+.auth-forgot-password a:hover,
+.auth-resend-link:hover,
+.auth-verify-resend-link:hover {
   text-decoration: underline;
+  font-style: normal;
 }
 
 .auth-footer,
 .auth-footer-text {
-  margin-top: 22px;
+  margin-top: 20px;
   text-align: center;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  color: #b5bac1;
+  line-height: 1.45;
+  color: var(--app-text-soft);
+  font-weight: 500;
 }
 
 .auth-footer a,
 .auth-footer-text a,
-.auth-forgot-password a {
-  color: #00a8fc;
+.auth-forgot-password a,
+.auth-resend-link,
+.auth-verify-resend-link {
+  color: var(--app-link);
   text-decoration: none;
+  font-weight: 600;
+  font-style: normal;
 }
 
 .auth-success {
-  margin-bottom: 16px;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: rgba(35, 165, 90, 0.14);
-  border: 1px solid rgba(35, 165, 90, 0.34);
-  color: #7ef0a7;
-  font-size: 0.95rem;
-  font-weight: 600;
-  line-height: 1.5;
+  margin-bottom: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-success);
+  line-height: 1.45;
   text-align: center;
+  font-weight: 600;
 }
 
 .password-strength-wrapper {
@@ -218,20 +282,20 @@ textarea.auth-input {
 }
 
 .password-strength-text {
-  font-size: 0.95rem;
+  font-size: var(--app-copy-size);
   font-weight: 500;
 }
 
 .password-strength-text.password-strength-weak {
-  color: #f23f43;
+  color: var(--app-danger);
 }
 
 .password-strength-text.password-strength-medium {
-  color: #f0b232;
+  color: var(--app-warning);
 }
 
 .password-strength-text.password-strength-strong {
-  color: #23a55a;
+  color: var(--app-success);
 }
 
 .password-rules {
@@ -243,18 +307,17 @@ textarea.auth-input {
 .password-rule {
   margin: 0;
   font-size: 13px;
-  color: #b5bac1;
+  color: var(--app-text-soft);
 }
 
 .auth-card .password-rule.password-rule-valid {
-  color: #23a55a;
+  color: var(--app-success);
   font-weight: 500;
 }
 
 .auth-error {
-  color: #fa777c !important;
-  font-size: 0.88rem;
-  line-height: 1.4;
+  color: var(--app-danger) !important;
+  line-height: 1.45;
 }
 
 .auth-error-login {
@@ -267,27 +330,27 @@ textarea.auth-input {
 }
 
 .auth-forgot-password {
-  margin: -2px 0 16px;
+  margin: -6px 0 4px;
   text-align: right;
-  font-size: 14px;
+  font-weight: 500;
 }
 
 .auth-message {
   margin-bottom: 14px;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: var(--app-copy-size);
+  line-height: 1.45;
 }
 
 .auth-message.error {
-  color: #fa777c;
+  color: var(--app-danger);
 }
 
 .auth-message.success {
-  color: #23a55a;
+  color: var(--app-success);
 }
 
 .auth-message.loading {
-  color: #dbdee1;
+  color: var(--app-text-soft);
 }
 
 .auth-verify-card {
@@ -300,32 +363,49 @@ textarea.auth-input {
   width: 100%;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.auth-verify-footer {
+  margin-top: 2px;
+}
+
+.auth-verify-resend-wrap {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  margin-top: 8px;
+  gap: 6px;
+}
+
+.auth-feedback-neutral {
+  color: var(--app-text-soft) !important;
+}
+
+.auth-verify-resend-link {
+  align-self: center;
+  padding-left: 0;
 }
 
 .auth-verify-status {
   margin: 0;
   text-align: center;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .auth-verify-status-loading {
-  color: #f2f3f5;
-  font-size: 1rem;
+  color: var(--app-text);
   font-weight: 500;
 }
 
 .auth-verify-status-success {
-  color: #23a55a;
-  font-size: 1.15rem;
-  font-weight: 700;
+  color: var(--app-success);
+  font-weight: 600;
 }
 
 .auth-verify-status-error {
-  color: #fa777c !important;
-  font-size: 0.98rem;
+  color: var(--app-danger) !important;
   font-weight: 600;
 }
 
@@ -338,14 +418,10 @@ textarea.auth-input {
   text-decoration: none;
 }
 
-.auth-verify-footer {
-  margin-top: 0;
-}
-
 .server-page {
   min-height: 100vh;
-  background: #313338;
-  color: #f2f3f5;
+  background: var(--app-bg-deep);
+  color: var(--app-text);
   overflow: hidden;
   font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
@@ -372,12 +448,12 @@ textarea.auth-input {
 .discord-sidebar-shell {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
-  background: #2b2d31;
-  border-right: 1px solid #1f2023;
+  background: var(--app-bg-elevated);
+  border-right: 1px solid rgba(137, 157, 255, 0.08);
 }
 
 .discord-guilds-bar {
-  background: #1e1f22;
+  background: rgba(8, 13, 26, 0.92);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -393,7 +469,7 @@ textarea.auth-input {
   height: 2px;
   margin: 8px 0 10px;
   border-radius: 999px;
-  background: #3f4147;
+  background: rgba(137, 157, 255, 0.18);
 }
 
 .discord-guild-list {
@@ -411,21 +487,21 @@ textarea.auth-input {
   width: 48px;
   height: 48px;
   border: none;
-  border-radius: 50%;
-  background: #313338;
+  border-radius: 16px;
+  background: var(--app-bg-elevated-2);
   color: #ffffff;
   cursor: pointer;
   transition: border-radius 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
 }
 
 .discord-guild-button:hover {
-  border-radius: 16px;
-  background: #5865f2;
+  border-radius: 14px;
+  background: var(--app-accent);
 }
 
 .discord-guild-button-active {
-  border-radius: 16px;
-  background: #5865f2;
+  border-radius: 14px;
+  background: var(--app-accent);
 }
 
 .discord-guild-initial,
@@ -439,12 +515,12 @@ textarea.auth-input {
 }
 
 .discord-guild-create-button {
-  background: #2b2d31;
-  color: #23a55a;
+  background: var(--app-bg-elevated);
+  color: var(--app-success);
 }
 
 .discord-guild-create-button:hover {
-  background: #23a55a;
+  background: var(--app-success);
   color: #ffffff;
 }
 
@@ -457,11 +533,11 @@ textarea.auth-input {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
-  background: #2b2d31;
+  background: var(--app-bg-elevated);
 }
 
 .discord-sidebar-pane-top {
-  border-bottom: 1px solid #1f2023;
+  border-bottom: 1px solid rgba(137, 157, 255, 0.08);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.16);
 }
 
@@ -475,14 +551,14 @@ textarea.auth-input {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #b5bac1;
+  color: var(--app-text-muted);
 }
 
 .discord-pane-title {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
-  color: #f2f3f5;
+  color: var(--app-text);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -493,7 +569,7 @@ textarea.auth-input {
   margin: 6px 0 0;
   font-size: 0.82rem;
   line-height: 1.45;
-  color: #b5bac1;
+  color: var(--app-text-soft);
 }
 
 .discord-search-wrap {
@@ -506,14 +582,14 @@ textarea.auth-input {
   padding: 0 12px;
   border: none;
   border-radius: 8px;
-  background: #1e1f22;
-  color: #f2f3f5;
+  background: rgba(8, 13, 26, 0.72);
+  color: var(--app-text);
   outline: none;
   font-size: 0.9rem;
 }
 
 .discord-search-input::placeholder {
-  color: #949ba4;
+  color: var(--app-text-muted);
 }
 
 .discord-dm-nav {
@@ -527,9 +603,9 @@ textarea.auth-input {
   width: 100%;
   padding: 10px 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  color: #b5bac1;
+  color: var(--app-text-soft);
   text-align: left;
   font-size: 0.95rem;
   font-weight: 600;
@@ -538,27 +614,27 @@ textarea.auth-input {
 }
 
 .discord-dm-nav-button:hover {
-  background: #35373c;
-  color: #f2f3f5;
+  background: rgba(137, 157, 255, 0.1);
+  color: var(--app-text);
 }
 
 .discord-dm-nav-button-active {
-  background: #404249;
+  background: rgba(112, 128, 255, 0.2);
   color: #ffffff;
 }
 
 .discord-sidebar-divider {
   height: 1px;
   margin: 0 12px 10px;
-  background: #3f4147;
+  background: rgba(137, 157, 255, 0.12);
 }
 
 .server-inline-error {
   margin: 0 12px 10px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(242, 63, 67, 0.12);
-  border: 1px solid rgba(242, 63, 67, 0.22);
+  border-radius: 10px;
+  background: var(--app-danger-soft);
+  border: 1px solid rgba(255, 115, 135, 0.22);
 }
 
 .server-inline-error-tight {
@@ -585,7 +661,7 @@ textarea.auth-input {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #949ba4;
+  color: var(--app-text-muted);
 }
 
 .discord-helper-text,
@@ -595,7 +671,7 @@ textarea.auth-input {
   padding: 0 8px;
   font-size: 0.88rem;
   line-height: 1.45;
-  color: #949ba4;
+  color: var(--app-text-muted);
 }
 
 .discord-dm-list,
@@ -614,9 +690,9 @@ textarea.auth-input {
   gap: 12px;
   padding: 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
-  color: #dbdee1;
+  color: var(--app-text-soft);
   text-align: left;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -625,19 +701,19 @@ textarea.auth-input {
 .discord-dm-item:hover,
 .channel-button:hover,
 .discord-channel-button:hover {
-  background: #35373c;
-  color: #f2f3f5;
+  background: rgba(137, 157, 255, 0.1);
+  color: var(--app-text);
 }
 
 .discord-dm-item-active,
 .channel-button-active {
-  background: #404249;
+  background: rgba(112, 128, 255, 0.18);
   color: #ffffff;
 }
 
 .channel-hash {
   flex-shrink: 0;
-  color: #949ba4;
+  color: var(--app-text-muted);
   font-size: 1rem;
   line-height: 1;
 }
@@ -660,7 +736,7 @@ textarea.auth-input {
   border-radius: 50%;
   font-weight: 700;
   color: #ffffff;
-  background: #5865f2;
+  background: linear-gradient(135deg, var(--app-accent) 0%, #8b95ff 100%);
 }
 
 .discord-dm-avatar {
@@ -693,13 +769,13 @@ textarea.auth-input {
 .discord-dm-time {
   flex-shrink: 0;
   font-size: 0.72rem;
-  color: #949ba4;
+  color: var(--app-text-muted);
 }
 
 .discord-dm-preview {
   margin: 2px 0 0;
   font-size: 0.82rem;
-  color: #949ba4;
+  color: var(--app-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -712,7 +788,7 @@ textarea.auth-input {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 3px solid #2b2d31;
+  border: 3px solid var(--app-bg-elevated);
   background: #80848e;
 }
 
@@ -726,20 +802,20 @@ textarea.auth-input {
 .discord-profile-status {
   width: 12px;
   height: 12px;
-  border-color: #2b2d31;
+  border-color: var(--app-bg-elevated);
 }
 
 .status-online {
-  background: #23a55a;
+  background: var(--app-success);
 }
 
 .status-offline {
-  background: #80848e;
+  background: #7f8aad;
 }
 
 .discord-utility-section {
   padding-top: 10px;
-  border-top: 1px solid #3f4147;
+  border-top: 1px solid rgba(137, 157, 255, 0.12);
 }
 
 .discord-form-stack {
@@ -788,8 +864,8 @@ textarea.auth-input {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  background: #232428;
-  border-top: 1px solid #1f2023;
+  background: rgba(8, 13, 26, 0.78);
+  border-top: 1px solid rgba(137, 157, 255, 0.08);
 }
 
 .discord-account-panel-user {
@@ -814,7 +890,7 @@ textarea.auth-input {
 .discord-account-name {
   font-size: 0.92rem;
   font-weight: 700;
-  color: #f2f3f5;
+  color: var(--app-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -823,7 +899,7 @@ textarea.auth-input {
 .discord-account-status {
   margin-top: 2px;
   font-size: 0.78rem;
-  color: #b5bac1;
+  color: var(--app-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -837,9 +913,9 @@ textarea.auth-input {
 
 .discord-account-action {
   border: none;
-  background: #2b2d31;
-  color: #dbdee1;
-  border-radius: 6px;
+  background: var(--app-bg-elevated-2);
+  color: var(--app-text-soft);
+  border-radius: 8px;
   padding: 8px 10px;
   font-size: 0.78rem;
   font-weight: 600;
@@ -848,14 +924,14 @@ textarea.auth-input {
 }
 
 .discord-account-action:hover {
-  background: #3a3c43;
+  background: rgba(112, 128, 255, 0.18);
   color: #ffffff;
 }
 
 .discord-chat-panel {
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr) auto;
-  background: #313338;
+  background: var(--app-bg-deep);
 }
 
 .discord-chat-header {
@@ -863,8 +939,8 @@ textarea.auth-input {
   align-items: center;
   gap: 16px;
   padding: 0 16px;
-  border-bottom: 1px solid #26282c;
-  background: #313338;
+  border-bottom: 1px solid rgba(137, 157, 255, 0.08);
+  background: rgba(14, 21, 39, 0.96);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.1);
 }
 
@@ -881,7 +957,7 @@ textarea.auth-input {
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.2;
-  color: #f2f3f5;
+  color: var(--app-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -890,19 +966,19 @@ textarea.auth-input {
 .discord-chat-subtitle {
   margin: 2px 0 0;
   font-size: 0.78rem;
-  color: #b5bac1;
+  color: var(--app-text-soft);
 }
 
 .discord-channel-symbol {
   flex-shrink: 0;
   font-size: 1.4rem;
   line-height: 1;
-  color: #949ba4;
+  color: var(--app-text-muted);
 }
 
 .discord-messages-panel {
   min-height: 0;
-  background: #313338;
+  background: var(--app-bg-deep);
 }
 
 .message-list,
@@ -921,19 +997,19 @@ textarea.auth-input {
   align-items: flex-start;
   gap: 16px;
   padding: 8px 16px 8px 0;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: background-color 0.12s ease;
 }
 
 .discord-message-row:hover {
-  background: rgba(4, 4, 5, 0.07);
+  background: rgba(112, 128, 255, 0.06);
 }
 
 .discord-message-avatar {
   width: 40px;
   height: 40px;
   font-size: 0.95rem;
-  background: #3f48cc;
+  background: linear-gradient(135deg, #5466ff 0%, #7585ff 100%);
 }
 
 .discord-message-body {
@@ -951,19 +1027,19 @@ textarea.auth-input {
 .discord-message-author {
   font-size: 1rem;
   font-weight: 600;
-  color: #f2f3f5;
+  color: var(--app-text);
 }
 
 .discord-message-time,
 .server-message-time {
   font-size: 0.75rem;
-  color: #949ba4;
+  color: var(--app-text-muted);
 }
 
 .discord-message-text,
 .server-message-content {
   margin: 2px 0 0;
-  color: #dbdee1;
+  color: var(--app-text-soft);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -977,11 +1053,11 @@ textarea.auth-input {
   justify-content: center;
   padding: 24px;
   text-align: center;
-  color: #949ba4;
+  color: var(--app-text-muted);
 }
 
 .server-state-error {
-  color: #fa777c;
+  color: var(--app-danger);
 }
 
 .discord-home-panel {
@@ -998,12 +1074,12 @@ textarea.auth-input {
   margin: 0;
   font-size: 1.6rem;
   font-weight: 800;
-  color: #f2f3f5;
+  color: var(--app-text);
 }
 
 .discord-home-subtitle-large {
   margin: 8px 0 0;
-  color: #b5bac1;
+  color: var(--app-text-soft);
   line-height: 1.5;
 }
 
@@ -1019,9 +1095,9 @@ textarea.auth-input {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 16px;
-  border-radius: 10px;
-  background: #2b2d31;
-  border: 1px solid #3b3d44;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(23, 31, 54, 0.96) 0%, rgba(18, 26, 45, 0.98) 100%);
+  border: 1px solid var(--app-border);
 }
 
 .discord-friend-home-main {
@@ -1039,7 +1115,7 @@ textarea.auth-input {
 .discord-friend-home-name {
   font-size: 0.98rem;
   font-weight: 700;
-  color: #f2f3f5;
+  color: var(--app-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1049,7 +1125,7 @@ textarea.auth-input {
 .discord-friend-home-status {
   margin-top: 3px;
   font-size: 0.85rem;
-  color: #b5bac1;
+  color: var(--app-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1068,16 +1144,16 @@ textarea.auth-input {
   justify-content: center;
   min-height: 180px;
   padding: 20px;
-  border-radius: 12px;
-  background: #2b2d31;
-  border: 1px solid #3b3d44;
-  color: #b5bac1;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(23, 31, 54, 0.96) 0%, rgba(18, 26, 45, 0.98) 100%);
+  border: 1px solid var(--app-border);
+  color: var(--app-text-soft);
   text-align: center;
 }
 
 .discord-composer {
   padding: 0 16px 24px;
-  background: #313338;
+  background: var(--app-bg-deep);
 }
 
 .discord-composer-shell {
@@ -1094,24 +1170,26 @@ textarea.auth-input {
   max-height: 160px;
   padding: 11px 14px;
   border: none;
-  border-radius: 8px;
-  background: #383a40;
-  color: #f2f3f5;
+  border-radius: 12px;
+  background: rgba(19, 28, 48, 0.96);
+  color: var(--app-text);
   font: inherit;
   line-height: 1.45;
   resize: none;
   outline: none;
   overflow-y: auto;
+  border: 1px solid rgba(137, 157, 255, 0.08);
 }
 
 .message-input::placeholder,
 .discord-composer-input::placeholder {
-  color: #b5bac1;
+  color: var(--app-text-muted);
 }
 
 .message-input:focus,
 .discord-composer-input:focus {
-  background: #3b3d44;
+  background: rgba(22, 33, 57, 1);
+  border-color: rgba(137, 157, 255, 0.18);
 }
 
 .discord-send-button {
@@ -1124,8 +1202,8 @@ textarea.auth-input {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: #2b2d31;
-  border-left: 1px solid #1f2023;
+  background: var(--app-bg-elevated);
+  border-left: 1px solid rgba(137, 157, 255, 0.08);
 }
 
 .discord-right-pane-header {
@@ -1150,13 +1228,13 @@ textarea.auth-input {
 .server-member-item,
 .discord-member-item {
   padding: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
 }
 
 .server-member-item:hover,
 .discord-member-item:hover {
-  background: #35373c;
+  background: rgba(137, 157, 255, 0.1);
 }
 
 .discord-member-row-top {
@@ -1180,7 +1258,7 @@ textarea.auth-input {
   margin: 0;
   font-size: 0.92rem;
   font-weight: 600;
-  color: #dbdee1;
+  color: var(--app-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1188,7 +1266,7 @@ textarea.auth-input {
 
 .server-member-email {
   font-size: 0.78rem;
-  color: #949ba4;
+  color: var(--app-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1201,9 +1279,9 @@ textarea.auth-input {
 .discord-profile-card {
   margin: 0 16px 16px;
   padding: 16px;
-  border-radius: 10px;
-  background: #232428;
-  border: 1px solid #1f2023;
+  border-radius: 14px;
+  background: rgba(8, 13, 26, 0.72);
+  border: 1px solid rgba(137, 157, 255, 0.1);
 }
 
 .compact-profile-card {
@@ -1213,8 +1291,8 @@ textarea.auth-input {
 .discord-profile-banner {
   height: 68px;
   margin: -16px -16px 0;
-  border-radius: 10px 10px 0 0;
-  background: linear-gradient(135deg, #5865f2 0%, #7a84ff 100%);
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(135deg, var(--app-accent) 0%, #8d99ff 100%);
 }
 
 .large-avatar {
@@ -1222,20 +1300,20 @@ textarea.auth-input {
   height: 72px;
   margin-top: -24px;
   font-size: 1.4rem;
-  border: 6px solid #232428;
+  border: 6px solid rgba(8, 13, 26, 0.92);
 }
 
 .discord-profile-name {
   margin-top: 10px;
   font-size: 1.1rem;
   font-weight: 700;
-  color: #f2f3f5;
+  color: var(--app-text);
 }
 
 .discord-profile-meta {
   margin-top: 4px;
   font-size: 0.88rem;
-  color: #b5bac1;
+  color: var(--app-text-soft);
   line-height: 1.45;
   word-break: break-word;
 }
@@ -1252,16 +1330,16 @@ textarea.auth-input {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(4, 7, 14, 0.78);
 }
 
 .discord-create-server-modal {
   width: 100%;
   max-width: 460px;
-  border-radius: 16px;
-  background: #2b2d31;
-  border: 1px solid #1f2023;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(23, 31, 54, 0.98) 0%, rgba(17, 24, 42, 0.98) 100%);
+  border: 1px solid var(--app-border-strong);
+  box-shadow: var(--app-card-shadow);
   overflow: hidden;
 }
 
@@ -1273,12 +1351,12 @@ textarea.auth-input {
   margin: 0;
   font-size: 1.3rem;
   font-weight: 800;
-  color: #f2f3f5;
+  color: var(--app-text);
 }
 
 .discord-modal-subtitle {
   margin: 8px 0 0;
-  color: #b5bac1;
+  color: var(--app-text-soft);
   line-height: 1.45;
 }
 
@@ -1300,7 +1378,7 @@ textarea.auth-input {
 .message-input,
 .discord-home-panel {
   scrollbar-width: thin;
-  scrollbar-color: #1a1b1e transparent;
+  scrollbar-color: rgba(112, 128, 255, 0.22) transparent;
 }
 
 .server-sidebar::-webkit-scrollbar,
@@ -1330,12 +1408,11 @@ textarea.auth-input {
 .server-members-list::-webkit-scrollbar-thumb,
 .message-input::-webkit-scrollbar-thumb,
 .discord-home-panel::-webkit-scrollbar-thumb {
-  background: #1a1b1e;
+  background: rgba(112, 128, 255, 0.2);
   border-radius: 999px;
 }
 
 @media (max-width: 1180px) {
-
   .server-layout,
   .main-layout-grid {
     grid-template-columns: 340px minmax(0, 1fr);
@@ -1347,7 +1424,6 @@ textarea.auth-input {
 }
 
 @media (max-width: 860px) {
-
   .server-layout,
   .main-layout-grid {
     grid-template-columns: 72px minmax(0, 1fr);
@@ -1359,7 +1435,6 @@ textarea.auth-input {
 }
 
 @media (max-width: 640px) {
-
   .discord-composer-shell,
   .discord-modal-actions,
   .discord-friend-home-card {
@@ -1393,80 +1468,113 @@ textarea.auth-input {
 .auth-error-username {
   margin: -6px 0 4px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(242, 63, 67, 0.14);
-  border: 1px solid rgba(242, 63, 67, 0.32);
-  color: #ff8e93;
+  border-radius: 10px;
+  background: var(--app-danger-soft);
+  border: 1px solid rgba(255, 115, 135, 0.32);
+  color: #ff9bab;
   font-weight: 600;
 }
 
 .auth-input-error {
-  border-color: #f23f43 !important;
-  box-shadow: 0 0 0 1px #f23f43;
+  border-color: var(--app-danger) !important;
+  box-shadow: 0 0 0 1px var(--app-danger), 0 0 0 6px rgba(255, 115, 135, 0.08);
 }
 
 .auth-input-error:focus {
-  border-color: #f23f43 !important;
-  box-shadow: 0 0 0 1px #f23f43;
+  border-color: var(--app-danger) !important;
+  box-shadow: 0 0 0 1px var(--app-danger), 0 0 0 6px rgba(255, 115, 135, 0.08);
+}
+
+.auth-status-stack {
+  margin: 2px 0 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.auth-feedback {
+  margin: 0;
+  padding-left: 4px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.auth-feedback-error {
+  color: var(--app-danger) !important;
+}
+
+.auth-feedback-warning {
+  color: var(--app-warning) !important;
+}
+
+.auth-feedback-success {
+  color: var(--app-success) !important;
+}
+
+.auth-feedback-link {
+  color: var(--app-link) !important;
+}
+
+.auth-feedback-center {
+  text-align: center;
+  padding-left: 0;
 }
 
 .auth-login-warning {
-  margin: 8px 0 14px;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: rgba(242, 63, 67, 0.14);
-  border: 1px solid rgba(242, 63, 67, 0.32);
-  color: #ff8e93;
-  font-weight: 600;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 186, 99, 0.13) 0%, rgba(255, 186, 99, 0.08) 100%);
+  border: 1px solid var(--app-warning-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   text-align: center;
+}
+
+.auth-login-warning-title {
+  margin: 0;
+  color: #ffc988 !important;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.auth-login-warning-text {
+  margin: 6px 0 0;
+  color: #e7d7bd !important;
+  line-height: 1.45;
 }
 
 .auth-verify-status-success {
-  color: #23a55a !important;
+  color: var(--app-success) !important;
 }
 
 .auth-resend-block {
-  margin: -4px 0 14px;
-  text-align: center;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
 }
 
 .auth-resend-link {
   border: none;
   background: transparent;
-  padding: 0;
-  color: #00a8fc;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 600;
+  padding: 0 0 0 4px;
   cursor: pointer;
+  text-align: left;
 }
 
 .auth-resend-link:hover {
-  text-decoration: underline;
+  background: transparent;
+}
+
+.auth-resend-link:active {
+  transform: none;
 }
 
 .auth-resend-link:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-}
-
-.auth-resend-success {
-  margin-top: 8px;
-  color: #23a55a !important;
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.auth-resend-error {
-  margin-top: 8px;
-  color: #fa777c;
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.auth-error-login-inline {
-  margin: -6px 0 -4px;
-  text-align: left;
 }
