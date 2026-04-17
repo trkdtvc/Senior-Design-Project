@@ -88,7 +88,7 @@ const ResetPasswordPage = () => {
   const isWeakPasswordError =
     status === "error" &&
     message ===
-    "Weak password not accepted. Your password must be at least medium strength.";
+    "Password must be at least of medium strength";
 
   const isSamePasswordError =
     status === "error" &&
@@ -237,7 +237,7 @@ const ResetPasswordPage = () => {
     if (passwordStrength.label === "Weak") {
       setStatus("error");
       setMessage(
-        "Weak password not accepted. Your password must be at least medium strength."
+        "Password must be at least of medium strength"
       );
       return;
     }

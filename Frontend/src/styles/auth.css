@@ -295,15 +295,15 @@ textarea.auth-input {
 }
 
 .password-strength-text.password-strength-weak {
-  color: var(--app-danger);
+  color: #ff6b81;
 }
 
 .password-strength-text.password-strength-medium {
-  color: var(--app-success);
+  color: #facc15;
 }
 
 .password-strength-text.password-strength-strong {
-  color: var(--app-success);
+  color: #34d399;
 }
 
 .password-rules {

@@ -4,7 +4,7 @@ import { registerUser } from "../services/authService";
 import "../styles/auth.css";
 
 const EMPTY_FIELDS_ERROR = "Please fill in all fields";
-const INVALID_EMAIL_ERROR = "Please enter a valid email address.";
+const INVALID_EMAIL_ERROR = "Invalid email format";
 const EMAIL_EXISTS_ERROR = "Email already exists";
 const USERNAME_EXISTS_ERROR = "Username already exists";
 const PASSWORD_MISMATCH_ERRORS = new Set([
@@ -12,7 +12,7 @@ const PASSWORD_MISMATCH_ERRORS = new Set([
   "Passwords do not match"
 ]);
 const PASSWORD_REQUIREMENT_ERRORS = new Set([
-  "Weak password isn't acceptable, it must be at least of medium strength",
+  "Password must be at least of medium strength",
   "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.",
   "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character."
 ]);
@@ -118,13 +118,17 @@ const RegisterPage = () => {
       return;
     }
 
-    if (!email.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
       setError(INVALID_EMAIL_ERROR);
       return;
     }
 
-    if (!Object.values(passwordChecks).every(Boolean)) {
-      setError("Weak password isn't acceptable, it must be at least of medium strength");
+    const passedChecks = Object.values(passwordChecks).filter(Boolean).length;
+
+    if (passedChecks <= 2) {
+      setError("Password must be at least of medium strength");
       return;
     }
 
@@ -177,9 +181,9 @@ const RegisterPage = () => {
           <p className="auth-error auth-error-register-top">{error}</p>
         )}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form className="auth-form" onSubmit={handleSubmit} noValidate>
           <input
-            type="email"
+            type="text"
             name="email"
             placeholder="Email"
             value={formData.email}
