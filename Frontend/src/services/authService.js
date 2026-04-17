@@ -1,5 +1,11 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+const JSON_HEADERS = {
+  "Content-Type": "application/json"
+};
+
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+
 const handleResponse = async (response) => {
   let data = {};
 
@@ -21,10 +27,11 @@ const handleResponse = async (response) => {
 export const registerUser = async (userData) => {
   const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(userData)
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      ...userData,
+      email: normalizeEmail(userData.email || "")
+    })
   });
 
   return handleResponse(response);
@@ -33,9 +40,7 @@ export const registerUser = async (userData) => {
 export const loginUser = async (userData) => {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: JSON_HEADERS,
     body: JSON.stringify(userData)
   });
 
@@ -48,7 +53,7 @@ export const verifyEmail = async (token, email = "") => {
   });
 
   if (email) {
-    query.set("email", email);
+    query.set("email", normalizeEmail(email));
   }
 
   const response = await fetch(
@@ -61,10 +66,8 @@ export const verifyEmail = async (token, email = "") => {
 export const resendVerificationEmail = async (email) => {
   const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ email })
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email: normalizeEmail(email) })
   });
 
   return handleResponse(response);
@@ -73,10 +76,8 @@ export const resendVerificationEmail = async (email) => {
 export const forgotPassword = async (email) => {
   const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ email })
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email: normalizeEmail(email) })
   });
 
   return handleResponse(response);
@@ -93,9 +94,7 @@ export const validateResetPasswordToken = async (token) => {
 export const resetPassword = async (token, newPassword, confirmPassword) => {
   const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: JSON_HEADERS,
     body: JSON.stringify({
       token,
       newPassword,

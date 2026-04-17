@@ -3,6 +3,40 @@ import { Link, useSearchParams } from "react-router-dom";
 import { resendVerificationEmail, verifyEmail } from "../services/authService";
 import "../styles/auth.css";
 
+const getVerificationStateFromError = (rawMessage) => {
+  const normalizedMessage = (rawMessage || "").toLowerCase();
+
+  if (normalizedMessage.includes("expired")) {
+    return {
+      status: "error",
+      errorType: "expired",
+      message: "This verification link has expired"
+    };
+  }
+
+  if (normalizedMessage.includes("already been used")) {
+    return {
+      status: "error",
+      errorType: "already_verified",
+      message: "This verification link has already been used."
+    };
+  }
+
+  if (normalizedMessage.includes("already verified")) {
+    return {
+      status: "error",
+      errorType: "already_verified",
+      message: "This email is already verified"
+    };
+  }
+
+  return {
+    status: "error",
+    errorType: "invalid",
+    message: "This verification link is invalid"
+  };
+};
+
 const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();
 
@@ -22,15 +56,18 @@ const VerifyEmailPage = () => {
 
   const shouldShowResendButton =
     status === "error" &&
-    fallbackEmail &&
+    Boolean(fallbackEmail) &&
     errorType !== "already_verified";
 
   useEffect(() => {
     const verifyUserEmail = async () => {
+      setResendMessage("");
+      setResendError("");
+
       if (!token) {
         setStatus("error");
         setErrorType("invalid");
-        setMessage("This verification link is invalid.");
+        setMessage("This verification link is invalid");
         return;
       }
 
@@ -44,32 +81,12 @@ const VerifyEmailPage = () => {
       } catch (err) {
         const backendMessage =
           err.response?.data?.message || err.message || "Verification failed";
-        const normalizedMessage = backendMessage.toLowerCase();
 
-        if (normalizedMessage.includes("expired")) {
-          setStatus("error");
-          setErrorType("expired");
-          setMessage("This verification link has expired.");
-          return;
-        }
+        const nextState = getVerificationStateFromError(backendMessage);
 
-        if (normalizedMessage.includes("already been used")) {
-          setStatus("error");
-          setErrorType("already_verified");
-          setMessage("This verification link has already been used.");
-          return;
-        }
-
-        if (normalizedMessage.includes("already verified")) {
-          setStatus("error");
-          setErrorType("already_verified");
-          setMessage("This email is already verified");
-          return;
-        }
-
-        setStatus("error");
-        setErrorType("invalid");
-        setMessage("This verification link is invalid.");
+        setStatus(nextState.status);
+        setErrorType(nextState.errorType);
+        setMessage(nextState.message);
       }
     };
 
@@ -92,8 +109,8 @@ const VerifyEmailPage = () => {
 
     try {
       setIsResending(true);
-      setResendError("");
       setResendMessage("");
+      setResendError("");
 
       const data = await resendVerificationEmail(fallbackEmail);
 
@@ -106,12 +123,18 @@ const VerifyEmailPage = () => {
         err.message ||
         "Failed to resend verification email.";
 
-      if (backendMessage.toLowerCase().includes("already verified")) {
+      const normalizedMessage = backendMessage.toLowerCase();
+
+      if (normalizedMessage.includes("already verified")) {
+        setStatus("error");
         setErrorType("already_verified");
-        setResendError("This email is already verified");
-      } else {
-        setResendError(backendMessage);
+        setMessage("This email is already verified");
+        setResendMessage("");
+        setResendError("");
+        return;
       }
+
+      setResendError(backendMessage);
     } finally {
       setIsResending(false);
     }
@@ -137,10 +160,7 @@ const VerifyEmailPage = () => {
     <div className="auth-page">
       <div className="auth-card auth-verify-card">
         <h1 className="auth-logo">YFNC</h1>
-
-        {status === "loading" ? (
-          <p className="auth-subtitle">Email verification</p>
-        ) : null}
+        
 
         <div className="auth-verify-stack">
           <p className={getMessageClassName()}>{message}</p>

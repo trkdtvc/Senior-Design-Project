@@ -3,6 +3,22 @@ import { Link } from "react-router-dom";
 import { registerUser } from "../services/authService";
 import "../styles/auth.css";
 
+const EMPTY_FIELDS_ERROR = "Please fill in all fields";
+const INVALID_EMAIL_ERROR = "Please enter a valid email address.";
+const EMAIL_EXISTS_ERROR = "Email already exists";
+const USERNAME_EXISTS_ERROR = "Username already exists";
+const PASSWORD_MISMATCH_ERRORS = new Set([
+  "Passwords do not match.",
+  "Passwords do not match"
+]);
+const PASSWORD_REQUIREMENT_ERRORS = new Set([
+  "Weak password isn't acceptable, it must be at least of medium strength",
+  "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.",
+  "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character."
+]);
+const REGISTER_SUCCESS_MESSAGE =
+  "Registration successful. Check your email to verify your account";
+
 const getPasswordChecks = (password) => ({
   minLength: password.length >= 8,
   hasUppercase: /[A-Z]/.test(password),
@@ -47,20 +63,12 @@ const RegisterPage = () => {
     [passwordChecks]
   );
 
-  const isEmptyFieldsError = error === "Please fill in all fields.";
-
+  const isEmptyFieldsError = error === EMPTY_FIELDS_ERROR;
   const isEmailError =
-    error === "Email already exists" ||
-    error === "Please enter a valid email address.";
-
-  const isUsernameError = error === "Username already exists";
-
-  const isPasswordRequirementError =
-    error ===
-    "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.";
-
-  const isPasswordMismatchError =
-    error === "Passwords do not match." || error === "Passwords do not match";
+    error === EMAIL_EXISTS_ERROR || error === INVALID_EMAIL_ERROR;
+  const isUsernameError = error === USERNAME_EXISTS_ERROR;
+  const isPasswordRequirementError = PASSWORD_REQUIREMENT_ERRORS.has(error);
+  const isPasswordMismatchError = PASSWORD_MISMATCH_ERRORS.has(error);
 
   const isGeneralError =
     !!error &&
@@ -106,24 +114,22 @@ const RegisterPage = () => {
     const confirmPassword = formData.confirmPassword;
 
     if (!email || !username || !password || !confirmPassword) {
-      setError("Please fill in all fields.");
+      setError(EMPTY_FIELDS_ERROR);
       return;
     }
 
     if (!email.includes("@")) {
-      setError("Please enter a valid email address.");
+      setError(INVALID_EMAIL_ERROR);
       return;
     }
 
     if (!Object.values(passwordChecks).every(Boolean)) {
-      setError(
-        "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character."
-      );
+      setError("Weak password isn't acceptable, it must be at least of medium strength");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError("Passwords do not match");
       return;
     }
 
@@ -140,11 +146,7 @@ const RegisterPage = () => {
       });
 
       localStorage.setItem("pendingVerificationEmail", data.email || email);
-
-      setSuccess(
-        data.message ||
-          `Registration successful. Check ${email} to verify your account.`
-      );
+      setSuccess(REGISTER_SUCCESS_MESSAGE);
 
       setFormData({
         email: "",
@@ -163,7 +165,7 @@ const RegisterPage = () => {
     <div className="auth-page">
       <div className="auth-card">
         <h1 className="auth-logo">YFNC</h1>
-        <p className="auth-subtitle">Create an account to get started.</p>
+        <p className="auth-subtitle">Create an account to get started</p>
 
         {(isEmptyFieldsError || isGeneralError) && (
           <p className="auth-error auth-error-register-top">{error}</p>
@@ -182,7 +184,9 @@ const RegisterPage = () => {
             placeholder="Email"
             value={formData.email}
             onChange={handleChange}
-            className={emailInputError ? "auth-input auth-input-error" : "auth-input"}
+            className={
+              emailInputError ? "auth-input auth-input-error" : "auth-input"
+            }
           />
 
           {isUsernameError && <p className="auth-error">{error}</p>}
@@ -211,7 +215,9 @@ const RegisterPage = () => {
 
           {formData.password && (
             <div className="password-strength-wrapper">
-              <p className={`password-strength-text ${passwordStrength.className}`}>
+              <p
+                className={`password-strength-text ${passwordStrength.className}`}
+              >
                 Password strength: {passwordStrength.label}
               </p>
 

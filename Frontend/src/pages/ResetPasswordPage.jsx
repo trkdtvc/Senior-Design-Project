@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   forgotPassword as forgotPasswordRequest,
@@ -7,9 +7,51 @@ import {
 } from "../services/authService";
 import "../styles/auth.css";
 
+const getPasswordChecks = (password) => ({
+  minLength: password.length >= 8,
+  uppercase: /[A-Z]/.test(password),
+  lowercase: /[a-z]/.test(password),
+  number: /\d/.test(password),
+  special: /[^A-Za-z0-9]/.test(password)
+});
+
+const getPasswordStrength = (checks) => {
+  const passedChecks = Object.values(checks).filter(Boolean).length;
+
+  if (passedChecks <= 2) {
+    return { label: "Weak", className: "password-strength-weak" };
+  }
+
+  if (passedChecks <= 4) {
+    return { label: "Medium", className: "password-strength-medium" };
+  }
+
+  return { label: "Strong", className: "password-strength-strong" };
+};
+
+const getTokenErrorState = (errorMessage = "") => {
+  const normalizedMessage = errorMessage.toLowerCase();
+
+  if (
+    normalizedMessage.includes("expired") ||
+    normalizedMessage.includes("invalid or expired")
+  ) {
+    return {
+      tokenState: "expired",
+      message: "This password reset link has expired"
+    };
+  }
+
+  return {
+    tokenState: "invalid",
+    message: "This password reset link is invalid"
+  };
+};
+
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const redirectTimeoutRef = useRef(null);
 
   const token = searchParams.get("token")?.trim() || "";
   const email = searchParams.get("email")?.trim() || "";
@@ -25,45 +67,42 @@ const ResetPasswordPage = () => {
   const [tokenState, setTokenState] = useState("valid");
   const [resendStatus, setResendStatus] = useState("idle");
   const [resendMessage, setResendMessage] = useState("");
+  const [resendError, setResendError] = useState("");
 
-  const passwordRules = {
-    minLength: formData.newPassword.length >= 8,
-    uppercase: /[A-Z]/.test(formData.newPassword),
-    lowercase: /[a-z]/.test(formData.newPassword),
-    number: /\d/.test(formData.newPassword),
-    special: /[^A-Za-z0-9]/.test(formData.newPassword)
-  };
+  const passwordChecks = useMemo(
+    () => getPasswordChecks(formData.newPassword),
+    [formData.newPassword]
+  );
 
-  const passedRulesCount = Object.values(passwordRules).filter(Boolean).length;
-  const isPasswordValid = Object.values(passwordRules).every(Boolean);
+  const passwordStrength = useMemo(
+    () => getPasswordStrength(passwordChecks),
+    [passwordChecks]
+  );
 
-  const getPasswordStrength = () => {
-    if (!formData.newPassword) return "";
-    if (passedRulesCount <= 2) return "Weak";
-    if (passedRulesCount <= 4) return "Medium";
-    return "Strong";
-  };
+  const isEmptyFieldsError =
+    status === "error" && message === "Please fill in all fields.";
 
-  const getTokenErrorState = (errorMessage = "") => {
-    const normalizedMessage = errorMessage.toLowerCase();
+  const isPasswordMismatchError =
+    status === "error" && message === "Passwords do not match.";
 
-    if (
-      normalizedMessage.includes("expired") ||
-      normalizedMessage.includes("invalid or expired")
-    ) {
-      return {
-        tokenState: "expired",
-        message: "This password reset link has already been used or has expired."
-      };
-    }
+  const isWeakPasswordError =
+    status === "error" &&
+    message ===
+    "Weak password not accepted. Your password must be at least medium strength.";
 
-    return {
-      tokenState: "invalid",
-      message: "Invalid password reset link."
-    };
-  };
+  const isSamePasswordError =
+    status === "error" &&
+    message === "Please do not use the same password you already used";
 
-  const passwordStrength = getPasswordStrength();
+  const newPasswordInputError =
+    (isEmptyFieldsError && !formData.newPassword.trim()) ||
+    isPasswordMismatchError ||
+    isWeakPasswordError ||
+    isSamePasswordError;
+
+  const confirmPasswordInputError =
+    (isEmptyFieldsError && !formData.confirmPassword.trim()) ||
+    isPasswordMismatchError;
 
   useEffect(() => {
     let isMounted = true;
@@ -75,7 +114,7 @@ const ResetPasswordPage = () => {
         setIsTokenValid(false);
         setTokenState("invalid");
         setStatus("error");
-        setMessage("Invalid password reset link.");
+        setMessage("This password reset link is invalid.");
         return;
       }
 
@@ -112,6 +151,14 @@ const ResetPasswordPage = () => {
     };
   }, [token]);
 
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -135,14 +182,17 @@ const ResetPasswordPage = () => {
     try {
       setResendStatus("loading");
       setResendMessage("");
+      setResendError("");
 
-      await forgotPasswordRequest(email);
+      const data = await forgotPasswordRequest(email.trim().toLowerCase());
 
       setResendStatus("success");
-      setResendMessage("Password reset email resent.");
+      setResendMessage(
+        data.message || "Password reset email resent successfully"
+      );
     } catch (error) {
       setResendStatus("error");
-      setResendMessage(
+      setResendError(
         error.response?.data?.message ||
         error.message ||
         "Something went wrong. Please try again."
@@ -158,11 +208,11 @@ const ResetPasswordPage = () => {
         tokenState === "expired"
           ? {
             tokenState: "expired",
-            message: "This password reset link has already been used or has expired."
+            message: "This password reset link has expired"
           }
           : {
             tokenState: "invalid",
-            message: "Invalid password reset link."
+            message: "This password reset link is invalid"
           };
 
       setStatus("error");
@@ -184,9 +234,11 @@ const ResetPasswordPage = () => {
       return;
     }
 
-    if (!isPasswordValid) {
+    if (passwordStrength.label === "Weak") {
       setStatus("error");
-      setMessage("Weak password can't be accepted");
+      setMessage(
+        "Weak password not accepted. Your password must be at least medium strength."
+      );
       return;
     }
 
@@ -212,9 +264,9 @@ const ResetPasswordPage = () => {
         confirmPassword: ""
       });
 
-      setTimeout(() => {
+      redirectTimeoutRef.current = setTimeout(() => {
         navigate("/login");
-      }, 5000);
+      }, 3000);
     } catch (error) {
       const rawMessage =
         error.response?.data?.message ||
@@ -222,7 +274,6 @@ const ResetPasswordPage = () => {
         "Something went wrong. Please try again.";
 
       const normalizedMessage = rawMessage.toLowerCase();
-
       const isTokenIssue =
         normalizedMessage.includes("token") ||
         normalizedMessage.includes("expired");
@@ -242,6 +293,26 @@ const ResetPasswordPage = () => {
     }
   };
 
+  const getMessageClassName = () => {
+    if (status === "success") {
+      return "auth-feedback auth-feedback-success auth-feedback-center";
+    }
+
+    if (status === "checking" || status === "loading") {
+      return "auth-feedback auth-feedback-neutral auth-feedback-center";
+    }
+
+    return "auth-feedback auth-feedback-error auth-feedback-center";
+  };
+
+  const getTokenMessageClassName = () => {
+    if (tokenState === "expired") {
+      return "auth-feedback auth-feedback-warning auth-feedback-center";
+    }
+
+    return "auth-feedback auth-feedback-error auth-feedback-center";
+  };
+
   const showResetForm = status !== "error" || isTokenValid;
   const showTokenErrorState = status === "error" && !isTokenValid;
 
@@ -254,86 +325,96 @@ const ResetPasswordPage = () => {
           <>
             <p className="auth-subtitle">Set your new password</p>
 
-            {message && (
-              <div className={`auth-message ${status}`}>
-                {message}
-              </div>
-            )}
+            {message ? (
+              <p className={`${getMessageClassName()} auth-reset-message`}>{message}</p>
+            ) : null}
 
             <form className="auth-form" onSubmit={handleSubmit}>
-              <div className="auth-form-group">
-                <label htmlFor="newPassword">New Password</label>
-                <input
-                  id="newPassword"
-                  name="newPassword"
-                  type="password"
-                  placeholder="Enter new password"
-                  value={formData.newPassword}
-                  onChange={handleChange}
-                  disabled={status === "loading" || status === "checking"}
-                />
-              </div>
+              <input
+                id="newPassword"
+                name="newPassword"
+                type="password"
+                placeholder="New password"
+                value={formData.newPassword}
+                onChange={handleChange}
+                disabled={status === "loading" || status === "checking"}
+                className={
+                  newPasswordInputError ? "auth-input auth-input-error" : "auth-input"
+                }
+              />
 
-              {formData.newPassword && (
+              {formData.newPassword ? (
                 <div className="password-strength-wrapper">
                   <p
-                    className={`password-strength-text ${passwordStrength === "Weak"
-                      ? "password-strength-weak"
-                      : passwordStrength === "Medium"
-                        ? "password-strength-medium"
-                        : "password-strength-strong"
-                      }`}
+                    className={`password-strength-text ${passwordStrength.className}`}
                   >
-                    Password strength: {passwordStrength}
+                    Password strength: {passwordStrength.label}
                   </p>
 
                   <div className="password-rules">
                     <p
-                      className={`password-rule ${passwordRules.minLength ? "password-rule-valid" : ""
-                        }`}
+                      className={
+                        passwordChecks.minLength
+                          ? "password-rule password-rule-valid"
+                          : "password-rule"
+                      }
                     >
                       At least 8 characters
                     </p>
                     <p
-                      className={`password-rule ${passwordRules.uppercase ? "password-rule-valid" : ""
-                        }`}
+                      className={
+                        passwordChecks.uppercase
+                          ? "password-rule password-rule-valid"
+                          : "password-rule"
+                      }
                     >
-                      At least 1 uppercase letter
+                      One uppercase letter
                     </p>
                     <p
-                      className={`password-rule ${passwordRules.lowercase ? "password-rule-valid" : ""
-                        }`}
+                      className={
+                        passwordChecks.lowercase
+                          ? "password-rule password-rule-valid"
+                          : "password-rule"
+                      }
                     >
-                      At least 1 lowercase letter
+                      One lowercase letter
                     </p>
                     <p
-                      className={`password-rule ${passwordRules.number ? "password-rule-valid" : ""
-                        }`}
+                      className={
+                        passwordChecks.number
+                          ? "password-rule password-rule-valid"
+                          : "password-rule"
+                      }
                     >
-                      At least 1 number
+                      One number
                     </p>
                     <p
-                      className={`password-rule ${passwordRules.special ? "password-rule-valid" : ""
-                        }`}
+                      className={
+                        passwordChecks.special
+                          ? "password-rule password-rule-valid"
+                          : "password-rule"
+                      }
                     >
-                      At least 1 special character
+                      One special character
                     </p>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              <div className="auth-form-group">
-                <label htmlFor="confirmPassword">Confirm Password</label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  placeholder="Confirm new password"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  disabled={status === "loading" || status === "checking"}
-                />
-              </div>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm new password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                disabled={status === "loading" || status === "checking"}
+                className={
+                  confirmPasswordInputError
+                    ? "auth-input auth-input-error"
+                    : "auth-input"
+                }
+              />
 
               <button
                 type="submit"
@@ -354,28 +435,40 @@ const ResetPasswordPage = () => {
           </>
         ) : (
           <div className="auth-verify-stack">
-            <p className="auth-verify-status auth-verify-status-error">{message}</p>
+            <p className={getTokenMessageClassName()}>{message}</p>
 
-            <button
-              type="button"
-              className="auth-button auth-button-secondary auth-verify-button"
-              onClick={handleResendResetLink}
-              disabled={resendStatus === "loading"}
-            >
-              {resendStatus === "loading" ? "Sending..." : "Send a new reset link"}
-            </button>
-
-            {resendMessage && (
-              <p
-                className={
-                  resendStatus === "success"
-                    ? "auth-resend-success"
-                    : "auth-resend-error"
-                }
+            {email ? (
+              <button
+                type="button"
+                className="auth-feedback auth-feedback-link auth-resend-link auth-verify-resend-link"
+                onClick={handleResendResetLink}
+                disabled={resendStatus === "loading"}
               >
-                {resendMessage}
+                {resendStatus === "loading"
+                  ? "Sending..."
+                  : "Resend password reset email"}
+              </button>
+            ) : (
+              <p className="auth-footer auth-verify-footer">
+                Go to <Link to="/forgot-password">forgot password</Link>
               </p>
             )}
+
+            {resendMessage ? (
+              <p className="auth-feedback auth-feedback-success auth-feedback-center">
+                {resendMessage}
+              </p>
+            ) : null}
+
+            {resendError ? (
+              <p className="auth-feedback auth-feedback-error auth-feedback-center">
+                {resendError}
+              </p>
+            ) : null}
+
+            <p className="auth-footer auth-verify-footer">
+              Go back to <Link to="/login">login</Link>
+            </p>
           </div>
         )}
       </div>

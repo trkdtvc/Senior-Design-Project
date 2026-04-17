@@ -54,6 +54,7 @@
 .auth-logo {
   margin: 0 0 8px;
   text-align: center;
+  font-family: inherit;
   font-size: 3rem;
   font-weight: 800;
   letter-spacing: 1px;
@@ -70,7 +71,13 @@
 .auth-form button,
 .auth-button,
 .auth-forgot-password,
-.auth-feedback {
+.auth-feedback,
+.auth-error,
+.auth-success,
+.auth-message,
+.auth-verify-status,
+.password-strength-text,
+.password-rule {
   font-size: var(--app-copy-size);
   font-family: inherit;
 }
@@ -266,7 +273,7 @@ textarea.auth-input {
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--app-success);
+  color: var(--app-success) !important;
   line-height: 1.45;
   text-align: center;
   font-weight: 600;
@@ -282,7 +289,8 @@ textarea.auth-input {
 }
 
 .password-strength-text {
-  font-size: var(--app-copy-size);
+  margin: 0;
+  line-height: 1.45;
   font-weight: 500;
 }
 
@@ -291,7 +299,7 @@ textarea.auth-input {
 }
 
 .password-strength-text.password-strength-medium {
-  color: var(--app-warning);
+  color: var(--app-success);
 }
 
 .password-strength-text.password-strength-strong {
@@ -306,8 +314,9 @@ textarea.auth-input {
 
 .password-rule {
   margin: 0;
-  font-size: 13px;
+  line-height: 1.45;
   color: var(--app-text-soft);
+  font-weight: 500;
 }
 
 .auth-card .password-rule.password-rule-valid {
@@ -316,8 +325,10 @@ textarea.auth-input {
 }
 
 .auth-error {
+  margin: 0;
   color: var(--app-danger) !important;
   line-height: 1.45;
+  font-weight: 500;
 }
 
 .auth-error-login {
@@ -336,9 +347,9 @@ textarea.auth-input {
 }
 
 .auth-message {
-  margin-bottom: 14px;
-  font-size: var(--app-copy-size);
+  margin: 0 0 14px;
   line-height: 1.45;
+  font-weight: 500;
 }
 
 .auth-message.error {
@@ -392,21 +403,19 @@ textarea.auth-input {
   margin: 0;
   text-align: center;
   line-height: 1.45;
+  font-weight: 500;
 }
 
 .auth-verify-status-loading {
   color: var(--app-text);
-  font-weight: 500;
 }
 
 .auth-verify-status-success {
-  color: var(--app-success);
-  font-weight: 600;
+  color: var(--app-success) !important;
 }
 
 .auth-verify-status-error {
   color: var(--app-danger) !important;
-  font-weight: 600;
 }
 
 .auth-verify-button {
@@ -1466,13 +1475,14 @@ textarea.auth-input {
 }
 
 .auth-error-username {
-  margin: -6px 0 4px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--app-danger-soft);
-  border: 1px solid rgba(255, 115, 135, 0.32);
-  color: #ff9bab;
-  font-weight: 600;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-danger) !important;
+  font-size: var(--app-copy-size);
+  line-height: 1.45;
+  font-weight: 500;
 }
 
 .auth-input-error {
@@ -1495,7 +1505,7 @@ textarea.auth-input {
 
 .auth-feedback {
   margin: 0;
-  padding-left: 4px;
+  padding-left: 0;
   font-weight: 600;
   line-height: 1.45;
   text-align: left;
@@ -1506,7 +1516,7 @@ textarea.auth-input {
 }
 
 .auth-feedback-warning {
-  color: var(--app-warning) !important;
+  color: var(--app-danger) !important;
 }
 
 .auth-feedback-success {
@@ -1524,29 +1534,28 @@ textarea.auth-input {
 
 .auth-login-warning {
   margin: 0;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 186, 99, 0.13) 0%, rgba(255, 186, 99, 0.08) 100%);
-  border: 1px solid var(--app-warning-border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   text-align: center;
 }
 
 .auth-login-warning-title {
   margin: 0;
-  color: #ffc988 !important;
-  font-weight: 700;
+  color: var(--app-danger) !important;
+  font-size: var(--app-copy-size);
+  font-weight: 500;
   line-height: 1.45;
 }
 
 .auth-login-warning-text {
   margin: 6px 0 0;
-  color: #e7d7bd !important;
+  color: var(--app-danger) !important;
+  font-size: var(--app-copy-size);
   line-height: 1.45;
-}
-
-.auth-verify-status-success {
-  color: var(--app-success) !important;
+  font-weight: 500;
 }
 
 .auth-resend-block {
@@ -1558,23 +1567,35 @@ textarea.auth-input {
   text-align: left;
 }
 
-.auth-resend-link {
+.auth-resend-link,
+.auth-verify-resend-link {
   border: none;
   background: transparent;
-  padding: 0 0 0 4px;
+  padding: 0;
   cursor: pointer;
   text-align: left;
 }
 
-.auth-resend-link:hover {
+.auth-resend-link:hover,
+.auth-verify-resend-link:hover {
   background: transparent;
 }
 
-.auth-resend-link:active {
+.auth-resend-link:active,
+.auth-verify-resend-link:active {
   transform: none;
 }
 
-.auth-resend-link:disabled {
+.auth-resend-link:disabled,
+.auth-verify-resend-link:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.auth-forgot-message {
+  margin: 0 0 10px 0 !important;
+}
+
+.auth-reset-message {
+  margin-bottom: 18px !important;
 }

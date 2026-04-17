@@ -7,16 +7,17 @@ const {
   findUserByUsername,
   findUserById,
   createUser,
-  setVerificationToken,
   markUserAsVerified,
   setPasswordResetToken,
   findUserByPasswordResetToken,
   updateUserPassword,
-  findUserByVerificationToken,
   createEmailVerificationToken,
   findEmailVerificationTokenRecord,
   markEmailVerificationTokenAsUsed
 } = require("../models/userModel");
+
+const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
+const PASSWORD_RESET_EXPIRY_HOURS = 24;
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -34,24 +35,38 @@ const getFrontendBaseUrl = () => {
   return process.env.FRONTEND_URL || "http://localhost:5173";
 };
 
-const validatePasswordRules = (password) => {
-  const rules = {
-    minLength: password.length >= 8,
-    uppercase: /[A-Z]/.test(password),
-    lowercase: /[a-z]/.test(password),
-    number: /\d/.test(password),
-    special: /[^A-Za-z0-9]/.test(password)
+const getPasswordChecks = (password) => ({
+  minLength: password.length >= 8,
+  uppercase: /[A-Z]/.test(password),
+  lowercase: /[a-z]/.test(password),
+  number: /\d/.test(password),
+  special: /[^A-Za-z0-9]/.test(password)
+});
+
+const getPasswordValidation = (password) => {
+  const rules = getPasswordChecks(password);
+  const passedChecks = Object.values(rules).filter(Boolean).length;
+
+  let strength = "Strong";
+
+  if (passedChecks <= 2) {
+    strength = "Weak";
+  } else if (passedChecks <= 4) {
+    strength = "Medium";
+  }
+
+  return {
+    rules,
+    passedChecks,
+    strength,
+    isAccepted: strength !== "Weak"
   };
-
-  const isValid = Object.values(rules).every(Boolean);
-
-  return { isValid, rules };
 };
 
 const sendVerificationEmailToUser = async (
   user,
   verificationToken,
-  expiresInHours = 24
+  expiresInHours = EMAIL_VERIFICATION_EXPIRY_HOURS
 ) => {
   const verificationLink = `${getFrontendBaseUrl()}/verify-email?token=${verificationToken}&email=${encodeURIComponent(user.email)}`;
 
@@ -78,7 +93,7 @@ This link expires in ${expiresInHours} hours.`,
 const sendPasswordResetEmailToUser = async (
   user,
   resetToken,
-  expiresInHours = 1
+  expiresInHours = PASSWORD_RESET_EXPIRY_HOURS
 ) => {
   const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
 
@@ -117,12 +132,12 @@ const registerUser = async (req, res, next) => {
       throw new Error("Passwords do not match");
     }
 
-    const passwordValidation = validatePasswordRules(password);
+    const passwordValidation = getPasswordValidation(password);
 
-    if (!passwordValidation.isValid) {
+    if (!passwordValidation.isAccepted) {
       res.status(400);
       throw new Error(
-        "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character."
+        "Weak password not accepted. Your password must be at least medium strength."
       );
     }
 
@@ -156,12 +171,8 @@ const registerUser = async (req, res, next) => {
     };
 
     const verificationToken = crypto.randomBytes(32).toString("hex");
-    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await setVerificationToken(
-      user.user_id,
-      verificationToken,
-      verificationTokenExpires
+    const verificationTokenExpires = new Date(
+      Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
     );
 
     await createEmailVerificationToken(
@@ -170,10 +181,14 @@ const registerUser = async (req, res, next) => {
       verificationTokenExpires
     );
 
-    await sendVerificationEmailToUser(user, verificationToken, 24);
+    await sendVerificationEmailToUser(
+      user,
+      verificationToken,
+      EMAIL_VERIFICATION_EXPIRY_HOURS
+    );
 
     return res.status(201).json({
-      message: "Registration successful. Check your email to verify your account.",
+      message: "Registration successful. Check your email to verify your account",
       email: user.email,
       user
     });
@@ -212,8 +227,10 @@ const loginUser = async (req, res, next) => {
     }
 
     if (!user.is_verified) {
-      res.status(403);
-      throw new Error("Please verify your email before logging in");
+      return res.status(403).json({
+        message: "Please verify your email before logging in",
+        email: user.email
+      });
     }
 
     const token = generateToken(user);
@@ -244,97 +261,57 @@ const verifyEmail = async (req, res, next) => {
 
     const verificationRecord = await findEmailVerificationTokenRecord(token);
 
-    if (verificationRecord) {
-      if (verificationRecord.used_at) {
-        if (verificationRecord.is_verified) {
-          res.status(400);
-          throw new Error("This email is already verified");
-        }
+    if (!verificationRecord) {
+      res.status(400);
+      throw new Error("Invalid verification token");
+    }
 
-        res.status(400);
-        throw new Error("Verification token has already been used");
-      }
-
-      const isExpired =
-        !verificationRecord.expires_at ||
-        new Date(verificationRecord.expires_at) < new Date();
-
-      if (isExpired) {
-        res.status(400);
-        throw new Error("Verification token has expired");
-      }
-
+    if (verificationRecord.used_at) {
       if (verificationRecord.is_verified) {
         res.status(400);
         throw new Error("This email is already verified");
       }
 
-      await markUserAsVerified(verificationRecord.user_id);
-      await markEmailVerificationTokenAsUsed(verificationRecord.verification_id);
-
-      const freshUser = await findUserById(verificationRecord.user_id);
-
-      if (!freshUser) {
-        res.status(404);
-        throw new Error("User not found");
-      }
-
-      const authToken = generateToken(freshUser);
-
-      return res.status(200).json({
-        message: "Email verified successfully. Redirecting you into the app...",
-        token: authToken,
-        user: {
-          user_id: freshUser.user_id,
-          username: freshUser.username,
-          email: freshUser.email,
-          is_verified: freshUser.is_verified
-        }
-      });
+      res.status(400);
+      throw new Error("Verification token has already been used");
     }
 
-    const legacyUser = await findUserByVerificationToken(token);
+    const isExpired =
+      !verificationRecord.expires_at ||
+      new Date(verificationRecord.expires_at) < new Date();
 
-    if (legacyUser) {
-      if (legacyUser.is_verified) {
-        res.status(400);
-        throw new Error("This email is already verified");
-      }
-
-      const isExpired =
-        !legacyUser.verification_token_expires ||
-        new Date(legacyUser.verification_token_expires) < new Date();
-
-      if (isExpired) {
-        res.status(400);
-        throw new Error("Verification token has expired");
-      }
-
-      await markUserAsVerified(legacyUser.user_id);
-
-      const freshUser = await findUserById(legacyUser.user_id);
-
-      if (!freshUser) {
-        res.status(404);
-        throw new Error("User not found");
-      }
-
-      const authToken = generateToken(freshUser);
-
-      return res.status(200).json({
-        message: "Email verified successfully. Redirecting you into the app...",
-        token: authToken,
-        user: {
-          user_id: freshUser.user_id,
-          username: freshUser.username,
-          email: freshUser.email,
-          is_verified: freshUser.is_verified
-        }
-      });
+    if (isExpired) {
+      res.status(400);
+      throw new Error("Verification token has expired");
     }
 
-    res.status(400);
-    throw new Error("Invalid verification token");
+    if (verificationRecord.is_verified) {
+      res.status(400);
+      throw new Error("This email is already verified");
+    }
+
+    await markUserAsVerified(verificationRecord.user_id);
+    await markEmailVerificationTokenAsUsed(verificationRecord.verification_id);
+
+    const freshUser = await findUserById(verificationRecord.user_id);
+
+    if (!freshUser) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const authToken = generateToken(freshUser);
+
+    return res.status(200).json({
+      message: "Email verified successfully. Redirecting you into the app...",
+      token: authToken,
+      user: {
+        user_id: freshUser.user_id,
+        username: freshUser.username,
+        email: freshUser.email,
+        is_verified: freshUser.is_verified
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -364,12 +341,8 @@ const resendVerificationEmail = async (req, res, next) => {
     }
 
     const verificationToken = crypto.randomBytes(32).toString("hex");
-    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await setVerificationToken(
-      user.user_id,
-      verificationToken,
-      verificationTokenExpires
+    const verificationTokenExpires = new Date(
+      Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
     );
 
     await createEmailVerificationToken(
@@ -378,7 +351,11 @@ const resendVerificationEmail = async (req, res, next) => {
       verificationTokenExpires
     );
 
-    await sendVerificationEmailToUser(user, verificationToken, 24);
+    await sendVerificationEmailToUser(
+      user,
+      verificationToken,
+      EMAIL_VERIFICATION_EXPIRY_HOURS
+    );
 
     return res.status(200).json({
       message: "Verification email resent successfully"
@@ -402,7 +379,9 @@ const requestPasswordReset = async (req, res, next) => {
 
     if (user) {
       const resetToken = crypto.randomBytes(32).toString("hex");
-      const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000);
+      const resetTokenExpires = new Date(
+        Date.now() + PASSWORD_RESET_EXPIRY_HOURS * 60 * 60 * 1000
+      );
 
       await setPasswordResetToken(
         user.user_id,
@@ -410,7 +389,11 @@ const requestPasswordReset = async (req, res, next) => {
         resetTokenExpires
       );
 
-      await sendPasswordResetEmailToUser(user, resetToken, 1);
+      await sendPasswordResetEmailToUser(
+        user,
+        resetToken,
+        PASSWORD_RESET_EXPIRY_HOURS
+      );
     }
 
     return res.status(200).json({
@@ -473,12 +456,12 @@ const resetPassword = async (req, res, next) => {
       throw new Error("Passwords do not match");
     }
 
-    const passwordValidation = validatePasswordRules(newPassword);
+    const passwordValidation = getPasswordValidation(newPassword);
 
-    if (!passwordValidation.isValid) {
+    if (!passwordValidation.isAccepted) {
       res.status(400);
       throw new Error(
-        "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character"
+        "Weak password not accepted. Your password must be at least medium strength."
       );
     }
 
@@ -505,7 +488,7 @@ const resetPassword = async (req, res, next) => {
 
     if (isSamePassword) {
       res.status(400);
-      throw new Error("Please do not use the same password you already used.");
+      throw new Error("Please do not use the same password you already used");
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);

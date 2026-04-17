@@ -57,7 +57,7 @@ const router = express.Router();
  *       201:
  *         description: User registered successfully
  *       400:
- *         description: Invalid registration data
+ *         description: Invalid registration data, duplicate account data, or weak password
  */
 router.post("/register", registerUser);
 
@@ -130,7 +130,7 @@ router.get("/me", protect, getMe);
  *       200:
  *         description: Email verified successfully
  *       400:
- *         description: Invalid or expired verification token
+ *         description: Invalid, expired, already used, or already verified verification token
  */
 router.get("/verify-email", verifyEmail);
 
@@ -241,7 +241,7 @@ router.get("/reset-password/validate", validatePasswordResetToken);
  *       200:
  *         description: Password reset successfully
  *       400:
- *         description: Invalid or expired token, or invalid input
+ *         description: Invalid or expired token, weak password, or invalid input
  */
 router.post("/reset-password", resetPassword);
 
