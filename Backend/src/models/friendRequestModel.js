@@ -29,11 +29,42 @@ const getPendingFriendRequestBetweenUsers = async (userAId, userBId) => {
   return rows[0];
 };
 
+const getFriendRequestBetweenUsers = async (userAId, userBId) => {
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM friend_requests
+     WHERE (
+       (sender_id = ? AND receiver_id = ?)
+       OR
+       (sender_id = ? AND receiver_id = ?)
+     )
+     LIMIT 1`,
+    [userAId, userBId, userBId, userAId]
+  );
+
+  return rows[0];
+};
+
 const createFriendRequest = async (senderId, receiverId) => {
   const [result] = await pool.execute(
     `INSERT INTO friend_requests (sender_id, receiver_id)
      VALUES (?, ?)`,
     [senderId, receiverId]
+  );
+
+  return result;
+};
+
+const resendFriendRequest = async (requestId, senderId, receiverId) => {
+  const [result] = await pool.execute(
+    `UPDATE friend_requests
+     SET sender_id = ?,
+         receiver_id = ?,
+         status = 'pending',
+         responded_at = NULL,
+         created_at = NOW()
+     WHERE request_id = ?`,
+    [senderId, receiverId, requestId]
   );
 
   return result;
@@ -134,6 +165,20 @@ const getFriendshipBetweenUsers = async (userAId, userBId) => {
   return rows[0];
 };
 
+const deleteFriendship = async (userAId, userBId) => {
+  const userOneId = Math.min(Number(userAId), Number(userBId));
+  const userTwoId = Math.max(Number(userAId), Number(userBId));
+
+  const [result] = await pool.execute(
+    `DELETE FROM friendships
+     WHERE user_one_id = ?
+       AND user_two_id = ?`,
+    [userOneId, userTwoId]
+  );
+
+  return result;
+};
+
 const getFriendsByUserId = async (userId) => {
   const [rows] = await pool.execute(
     `SELECT
@@ -163,12 +208,15 @@ const getFriendsByUserId = async (userId) => {
 module.exports = {
   findUserByUsernameOrEmail,
   getPendingFriendRequestBetweenUsers,
+  getFriendRequestBetweenUsers,
   createFriendRequest,
+  resendFriendRequest,
   getIncomingPendingRequestsByUserId,
   getOutgoingPendingRequestsByUserId,
   getFriendRequestById,
   updateFriendRequestStatus,
   createFriendship,
   getFriendshipBetweenUsers,
+  deleteFriendship,
   getFriendsByUserId
 };

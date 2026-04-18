@@ -36,15 +36,30 @@ const sendFriendRequest = async (req, res, next) => {
       throw new Error("You are already friends with this user");
     }
 
-    const existingPendingRequest =
-      await friendRequestModel.getPendingFriendRequestBetweenUsers(
+    const existingRequest =
+      await friendRequestModel.getFriendRequestBetweenUsers(
         senderId,
         receiver.user_id
       );
 
-    if (existingPendingRequest) {
-      res.status(400);
-      throw new Error("A pending friend request already exists between these users");
+    if (existingRequest) {
+      if (existingRequest.status === "pending") {
+        res.status(400);
+        throw new Error(
+          "A pending friend request already exists between these users"
+        );
+      }
+
+      await friendRequestModel.resendFriendRequest(
+        existingRequest.request_id,
+        senderId,
+        receiver.user_id
+      );
+
+      return res.status(200).json({
+        message: "Friend request sent successfully",
+        request_id: existingRequest.request_id
+      });
     }
 
     const result = await friendRequestModel.createFriendRequest(
@@ -162,6 +177,52 @@ const rejectFriendRequest = async (req, res, next) => {
   }
 };
 
+const removeFriend = async (req, res, next) => {
+  try {
+    const userId = req.user.user_id;
+    const friendId = Number(req.params.friendId);
+
+    if (!friendId) {
+      res.status(400);
+      throw new Error("Friend ID is required");
+    }
+
+    if (Number(friendId) == Number(userId)) {
+      res.status(400);
+      throw new Error("You cannot remove yourself from your friends list");
+    }
+
+    const existingFriendship = await friendRequestModel.getFriendshipBetweenUsers(
+      userId,
+      friendId
+    );
+
+    if (!existingFriendship) {
+      res.status(404);
+      throw new Error("Friendship not found");
+    }
+
+    await friendRequestModel.deleteFriendship(userId, friendId);
+
+    const io = req.app.get("io");
+    const socketPayload = {
+      user_id: Number(userId),
+      friend_id: Number(friendId)
+    };
+
+    if (io) {
+      io.to(`user_${userId}`).emit("friend_removed", socketPayload);
+      io.to(`user_${friendId}`).emit("friend_removed", socketPayload);
+    }
+
+    res.status(200).json({
+      message: "Friend removed successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getFriends = async (req, res, next) => {
   try {
     const userId = req.user.user_id;
@@ -179,5 +240,6 @@ module.exports = {
   getOutgoingFriendRequests,
   acceptFriendRequest,
   rejectFriendRequest,
+  removeFriend,
   getFriends
 };

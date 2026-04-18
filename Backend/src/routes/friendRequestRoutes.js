@@ -162,4 +162,28 @@ router.patch(
  */
 router.get("/", protect, friendRequestController.getFriends);
 
+/**
+ * @swagger
+ * /api/friends/{friendId}:
+ *   delete:
+ *     summary: Remove a confirmed friend
+ *     tags: [Friends]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: friendId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Friend removed successfully
+ *       401:
+ *         description: Not authorized
+ *       404:
+ *         description: Friendship not found
+ */
+router.delete("/:friendId", protect, friendRequestController.removeFriend);
+
 module.exports = router;

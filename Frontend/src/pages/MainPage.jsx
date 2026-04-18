@@ -323,6 +323,8 @@ const MainPage = () => {
   const previousChannelIdRef = useRef(null);
 
   const [user, setUser] = useState(null);
+  const [removeFriendError, setRemoveFriendError] = useState("");
+  const [removingFriendId, setRemovingFriendId] = useState(null);
   const [hoveredChannelId, setHoveredChannelId] = useState(null);
   const [inviteError, setInviteError] = useState("");
   const [inviteSuccess, setInviteSuccess] = useState("");
@@ -444,6 +446,13 @@ const MainPage = () => {
       email.includes(normalizedSidebarSearch)
     );
   });
+
+  const activeConversationIsFriend = activeConversationUser
+    ? friends.some(
+      (friend) =>
+        String(getFriendId(friend)) === String(activeConversationUser.user_id)
+    )
+    : false;
 
   const filteredDirectConversations = directConversations.filter((conversation) => {
     const username = getConversationOtherUsername(conversation).toLowerCase();
@@ -1079,21 +1088,48 @@ const MainPage = () => {
       }
     };
 
+    const handleFriendRemoved = (payload) => {
+      if (!payload?.user_id || !payload?.friend_id || !currentUserId) {
+        return;
+      }
+
+      let removedFriendId = null;
+
+      if (String(payload.user_id) === String(currentUserId)) {
+        removedFriendId = payload.friend_id;
+      } else if (String(payload.friend_id) === String(currentUserId)) {
+        removedFriendId = payload.user_id;
+      }
+
+      if (!removedFriendId) {
+        return;
+      }
+
+      setFriends((prevFriends) =>
+        prevFriends.filter(
+          (friend) => String(getFriendId(friend)) !== String(removedFriendId)
+        )
+      );
+    };
+
     socket.on("presence_update", handlePresenceUpdate);
     socket.on("new_message", handleNewMessage);
     socket.on("direct_message", handleDirectMessage);
+    socket.on("friend_removed", handleFriendRemoved);
 
     return () => {
       socket.off("presence_update", handlePresenceUpdate);
       socket.off("new_message", handleNewMessage);
       socket.off("direct_message", handleDirectMessage);
+      socket.off("friend_removed", handleFriendRemoved);
     };
   }, [
     isSocketReady,
     activeServerId,
     activeChannelId,
     activeConversationId,
-    loadDirectConversationList
+    loadDirectConversationList,
+    currentUserId
   ]);
 
   useEffect(() => {
@@ -1159,6 +1195,7 @@ const MainPage = () => {
     setAddFriendError("");
     setAddFriendSuccess("");
     setFriendRequestsError("");
+    setRemoveFriendError("");
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -1176,6 +1213,7 @@ const MainPage = () => {
     setAddFriendError("");
     setAddFriendSuccess("");
     setFriendRequestsError("");
+    setRemoveFriendError("");
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -1193,6 +1231,7 @@ const MainPage = () => {
     setAddFriendError("");
     setAddFriendSuccess("");
     setFriendRequestsError("");
+    setRemoveFriendError("");
     setIsCreateServerModalOpen(false);
     navigate(`/server/${serverId}`);
 
@@ -1228,6 +1267,7 @@ const MainPage = () => {
     setAddFriendError("");
     setAddFriendSuccess("");
     setFriendRequestsError("");
+    setRemoveFriendError("");
     navigate(`/dm/${conversationId}`);
 
     requestAnimationFrame(() => {
@@ -1352,6 +1392,55 @@ const MainPage = () => {
       );
     } finally {
       setProcessingFriendRequestId(null);
+    }
+  };
+
+  const handleRemoveFriend = async (friendId) => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!friendId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to remove this friend?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setRemovingFriendId(friendId);
+      setRemoveFriendError("");
+
+      const response = await fetch(`${API_BASE_URL}/friends/${friendId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Failed to remove friend.");
+      }
+
+      setFriends((prevFriends) =>
+        prevFriends.filter(
+          (friend) => String(getFriendId(friend)) !== String(friendId)
+        )
+      );
+    } catch (error) {
+      setRemoveFriendError(error.message || "Failed to remove friend.");
+    } finally {
+      setRemovingFriendId(null);
     }
   };
 
@@ -2284,7 +2373,11 @@ const MainPage = () => {
                       </p>
                     </div>
 
-
+                    {removeFriendError ? (
+                      <p className="auth-error server-inline-error server-inline-error-tight">
+                        {removeFriendError}
+                      </p>
+                    ) : null}
 
                     {filteredFriends.length === 0 ? (
                       <div className="discord-home-empty-card">
@@ -2325,13 +2418,26 @@ const MainPage = () => {
                                 </div>
                               </div>
 
-                              <button
-                                type="button"
-                                className="auth-button discord-friend-home-action"
-                                onClick={() => handleStartDirectConversation(friend)}
-                              >
-                                Message
-                              </button>
+                              <div className="discord-friend-home-actions">
+                                <button
+                                  type="button"
+                                  className="auth-button discord-friend-home-action"
+                                  onClick={() => handleStartDirectConversation(friend)}
+                                >
+                                  Message
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="auth-button auth-button-danger discord-friend-home-action discord-friend-home-action-danger"
+                                  onClick={() => handleRemoveFriend(getFriendId(friend))}
+                                  disabled={String(removingFriendId) === String(getFriendId(friend))}
+                                >
+                                  {String(removingFriendId) === String(getFriendId(friend))
+                                    ? "Removing..."
+                                    : "Remove"}
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -2664,6 +2770,28 @@ const MainPage = () => {
                       ? "Online"
                       : "Offline"}
                   </div>
+                  {activeConversationIsFriend ? (
+                    <>
+                      {removeFriendError ? (
+                        <p className="auth-error discord-profile-action-error">
+                          {removeFriendError}
+                        </p>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        className="auth-button auth-button-danger discord-profile-action-button"
+                        onClick={() => handleRemoveFriend(activeConversationUser.user_id)}
+                        disabled={
+                          String(removingFriendId) === String(activeConversationUser.user_id)
+                        }
+                      >
+                        {String(removingFriendId) === String(activeConversationUser.user_id)
+                          ? "Removing..."
+                          : "Remove friend"}
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               ) : (
                 <div className="discord-profile-card compact-profile-card">

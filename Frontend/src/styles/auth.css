@@ -1140,11 +1140,23 @@ textarea.auth-input {
   text-overflow: ellipsis;
 }
 
+.discord-friend-home-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .discord-friend-home-action {
   width: auto;
   min-width: 110px;
   padding: 10px 14px;
   flex-shrink: 0;
+}
+
+.discord-friend-home-action-danger {
+  min-width: 118px;
 }
 
 .discord-home-empty-card {
@@ -1295,6 +1307,15 @@ textarea.auth-input {
 
 .compact-profile-card {
   padding-top: 20px;
+}
+
+.discord-profile-action-error {
+  margin: 12px 0 0;
+}
+
+.discord-profile-action-button {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .discord-profile-banner {
