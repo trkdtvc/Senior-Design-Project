@@ -2128,11 +2128,11 @@ const MainPage = () => {
                                         top: "50%",
                                         right: "calc(100% + 8px)",
                                         transform: "translateY(-50%)",
-                                        minWidth: "120px",
+                                        minWidth: "96px",
                                         background: "#111214",
                                         border: "1px solid rgba(255, 255, 255, 0.08)",
                                         borderRadius: "8px",
-                                        padding: "4px",
+                                        padding: "3px",
                                         zIndex: 20,
                                         boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)"
                                       }}
@@ -2145,7 +2145,13 @@ const MainPage = () => {
                                           handleDeleteChannel(channel);
                                         }}
                                         className="auth-button auth-button-danger compact-button"
-                                        style={{ width: "100%" }}
+                                        style={{
+                                          width: "100%",
+                                          padding: "8px 10px",
+                                          fontSize: "13px",
+                                          lineHeight: "1.2",
+                                          borderRadius: "10px"
+                                        }}
                                         disabled={isDeletingChannel}
                                       >
                                         {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
