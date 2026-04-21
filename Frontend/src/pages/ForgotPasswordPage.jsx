@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import { forgotPassword as forgotPasswordRequest } from "../services/authService";
 import "../styles/auth.css";
 
+const EMAIL_REQUIRED_ERROR = "Email is required";
+const INVALID_EMAIL_ERROR = "Please enter a valid email address";
+
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("idle");
@@ -10,9 +13,12 @@ const ForgotPasswordPage = () => {
 
   const trimmedEmail = email.trim();
 
-  const isEmailRequiredError = status === "error" && message === "Email is required";
+  const isEmailRequiredError =
+    status === "error" && message === EMAIL_REQUIRED_ERROR;
+
   const isInvalidEmailError =
-    status === "error" && message === "Please enter a valid email address.";
+    status === "error" && message === INVALID_EMAIL_ERROR;
+
   const hasEmailError = isEmailRequiredError || isInvalidEmailError;
 
   const getMessageClassName = () => {
@@ -38,13 +44,15 @@ const ForgotPasswordPage = () => {
 
     if (!trimmedEmail) {
       setStatus("error");
-      setMessage("Email is required");
+      setMessage(EMAIL_REQUIRED_ERROR);
       return;
     }
 
-    if (!trimmedEmail.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(trimmedEmail)) {
       setStatus("error");
-      setMessage("Please enter a valid email address.");
+      setMessage(INVALID_EMAIL_ERROR);
       return;
     }
 
@@ -57,15 +65,15 @@ const ForgotPasswordPage = () => {
       setStatus("success");
       setMessage(
         data.message ||
-        "If an account with that email exists, a password reset email has been sent"
+          "If an account with that email exists, a password reset email has been sent"
       );
       setEmail("");
     } catch (error) {
       setStatus("error");
       setMessage(
         error.response?.data?.message ||
-        error.message ||
-        "Something went wrong. Please try again."
+          error.message ||
+          "Something went wrong. Please try again."
       );
     }
   };
@@ -80,14 +88,16 @@ const ForgotPasswordPage = () => {
         </p>
 
         {message ? (
-          <p className={`${getMessageClassName()} auth-forgot-message`}>{message}</p>
+          <p className={`${getMessageClassName()} auth-forgot-message`}>
+            {message}
+          </p>
         ) : null}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form className="auth-form" onSubmit={handleSubmit} noValidate>
           <input
             id="email"
             name="email"
-            type="email"
+            type="text"
             placeholder="Email"
             value={email}
             onChange={handleChange}

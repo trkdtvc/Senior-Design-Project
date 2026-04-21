@@ -1614,7 +1614,9 @@ textarea.auth-input {
 }
 
 .auth-forgot-message {
-  margin: 0 0 10px 0 !important;
+  text-align: left;
+  width: 100%;
+  margin-bottom: 12px;
 }
 
 .auth-reset-message {
