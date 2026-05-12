@@ -1,5 +1,27 @@
 const friendRequestModel = require("../models/friendRequestModel");
 
+const emitFriendRequestReceived = (req, receiverId, request) => {
+  const io = req.app.get("io");
+
+  if (!io || !receiverId || !request) {
+    return;
+  }
+
+  io.to(`user_${receiverId}`).emit("friend_request_received", {
+    request
+  });
+};
+
+const buildFriendRequestPayload = (requestId, senderId, receiverId, req) => ({
+  request_id: requestId,
+  sender_id: Number(senderId),
+  receiver_id: Number(receiverId),
+  status: "pending",
+  created_at: new Date().toISOString(),
+  sender_username: req.user.username,
+  sender_email: req.user.email || ""
+});
+
 const sendFriendRequest = async (req, res, next) => {
   try {
     const senderId = req.user.user_id;
@@ -56,6 +78,17 @@ const sendFriendRequest = async (req, res, next) => {
         receiver.user_id
       );
 
+      emitFriendRequestReceived(
+        req,
+        receiver.user_id,
+        buildFriendRequestPayload(
+          existingRequest.request_id,
+          senderId,
+          receiver.user_id,
+          req
+        )
+      );
+
       return res.status(200).json({
         message: "Friend request sent successfully",
         request_id: existingRequest.request_id
@@ -65,6 +98,12 @@ const sendFriendRequest = async (req, res, next) => {
     const result = await friendRequestModel.createFriendRequest(
       senderId,
       receiver.user_id
+    );
+
+    emitFriendRequestReceived(
+      req,
+      receiver.user_id,
+      buildFriendRequestPayload(result.insertId, senderId, receiver.user_id, req)
     );
 
     res.status(201).json({

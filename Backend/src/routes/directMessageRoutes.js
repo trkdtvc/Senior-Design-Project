@@ -5,6 +5,7 @@ const {
   getMyDirectConversations,
   getDirectMessages,
   sendDirectMessageToConversation,
+  deleteDirectConversationForMe
 } = require("../controllers/directMessageController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -127,5 +128,11 @@ router.get(
  *         description: Direct conversation not found
  */
 router.post("/", protect, sendDirectMessageToConversation);
+
+router.delete(
+  "/conversations/:conversationId",
+  protect,
+  deleteDirectConversationForMe
+);
 
 module.exports = router;

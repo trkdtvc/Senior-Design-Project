@@ -93,6 +93,10 @@ const getUserConversations = async (userId) => {
           SELECT dm.content
           FROM direct_messages dm
           WHERE dm.conversation_id = dc.conversation_id
+            AND (
+              dcd.deletion_id IS NULL
+              OR dm.direct_message_id > dcd.deleted_after_message_id
+            )
           ORDER BY dm.created_at DESC, dm.direct_message_id DESC
           LIMIT 1
         ) AS last_message_content,
@@ -100,6 +104,10 @@ const getUserConversations = async (userId) => {
           SELECT dm.created_at
           FROM direct_messages dm
           WHERE dm.conversation_id = dc.conversation_id
+            AND (
+              dcd.deletion_id IS NULL
+              OR dm.direct_message_id > dcd.deleted_after_message_id
+            )
           ORDER BY dm.created_at DESC, dm.direct_message_id DESC
           LIMIT 1
         ) AS last_message_created_at
@@ -109,26 +117,29 @@ const getUserConversations = async (userId) => {
           WHEN dc.user_one_id = ? THEN dc.user_two_id
           ELSE dc.user_one_id
         END
-      WHERE dc.user_one_id = ? OR dc.user_two_id = ?
-      ORDER BY
-        COALESCE(
-          (
-            SELECT dm.created_at
-            FROM direct_messages dm
-            WHERE dm.conversation_id = dc.conversation_id
-            ORDER BY dm.created_at DESC, dm.direct_message_id DESC
+      LEFT JOIN direct_conversation_deletions dcd
+        ON dcd.conversation_id = dc.conversation_id
+       AND dcd.user_id = ?
+      WHERE (dc.user_one_id = ? OR dc.user_two_id = ?)
+        AND (
+          dcd.deletion_id IS NULL
+          OR EXISTS (
+            SELECT 1
+            FROM direct_messages dm_visible
+            WHERE dm_visible.conversation_id = dc.conversation_id
+              AND dm_visible.direct_message_id > dcd.deleted_after_message_id
             LIMIT 1
-          ),
-          dc.updated_at
-        ) DESC
+          )
+        )
+      ORDER BY COALESCE(last_message_created_at, dc.updated_at) DESC
     `,
-    [userId, userId, userId]
+    [userId, userId, userId, userId]
   );
 
   return rows;
 };
 
-const getMessagesByConversationId = async (conversationId) => {
+const getMessagesByConversationId = async (conversationId, userId) => {
   const [rows] = await pool.execute(
     `
       SELECT
@@ -141,10 +152,17 @@ const getMessagesByConversationId = async (conversationId) => {
         dm.updated_at
       FROM direct_messages dm
       JOIN users u ON dm.sender_id = u.user_id
+      LEFT JOIN direct_conversation_deletions dcd
+        ON dcd.conversation_id = dm.conversation_id
+       AND dcd.user_id = ?
       WHERE dm.conversation_id = ?
+        AND (
+          dcd.deletion_id IS NULL
+          OR dm.direct_message_id > dcd.deleted_after_message_id
+        )
       ORDER BY dm.created_at ASC, dm.direct_message_id ASC
     `,
-    [conversationId]
+    [userId, conversationId]
   );
 
   return rows;
@@ -189,6 +207,40 @@ const createDirectMessage = async (conversationId, senderId, content) => {
   return rows[0];
 };
 
+const hideDirectConversationForUser = async (conversationId, userId) => {
+  const [rows] = await pool.execute(
+    `
+      SELECT COALESCE(MAX(direct_message_id), 0) AS deleted_after_message_id
+      FROM direct_messages
+      WHERE conversation_id = ?
+    `,
+    [conversationId]
+  );
+
+  const deletedAfterMessageId = Number(rows[0]?.deleted_after_message_id || 0);
+
+  await pool.execute(
+    `
+      INSERT INTO direct_conversation_deletions (
+        conversation_id,
+        user_id,
+        deleted_after_message_id
+      )
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        deleted_after_message_id = VALUES(deleted_after_message_id),
+        deleted_at = CURRENT_TIMESTAMP
+    `,
+    [conversationId, userId, deletedAfterMessageId]
+  );
+
+  return {
+    conversation_id: Number(conversationId),
+    user_id: Number(userId),
+    deleted_after_message_id: deletedAfterMessageId
+  };
+};
+
 module.exports = {
   getConversationByUsers,
   createConversation,
@@ -197,4 +249,5 @@ module.exports = {
   getUserConversations,
   getMessagesByConversationId,
   createDirectMessage,
+  hideDirectConversationForUser
 };

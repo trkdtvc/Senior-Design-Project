@@ -7,6 +7,7 @@ const {
   getUserConversations,
   getMessagesByConversationId,
   createDirectMessage,
+  hideDirectConversationForUser
 } = require("../models/directMessageModel");
 
 const areUsersFriends = async (userAId, userBId) => {
@@ -133,7 +134,10 @@ const getDirectMessages = async (req, res, next) => {
       throw new Error("You are not a participant in this direct conversation");
     }
 
-    const messages = await getMessagesByConversationId(conversationId);
+    const messages = await getMessagesByConversationId(
+      conversationId,
+      currentUserId
+    );
 
     res.status(200).json({
       message: "Direct messages fetched successfully",
@@ -206,9 +210,39 @@ const sendDirectMessageToConversation = async (req, res, next) => {
   }
 };
 
+const deleteDirectConversationForMe = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { conversationId } = req.params;
+
+    const conversation = await getConversationById(conversationId);
+
+    if (!conversation) {
+      res.status(404);
+      throw new Error("Direct conversation not found");
+    }
+
+    const hasAccess = await isUserInConversation(conversationId, currentUserId);
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    await hideDirectConversationForUser(conversationId, currentUserId);
+
+    res.status(200).json({
+      message: "Direct conversation deleted for you"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getOrCreateDirectConversation,
   getMyDirectConversations,
   getDirectMessages,
   sendDirectMessageToConversation,
+  deleteDirectConversationForMe
 };

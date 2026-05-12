@@ -60,3 +60,17 @@ export const sendDirectMessage = async (token, messageData) => {
 
   return handleResponse(response);
 };
+
+export const deleteDirectConversation = async (token, conversationId) => {
+  const response = await fetch(
+    `${API_BASE_URL}/direct-messages/conversations/${conversationId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  );
+
+  return handleResponse(response);
+};

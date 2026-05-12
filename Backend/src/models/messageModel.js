@@ -29,6 +29,30 @@ const getMessagesByChannelId = async (channelId) => {
   return rows;
 };
 
+const getChannelServerId = async (channelId) => {
+  const [rows] = await pool.query(
+    `SELECT server_id
+     FROM channels
+     WHERE channel_id = ?
+     LIMIT 1`,
+    [channelId]
+  );
+
+  return rows[0]?.server_id || null;
+};
+
+const getChannelServerMemberIds = async (channelId) => {
+  const [rows] = await pool.query(
+    `SELECT sm.user_id
+     FROM channels c
+     JOIN server_members sm ON c.server_id = sm.server_id
+     WHERE c.channel_id = ?`,
+    [channelId]
+  );
+
+  return rows;
+};
+
 const isUserMemberOfChannelServer = async (channelId, userId) => {
   const [rows] = await pool.query(
     `SELECT sm.*
@@ -44,5 +68,7 @@ const isUserMemberOfChannelServer = async (channelId, userId) => {
 module.exports = {
   createMessage,
   getMessagesByChannelId,
+  getChannelServerId,
+  getChannelServerMemberIds,
   isUserMemberOfChannelServer
 };

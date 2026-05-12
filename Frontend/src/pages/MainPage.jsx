@@ -20,7 +20,8 @@ import {
   getDirectConversations,
   getOrCreateDirectConversation,
   getDirectMessages,
-  sendDirectMessage
+  sendDirectMessage,
+  deleteDirectConversation
 } from "../services/directMessageService";
 import {
   createServerInvite,
@@ -132,6 +133,14 @@ const getMessageId = (message) =>
 
 const getMessageAuthor = (message) =>
   message?.username || message?.user?.username || "Unknown user";
+
+const getMessageAuthorId = (message) =>
+  message?.user_id ||
+  message?.userId ||
+  message?.sender_id ||
+  message?.senderId ||
+  message?.user?.user_id ||
+  null;
 
 const getMessageContent = (message) =>
   message?.content || message?.message || "";
@@ -307,6 +316,24 @@ const getInitial = (value) => {
   return safeValue.charAt(0).toUpperCase() || "?";
 };
 
+const getUnreadValue = (unreadMap, id) => {
+  if (!id) return 0;
+  return Number(unreadMap?.[String(id)] || 0);
+};
+
+const getTotalUnreadCount = (unreadMap) =>
+  Object.values(unreadMap).reduce((total, value) => total + Number(value || 0), 0);
+
+const formatBadgeCount = (count) => {
+  const safeCount = Number(count || 0);
+
+  if (safeCount <= 0) {
+    return "";
+  }
+
+  return safeCount > 99 ? "99+" : String(safeCount);
+};
+
 const MainPage = () => {
   const navigate = useNavigate();
   const {
@@ -352,6 +379,13 @@ const MainPage = () => {
   const [members, setMembers] = useState([]);
   const [channelMessages, setChannelMessages] = useState([]);
   const [directMessages, setDirectMessages] = useState([]);
+  const [unreadDirectCounts, setUnreadDirectCounts] = useState({});
+  const [unreadChannelCounts, setUnreadChannelCounts] = useState({});
+  const [unreadServerCounts, setUnreadServerCounts] = useState({});
+  const [hoveredConversationId, setHoveredConversationId] = useState(null);
+  const [openConversationMenuId, setOpenConversationMenuId] = useState(null);
+  const [isDeletingConversation, setIsDeletingConversation] = useState(false);
+  const [directConversationError, setDirectConversationError] = useState("");
 
   const [activeServerId, setActiveServerId] = useState(null);
   const [activeChannelId, setActiveChannelId] = useState(null);
@@ -421,6 +455,72 @@ const MainPage = () => {
 
   const currentUserId = user?.user_id || user?.id || null;
 
+  const clearDirectUnread = useCallback((conversationId) => {
+    if (!conversationId) {
+      return;
+    }
+
+    setUnreadDirectCounts((prevCounts) => {
+      const key = String(conversationId);
+
+      if (!prevCounts[key]) {
+        return prevCounts;
+      }
+
+      const nextCounts = { ...prevCounts };
+      delete nextCounts[key];
+      return nextCounts;
+    });
+  }, []);
+
+  const clearChannelUnread = useCallback(
+    (channelId, serverId = activeServerId) => {
+      if (!channelId) {
+        return;
+      }
+
+      const unreadCount = getUnreadValue(unreadChannelCounts, channelId);
+
+      if (!unreadCount) {
+        return;
+      }
+
+      setUnreadChannelCounts((prevCounts) => {
+        const key = String(channelId);
+
+        if (!prevCounts[key]) {
+          return prevCounts;
+        }
+
+        const nextCounts = { ...prevCounts };
+        delete nextCounts[key];
+        return nextCounts;
+      });
+
+      if (serverId) {
+        setUnreadServerCounts((prevCounts) => {
+          const key = String(serverId);
+          const nextServerCount = Math.max(
+            Number(prevCounts[key] || 0) - unreadCount,
+            0
+          );
+
+          if (nextServerCount === 0) {
+            const nextCounts = { ...prevCounts };
+            delete nextCounts[key];
+            return nextCounts;
+          }
+
+          return {
+            ...prevCounts,
+            [key]: nextServerCount
+          };
+        });
+      }
+    },
+    [activeServerId, unreadChannelCounts]
+  );
+
   const currentUserIsOwner =
     (activeServer && currentUserId
       ? String(getServerOwnerId(activeServer)) === String(currentUserId)
@@ -431,6 +531,10 @@ const MainPage = () => {
     );
 
   const displayedMessages = isDmView ? directMessages : channelMessages;
+  const totalUnreadDirectCount = getTotalUnreadCount(unreadDirectCounts);
+  const pendingFriendRequestCount = incomingFriendRequests.length;
+  const totalDmNotificationCount =
+    totalUnreadDirectCount + pendingFriendRequestCount;
   const normalizedSidebarSearch = sidebarSearch.trim().toLowerCase();
 
   const filteredChannels = channels.filter((channel) =>
@@ -673,7 +777,8 @@ const MainPage = () => {
         await Promise.all([
           loadServers(token),
           loadFriends(token),
-          loadDirectConversationList(token)
+          loadDirectConversationList(token),
+          loadFriendRequests(token)
         ]);
       } catch (error) {
         disconnectSocket();
@@ -686,9 +791,23 @@ const MainPage = () => {
     };
 
     loadMainPageData();
-  }, [navigate, loadServers, loadFriends, loadDirectConversationList]);
+  }, [navigate, loadServers, loadFriends, loadDirectConversationList, loadFriendRequests]);
 
+  useEffect(() => {
+    if (!activeConversationId) {
+      return;
+    }
 
+    clearDirectUnread(activeConversationId);
+  }, [activeConversationId, clearDirectUnread]);
+
+  useEffect(() => {
+    if (!activeServerId || !activeChannelId) {
+      return;
+    }
+
+    clearChannelUnread(activeChannelId, activeServerId);
+  }, [activeServerId, activeChannelId, clearChannelUnread]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -1061,9 +1180,16 @@ const MainPage = () => {
         return;
       }
 
-      shouldAutoScrollRef.current = true;
+      const conversationId = payload.conversation_id;
+      const isCurrentConversation =
+        String(conversationId) === String(activeConversationId);
+      const isOwnMessage =
+        currentUserId &&
+        String(payload.sender_user_id) === String(currentUserId);
 
-      if (String(payload.conversation_id) === String(activeConversationId)) {
+      if (isCurrentConversation) {
+        shouldAutoScrollRef.current = true;
+
         setDirectMessages((prevMessages) => {
           const incomingMessageId = getDirectMessageId(payload.directMessage);
 
@@ -1079,6 +1205,15 @@ const MainPage = () => {
 
           return [...prevMessages, payload.directMessage];
         });
+      } else if (!isOwnMessage) {
+        setUnreadDirectCounts((prevCounts) => {
+          const key = String(conversationId);
+
+          return {
+            ...prevCounts,
+            [key]: Number(prevCounts[key] || 0) + 1
+          };
+        });
       }
 
       const token = localStorage.getItem("token");
@@ -1086,6 +1221,78 @@ const MainPage = () => {
       if (token) {
         loadDirectConversationList(token);
       }
+    };
+
+    const handleChannelMessageNotification = (payload) => {
+      if (!payload) {
+        return;
+      }
+
+      const channelId =
+        payload.channel_id || payload.channelId || payload.message?.channel_id;
+      const serverId =
+        payload.server_id || payload.serverId || payload.message?.server_id;
+      const senderUserId =
+        payload.sender_user_id || payload.senderId || payload.message?.user_id;
+
+      if (!channelId || !serverId || !senderUserId || !currentUserId) {
+        return;
+      }
+
+      const isOwnMessage = String(senderUserId) === String(currentUserId);
+      const isCurrentChannel =
+        String(channelId) === String(activeChannelId) &&
+        String(serverId) === String(activeServerId);
+
+      if (isOwnMessage || isCurrentChannel) {
+        return;
+      }
+
+      setUnreadChannelCounts((prevCounts) => {
+        const key = String(channelId);
+
+        return {
+          ...prevCounts,
+          [key]: Number(prevCounts[key] || 0) + 1
+        };
+      });
+
+      setUnreadServerCounts((prevCounts) => {
+        const key = String(serverId);
+
+        return {
+          ...prevCounts,
+          [key]: Number(prevCounts[key] || 0) + 1
+        };
+      });
+    };
+
+    const handleFriendRequestReceived = (payload) => {
+      const request = payload?.request || payload;
+
+      if (!request?.request_id) {
+        const token = localStorage.getItem("token");
+
+        if (token) {
+          fetchFriendRequests(token);
+        }
+
+        return;
+      }
+
+      setIncomingFriendRequests((prevRequests) => {
+        const alreadyExists = prevRequests.some(
+          (existingRequest) =>
+            String(getFriendRequestId(existingRequest)) ===
+            String(getFriendRequestId(request))
+        );
+
+        if (alreadyExists) {
+          return prevRequests;
+        }
+
+        return [request, ...prevRequests];
+      });
     };
 
     const handleFriendRemoved = (payload) => {
@@ -1116,12 +1323,16 @@ const MainPage = () => {
     socket.on("new_message", handleNewMessage);
     socket.on("direct_message", handleDirectMessage);
     socket.on("friend_removed", handleFriendRemoved);
+    socket.on("channel_message_notification", handleChannelMessageNotification);
+    socket.on("friend_request_received", handleFriendRequestReceived);
 
     return () => {
       socket.off("presence_update", handlePresenceUpdate);
       socket.off("new_message", handleNewMessage);
       socket.off("direct_message", handleDirectMessage);
       socket.off("friend_removed", handleFriendRemoved);
+      socket.off("channel_message_notification", handleChannelMessageNotification);
+      socket.off("friend_request_received", handleFriendRequestReceived);
     };
   }, [
     isSocketReady,
@@ -1129,6 +1340,7 @@ const MainPage = () => {
     activeChannelId,
     activeConversationId,
     loadDirectConversationList,
+    fetchFriendRequests,
     currentUserId
   ]);
 
@@ -1155,6 +1367,7 @@ const MainPage = () => {
   useEffect(() => {
     const handleGlobalClick = () => {
       setOpenChannelMenuId(null);
+      setOpenConversationMenuId(null);
     };
 
     window.addEventListener("click", handleGlobalClick);
@@ -1273,6 +1486,72 @@ const MainPage = () => {
     requestAnimationFrame(() => {
       resetMessageInputHeight();
     });
+  };
+
+  const handleDeleteDirectConversation = async (conversation) => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const conversationId = getConversationId(conversation);
+
+    if (!conversationId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete this DM with ${getConversationOtherUsername(conversation)}? This only deletes it for you.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsDeletingConversation(true);
+      setDirectConversationError("");
+
+      await deleteDirectConversation(token, conversationId);
+
+      setDirectConversations((prevConversations) =>
+        prevConversations.filter(
+          (existingConversation) =>
+            String(getConversationId(existingConversation)) !==
+            String(conversationId)
+        )
+      );
+
+      setUnreadDirectCounts((prevCounts) => {
+        const key = String(conversationId);
+
+        if (!prevCounts[key]) {
+          return prevCounts;
+        }
+
+        const nextCounts = { ...prevCounts };
+        delete nextCounts[key];
+        return nextCounts;
+      });
+
+      setOpenConversationMenuId(null);
+
+      if (String(activeConversationId) === String(conversationId)) {
+        setActiveConversationId(null);
+        setDirectMessages([]);
+        setMessageContent("");
+        setActiveDmSection("friends");
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      setDirectConversationError(
+        error.message || "Failed to delete direct conversation."
+      );
+    } finally {
+      setIsDeletingConversation(false);
+    }
   };
 
   const handleStartDirectConversation = async (friend) => {
@@ -1871,6 +2150,12 @@ const MainPage = () => {
               title="Direct Messages"
             >
               <span className="discord-guild-initial">DM</span>
+
+              {totalDmNotificationCount > 0 ? (
+                <span className="discord-notification-badge discord-guild-notification-badge">
+                  {formatBadgeCount(totalDmNotificationCount)}
+                </span>
+              ) : null}
             </button>
 
             <div className="discord-guild-divider" />
@@ -1881,18 +2166,28 @@ const MainPage = () => {
                 const serverName = getServerName(server);
                 const isActive = String(serverId) === String(activeServerId);
 
+
                 return (
                   <button
                     key={serverId}
                     type="button"
                     onClick={() => handleSelectServer(serverId)}
                     className={`discord-guild-button${isActive ? " discord-guild-button-active" : ""
+                      }${getUnreadValue(unreadServerCounts, serverId) > 0 && !isActive
+                        ? " discord-guild-button-unread"
+                        : ""
                       }`}
                     title={serverName}
                   >
                     <span className="discord-guild-initial">
                       {getInitial(serverName)}
                     </span>
+
+                    {getUnreadValue(unreadServerCounts, serverId) > 0 ? (
+                      <span className="discord-notification-badge discord-guild-notification-badge">
+                        {formatBadgeCount(getUnreadValue(unreadServerCounts, serverId))}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -1965,10 +2260,16 @@ const MainPage = () => {
                     className={`discord-dm-nav-button${showDmHomeView && activeDmSection === "requests"
                       ? " discord-dm-nav-button-active"
                       : ""
-                      }`}
+                      }${pendingFriendRequestCount > 0 ? " discord-dm-nav-button-unread" : ""}`}
                     onClick={() => handleSelectDmSection("requests")}
                   >
-                    Friend Requests
+                    <span>Friend Requests</span>
+
+                    {pendingFriendRequestCount > 0 ? (
+                      <span className="discord-notification-badge discord-list-notification-badge">
+                        {formatBadgeCount(pendingFriendRequestCount)}
+                      </span>
+                    ) : null}
                   </button>
                 </div>
 
@@ -2010,6 +2311,11 @@ const MainPage = () => {
               {isDmView ? (
                 <section className="discord-section-block">
                   <div className="discord-section-heading">Direct Messages</div>
+                  {directConversationError ? (
+                    <p className="auth-error server-inline-error">
+                      {directConversationError}
+                    </p>
+                  ) : null}
 
                   {filteredDirectConversations.length === 0 ? (
                     <p className="discord-helper-text">No direct conversations yet.</p>
@@ -2021,42 +2327,128 @@ const MainPage = () => {
                           String(conversationId) === String(activeConversationId);
                         const presenceStatus =
                           getConversationPresenceStatus(conversation);
+                        const unreadCount = getUnreadValue(
+                          unreadDirectCounts,
+                          conversationId
+                        );
 
                         return (
-                          <button
+                          <div
                             key={conversationId}
-                            type="button"
-                            onClick={() => handleSelectConversation(conversationId)}
-                            className={`discord-dm-item${isActive ? " discord-dm-item-active" : ""
-                              }`}
+                            onMouseEnter={() => setHoveredConversationId(conversationId)}
+                            onMouseLeave={() =>
+                              setHoveredConversationId((current) =>
+                                String(current) === String(conversationId) ? null : current
+                              )
+                            }
+                            style={{
+                              position: "relative",
+                              display: "flex",
+                              alignItems: "center"
+                            }}
                           >
-                            <div className="discord-dm-avatar">
-                              {getInitial(getConversationOtherUsername(conversation))}
-                              <span
-                                className={`discord-status-dot ${getPresenceColorClass(
-                                  presenceStatus
-                                )}`}
-                              />
-                            </div>
-
-                            <div className="discord-dm-content">
-                              <div className="discord-dm-name-row">
-                                <span className="discord-dm-name">
-                                  {getConversationOtherUsername(conversation)}
-                                </span>
-                                <span className="discord-dm-time">
-                                  {formatTimestamp(
-                                    getConversationLastTimestamp(conversation)
-                                  )}
-                                </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectConversation(conversationId);
+                                setOpenConversationMenuId(null);
+                              }}
+                              className={`discord-dm-item${isActive ? " discord-dm-item-active" : ""
+                                }${unreadCount > 0 && !isActive ? " discord-dm-item-unread" : ""
+                                }`}
+                              style={{ flex: 1 }}
+                            >
+                              <div className="discord-dm-avatar">
+                                {getInitial(getConversationOtherUsername(conversation))}
+                                <span
+                                  className={`discord-status-dot ${getPresenceColorClass(
+                                    presenceStatus
+                                  )}`}
+                                />
                               </div>
 
-                              <p className="discord-dm-preview">
-                                {getConversationLastMessage(conversation) ||
-                                  "No messages yet."}
-                              </p>
-                            </div>
-                          </button>
+                              <div className="discord-dm-content">
+                                <div className="discord-dm-name-row">
+                                  <span className="discord-dm-name">
+                                    {getConversationOtherUsername(conversation)}
+                                  </span>
+
+                                  {unreadCount > 0 ? (
+                                    <span className="discord-notification-badge discord-list-notification-badge">
+                                      {formatBadgeCount(unreadCount)}
+                                    </span>
+                                  ) : (
+                                    <span className="discord-dm-time">
+                                      {formatTimestamp(
+                                        getConversationLastTimestamp(conversation)
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="discord-dm-preview">
+                                  {getConversationLastMessage(conversation) || "No messages yet."}
+                                </p>
+                              </div>
+                            </button>
+
+                            {String(hoveredConversationId) === String(conversationId) ||
+                              String(openConversationMenuId) === String(conversationId) ? (
+                              <div style={{ position: "relative", marginLeft: "6px" }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenConversationMenuId((current) =>
+                                      String(current) === String(conversationId)
+                                        ? null
+                                        : conversationId
+                                    );
+                                  }}
+                                  className="discord-account-action"
+                                >
+                                  ⋯
+                                </button>
+
+                                {String(openConversationMenuId) === String(conversationId) ? (
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      top: "50%",
+                                      right: "calc(100% + 8px)",
+                                      transform: "translateY(-50%)",
+                                      minWidth: "110px",
+                                      background: "#111214",
+                                      border: "1px solid rgba(255, 255, 255, 0.08)",
+                                      borderRadius: "8px",
+                                      padding: "3px",
+                                      zIndex: 20,
+                                      boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)"
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteDirectConversation(conversation);
+                                      }}
+                                      className="auth-button auth-button-danger compact-button"
+                                      style={{
+                                        width: "100%",
+                                        padding: "8px 10px",
+                                        fontSize: "13px",
+                                        lineHeight: "1.2",
+                                        borderRadius: "10px"
+                                      }}
+                                      disabled={isDeletingConversation}
+                                    >
+                                      {isDeletingConversation ? "Deleting..." : "Delete DM"}
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })}
                     </div>
@@ -2077,6 +2469,10 @@ const MainPage = () => {
                             String(channelId) === String(activeChannelId);
                           const isGeneralChannel =
                             getChannelName(channel).trim().toLowerCase() === "general";
+                          const unreadCount = getUnreadValue(
+                            unreadChannelCounts,
+                            channelId
+                          );
 
                           return (
                             <div
@@ -2091,9 +2487,10 @@ const MainPage = () => {
                                 type="button"
                                 onClick={() => {
                                   handleSelectChannel(channelId);
-                                  setIsChannelMenuOpen(null);
+                                  setOpenChannelMenuId(null);
                                 }}
                                 className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
+                                  }${unreadCount > 0 && !isActive ? " discord-channel-button-unread" : ""
                                   }`}
                                 style={{ flex: 1 }}
                               >
@@ -2101,6 +2498,11 @@ const MainPage = () => {
                                 <span className="channel-name">
                                   {getChannelName(channel)}
                                 </span>
+                                {unreadCount > 0 ? (
+                                  <span className="discord-notification-badge discord-list-notification-badge">
+                                    {formatBadgeCount(unreadCount)}
+                                  </span>
+                                ) : null}
                               </button>
 
                               {currentUserIsOwner &&
@@ -2669,28 +3071,43 @@ const MainPage = () => {
                     ? getDirectMessageId(message) || index
                     : getMessageId(message) || index;
 
-                  const isOwnDmMessage =
-                    isDmView &&
-                    String(getDirectMessageSenderId(message)) === String(currentUserId);
+                  const messageAuthorId = isDmView
+                    ? getDirectMessageSenderId(message)
+                    : getMessageAuthorId(message);
+
+                  const isOwnMessage =
+                    currentUserId &&
+                    String(messageAuthorId) === String(currentUserId);
 
                   return (
-                    <div key={key} className="discord-message-row">
-                      <div className="discord-message-avatar">
-                        {getInitial(author)}
-                      </div>
+                    <div
+                      key={key}
+                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}`}
+                    >
+                      {!isOwnMessage ? (
+                        <div className="discord-message-avatar">
+                          {getInitial(author)}
+                        </div>
+                      ) : null}
 
                       <div className="discord-message-body">
-                        <div className="discord-message-meta">
-                          <span className="discord-message-author">
-                            {author}
-                            {isOwnDmMessage ? " (You)" : ""}
-                          </span>
-                          {timestamp && (
-                            <span className="discord-message-time">{timestamp}</span>
-                          )}
-                        </div>
+                        {!isOwnMessage ? (
+                          <div className="discord-message-meta">
+                            <span className="discord-message-author">{author}</span>
 
-                        <p className="discord-message-text">{content}</p>
+                            {timestamp && (
+                              <span className="discord-message-time">{timestamp}</span>
+                            )}
+                          </div>
+                        ) : null}
+
+                        <p className="discord-message-text">
+                          {content}
+
+                          {isOwnMessage && timestamp ? (
+                            <span className="discord-own-message-time">{timestamp}</span>
+                          ) : null}
+                        </p>
                       </div>
                     </div>
                   );

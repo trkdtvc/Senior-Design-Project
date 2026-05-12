@@ -177,3 +177,20 @@ CREATE TABLE email_verification_tokens (
   CONSTRAINT email_verification_tokens_ibfk_1
     FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE direct_conversation_deletions (
+  deletion_id INT NOT NULL AUTO_INCREMENT,
+  conversation_id INT NOT NULL,
+  user_id INT NOT NULL,
+  deleted_after_message_id INT NOT NULL DEFAULT 0,
+  deleted_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (deletion_id),
+  UNIQUE KEY unique_direct_conversation_delete (conversation_id, user_id),
+  KEY user_id (user_id),
+  CONSTRAINT direct_conversation_deletions_conversation_fk
+    FOREIGN KEY (conversation_id) REFERENCES direct_conversations (conversation_id)
+    ON DELETE CASCADE,
+  CONSTRAINT direct_conversation_deletions_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id)
+    ON DELETE CASCADE
+);

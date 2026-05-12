@@ -493,14 +493,63 @@ textarea.auth-input {
 }
 
 .discord-guild-button {
-  width: 48px;
-  height: 48px;
-  border: none;
-  border-radius: 16px;
-  background: var(--app-bg-elevated-2);
+  position: relative;
+  overflow: visible;
+}
+
+.discord-guild-button-unread {
+  box-shadow: 0 0 0 2px rgba(137, 157, 255, 0.28);
+}
+
+.discord-notification-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--app-danger);
   color: #ffffff;
-  cursor: pointer;
-  transition: border-radius 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 3px var(--app-bg-elevated);
+  flex-shrink: 0;
+}
+
+.discord-guild-notification-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  font-size: 0.65rem;
+  box-shadow: 0 0 0 2px var(--app-bg);
+  z-index: 5;
+}
+
+.discord-guilds-bar,
+.discord-guild-list {
+  overflow: visible;
+}
+
+.discord-list-notification-badge {
+  margin-left: auto;
+  box-shadow: none;
+}
+
+.discord-dm-nav-button-unread {
+  background: rgba(112, 128, 255, 0.12);
+  color: #ffffff;
+}
+
+.discord-dm-item-unread,
+.discord-channel-button-unread {
+  background: rgba(112, 128, 255, 0.12);
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .discord-guild-button:hover {
@@ -620,6 +669,10 @@ textarea.auth-input {
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .discord-dm-nav-button:hover {
@@ -732,6 +785,50 @@ textarea.auth-input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+}
+
+.discord-message-row-own {
+  justify-content: flex-end;
+  padding-left: 72px;
+  padding-right: 16px;
+}
+
+.discord-message-row-own:hover {
+  background: transparent;
+}
+
+.discord-message-row-own .discord-message-avatar {
+  order: 2;
+}
+
+.discord-message-row-own .discord-message-body {
+  flex: 0 1 auto;
+  max-width: min(72%, 680px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.discord-message-row-own .discord-message-meta {
+  justify-content: flex-end;
+}
+
+.discord-message-row-own .discord-message-text {
+  padding: 10px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: rgba(112, 128, 255, 0.22);
+  border: 1px solid rgba(137, 157, 255, 0.24);
+  color: #ffffff;
+}
+
+.discord-own-message-time {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  vertical-align: baseline;
 }
 
 .discord-dm-avatar,
@@ -1443,6 +1540,7 @@ textarea.auth-input {
 }
 
 @media (max-width: 1180px) {
+
   .server-layout,
   .main-layout-grid {
     grid-template-columns: 340px minmax(0, 1fr);
@@ -1454,6 +1552,7 @@ textarea.auth-input {
 }
 
 @media (max-width: 860px) {
+
   .server-layout,
   .main-layout-grid {
     grid-template-columns: 72px minmax(0, 1fr);
@@ -1465,6 +1564,7 @@ textarea.auth-input {
 }
 
 @media (max-width: 640px) {
+
   .discord-composer-shell,
   .discord-modal-actions,
   .discord-friend-home-card {
@@ -1621,4 +1721,60 @@ textarea.auth-input {
 
 .auth-reset-message {
   margin-bottom: 18px !important;
+}
+
+.discord-guilds-bar,
+.discord-guild-list {
+  overflow: visible;
+}
+
+.discord-guild-button {
+  width: 50px;
+  height: 50px;
+  min-width: 50px;
+  min-height: 50px;
+  padding: 0;
+  border: none;
+  border-radius: 16px;
+  background: rgba(112, 128, 255, 0.16);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: visible;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.discord-guild-button:hover,
+.discord-guild-button-active {
+  background: rgba(112, 128, 255, 0.35);
+  color: #ffffff;
+}
+
+.discord-guild-initial,
+.discord-guild-create-plus {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.discord-guild-notification-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
+  background: var(--app-danger);
+  color: #ffffff;
+  box-shadow: 0 0 0 3px #111827;
+  z-index: 10;
 }

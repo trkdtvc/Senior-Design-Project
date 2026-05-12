@@ -26,10 +26,12 @@ const createMessage = async (req, res, next) => {
     }
 
     const result = await messageModel.createMessage(channelId, userId, trimmedContent);
+    const serverId = await messageModel.getChannelServerId(channelId);
 
     const createdMessage = {
       message_id: result.insertId,
       channel_id: Number(channelId),
+      server_id: serverId ? Number(serverId) : null,
       user_id: userId,
       username: req.user.username,
       content: trimmedContent,
@@ -40,6 +42,19 @@ const createMessage = async (req, res, next) => {
 
     if (io) {
       io.to(`channel_${channelId}`).emit("new_message", createdMessage);
+
+      if (serverId) {
+        const serverMembers = await messageModel.getChannelServerMemberIds(channelId);
+
+        serverMembers.forEach((member) => {
+          io.to(`user_${member.user_id}`).emit("channel_message_notification", {
+            server_id: Number(serverId),
+            channel_id: Number(channelId),
+            sender_user_id: Number(userId),
+            message: createdMessage
+          });
+        });
+      }
     }
 
     res.status(201).json({
