@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getMe } from "../services/authService";
 import {
@@ -34,6 +34,7 @@ import EmojiPicker, { Theme } from "emoji-picker-react";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+const getAuthToken = () => localStorage.getItem("token");
 
 const ATTACHMENT_ACCEPT_TYPES = [
   "image/jpeg",
@@ -549,7 +550,6 @@ const MainPage = () => {
   const [removingFriendId, setRemovingFriendId] = useState(null);
   const [hoveredChannelId, setHoveredChannelId] = useState(null);
   const [inviteError, setInviteError] = useState("");
-  const [inviteSuccess, setInviteSuccess] = useState("");
   const [openChannelMenuId, setOpenChannelMenuId] = useState(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
@@ -620,35 +620,43 @@ const MainPage = () => {
 
   const isDmView = !activeServerId;
 
-  const activeServer = servers.find(
-    (server) => String(getServerId(server)) === String(activeServerId)
+  const activeServer = useMemo(
+    () =>
+      servers.find(
+        (server) => String(getServerId(server)) === String(activeServerId)
+      ),
+    [servers, activeServerId]
   );
 
-  const activeChannel = channels.find(
-    (channel) => String(getChannelId(channel)) === String(activeChannelId)
+  const activeChannel = useMemo(
+    () =>
+      channels.find(
+        (channel) => String(getChannelId(channel)) === String(activeChannelId)
+      ),
+    [channels, activeChannelId]
   );
 
-  const activeConversation = directConversations.find(
-    (conversation) =>
-      String(getConversationId(conversation)) === String(activeConversationId)
+  const activeConversation = useMemo(
+    () =>
+      directConversations.find(
+        (conversation) =>
+          String(getConversationId(conversation)) === String(activeConversationId)
+      ),
+    [directConversations, activeConversationId]
   );
 
-  const activeConversationUser = activeConversation
-    ? {
-      user_id: getConversationOtherUserId(activeConversation),
-      username: getConversationOtherUsername(activeConversation),
-      email: getConversationOtherEmail(activeConversation),
-      presence_status: getConversationPresenceStatus(activeConversation)
-    }
-    : null;
-
-  const selectedChannelName = activeChannel ? getChannelName(activeChannel) : "";
-
-  const isGeneralChannelSelected =
-    selectedChannelName.trim().toLowerCase() === "general";
-
-  const canDeleteSelectedChannel =
-    !!activeChannel && channels.length > 1 && !isGeneralChannelSelected;
+  const activeConversationUser = useMemo(
+    () =>
+      activeConversation
+        ? {
+          user_id: getConversationOtherUserId(activeConversation),
+          username: getConversationOtherUsername(activeConversation),
+          email: getConversationOtherEmail(activeConversation),
+          presence_status: getConversationPresenceStatus(activeConversation)
+        }
+        : null,
+    [activeConversation]
+  );
 
   const currentUserId = user?.user_id || user?.id || null;
 
@@ -718,61 +726,99 @@ const MainPage = () => {
     [activeServerId, unreadChannelCounts]
   );
 
-  const currentUserIsOwner =
-    (activeServer && currentUserId
-      ? String(getServerOwnerId(activeServer)) === String(currentUserId)
-      : false) ||
-    members.some(
-      (member) =>
-        String(getMemberUserId(member)) === String(currentUserId) && isOwner(member)
-    );
+  const currentUserIsOwner = useMemo(
+    () =>
+      (activeServer && currentUserId
+        ? String(getServerOwnerId(activeServer)) === String(currentUserId)
+        : false) ||
+      members.some(
+        (member) =>
+          String(getMemberUserId(member)) === String(currentUserId) &&
+          isOwner(member)
+      ),
+    [activeServer, currentUserId, members]
+  );
 
   const displayedMessages = isDmView ? directMessages : channelMessages;
-  const totalUnreadDirectCount = getTotalUnreadCount(unreadDirectCounts);
+
+  const totalUnreadDirectCount = useMemo(
+    () => getTotalUnreadCount(unreadDirectCounts),
+    [unreadDirectCounts]
+  );
+
   const pendingFriendRequestCount = incomingFriendRequests.length;
   const totalDmNotificationCount =
     totalUnreadDirectCount + pendingFriendRequestCount;
-  const normalizedSidebarSearch = sidebarSearch.trim().toLowerCase();
 
-  const filteredChannels = channels.filter((channel) =>
-    getChannelName(channel).toLowerCase().includes(normalizedSidebarSearch)
+  const normalizedSidebarSearch = useMemo(
+    () => sidebarSearch.trim().toLowerCase(),
+    [sidebarSearch]
   );
 
-  const filteredFriends = friends.filter((friend) => {
-    const name = getFriendName(friend).toLowerCase();
-    const email = getFriendEmail(friend).toLowerCase();
-
-    return (
-      name.includes(normalizedSidebarSearch) ||
-      email.includes(normalizedSidebarSearch)
-    );
-  });
-
-  const activeConversationIsFriend = activeConversationUser
-    ? friends.some(
-      (friend) =>
-        String(getFriendId(friend)) === String(activeConversationUser.user_id)
-    )
-    : false;
-
-  const filteredDirectConversations = directConversations.filter((conversation) => {
-    const username = getConversationOtherUsername(conversation).toLowerCase();
-    const email = getConversationOtherEmail(conversation).toLowerCase();
-    const lastMessage = getConversationLastMessage(conversation).toLowerCase();
-
-    return (
-      username.includes(normalizedSidebarSearch) ||
-      email.includes(normalizedSidebarSearch) ||
-      lastMessage.includes(normalizedSidebarSearch)
-    );
-  });
-
-  const onlineMembers = members.filter(
-    (member) => getMemberPresenceStatus(member) === "online"
+  const filteredChannels = useMemo(
+    () =>
+      channels.filter((channel) =>
+        getChannelName(channel).toLowerCase().includes(normalizedSidebarSearch)
+      ),
+    [channels, normalizedSidebarSearch]
   );
 
-  const offlineMembers = members.filter(
-    (member) => getMemberPresenceStatus(member) !== "online"
+  const filteredFriends = useMemo(
+    () =>
+      friends.filter((friend) => {
+        const name = getFriendName(friend).toLowerCase();
+        const email = getFriendEmail(friend).toLowerCase();
+
+        return (
+          name.includes(normalizedSidebarSearch) ||
+          email.includes(normalizedSidebarSearch)
+        );
+      }),
+    [friends, normalizedSidebarSearch]
+  );
+
+  const activeConversationIsFriend = useMemo(
+    () =>
+      activeConversationUser
+        ? friends.some(
+          (friend) =>
+            String(getFriendId(friend)) ===
+            String(activeConversationUser.user_id)
+        )
+        : false,
+    [activeConversationUser, friends]
+  );
+
+  const filteredDirectConversations = useMemo(
+    () =>
+      directConversations.filter((conversation) => {
+        const username = getConversationOtherUsername(conversation).toLowerCase();
+        const email = getConversationOtherEmail(conversation).toLowerCase();
+        const lastMessage = getConversationLastMessage(conversation).toLowerCase();
+
+        return (
+          username.includes(normalizedSidebarSearch) ||
+          email.includes(normalizedSidebarSearch) ||
+          lastMessage.includes(normalizedSidebarSearch)
+        );
+      }),
+    [directConversations, normalizedSidebarSearch]
+  );
+
+  const onlineMembers = useMemo(
+    () =>
+      members.filter(
+        (member) => getMemberPresenceStatus(member) === "online"
+      ),
+    [members]
+  );
+
+  const offlineMembers = useMemo(
+    () =>
+      members.filter(
+        (member) => getMemberPresenceStatus(member) !== "online"
+      ),
+    [members]
   );
 
   const currentUserPresence = isSocketReady
@@ -949,7 +995,7 @@ const MainPage = () => {
 
   useEffect(() => {
     const loadMainPageData = async () => {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
 
       if (!token) {
         navigate("/login");
@@ -1007,7 +1053,7 @@ const MainPage = () => {
   }, [activeServerId, activeChannelId, clearChannelUnread]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token || !isDmView) {
       return;
@@ -1054,7 +1100,7 @@ const MainPage = () => {
   }, [routeServerId, routeConversationId, servers, isLoading, navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1095,7 +1141,7 @@ const MainPage = () => {
   }, [activeServerId, loadServerChannels, loadServerMembers, navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1125,7 +1171,7 @@ const MainPage = () => {
   }, [activeServerId, activeChannelId, loadChannelMessageList, navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1157,7 +1203,7 @@ const MainPage = () => {
   }, [isDmView, activeConversationId, loadDirectMessageList, navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1413,7 +1459,7 @@ const MainPage = () => {
         });
       }
 
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
 
       if (token) {
         loadDirectConversationList(token);
@@ -1468,7 +1514,7 @@ const MainPage = () => {
       const request = payload?.request || payload;
 
       if (!request?.request_id) {
-        const token = localStorage.getItem("token");
+        const token = getAuthToken();
 
         if (token) {
           fetchFriendRequests(token);
@@ -1693,7 +1739,7 @@ const MainPage = () => {
   };
 
   const handleDeleteDirectConversation = async (conversation) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1759,7 +1805,7 @@ const MainPage = () => {
   };
 
   const handleStartDirectConversation = async (friend) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1790,7 +1836,7 @@ const MainPage = () => {
   const handleAddFriend = async (e) => {
     e.preventDefault();
 
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1837,7 +1883,7 @@ const MainPage = () => {
   };
 
   const handleRespondToFriendRequest = async (requestId, action) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1879,7 +1925,7 @@ const MainPage = () => {
   };
 
   const handleRemoveFriend = async (friendId) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -1930,7 +1976,7 @@ const MainPage = () => {
   const handleCreateServer = async (e) => {
     e.preventDefault();
 
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     const trimmedName = serverFormData.server_name.trim();
     const trimmedDescription = serverFormData.description.trim();
 
@@ -1986,7 +2032,7 @@ const MainPage = () => {
   const handleCreateChannel = async (e) => {
     e.preventDefault();
 
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -2033,7 +2079,7 @@ const MainPage = () => {
   };
 
   const handleDeleteChannel = async (channelToDelete) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -2094,7 +2140,7 @@ const MainPage = () => {
       e.preventDefault();
     }
 
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -2250,7 +2296,7 @@ const MainPage = () => {
   };
 
   const handleDeleteOrLeaveServer = async () => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token || !activeServer) {
       navigate("/login");
@@ -2301,7 +2347,7 @@ const MainPage = () => {
   };
 
   const handleCreateInvite = async () => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -2310,14 +2356,12 @@ const MainPage = () => {
 
     if (!activeServerId) {
       setInviteError("Select a server first.");
-      setInviteSuccess("");
       return;
     }
 
     try {
       setIsCreatingInvite(true);
       setInviteError("");
-      setInviteSuccess("");
 
       const response = await createServerInvite(activeServerId, token);
       const inviteCode =
@@ -2331,10 +2375,8 @@ const MainPage = () => {
       }
 
       setInviteCode(inviteCode);
-      setInviteSuccess("Invite created successfully.");
     } catch (error) {
       setInviteError(error.message || "Failed to create invite.");
-      setInviteSuccess("");
     } finally {
       setIsCreatingInvite(false);
     }
@@ -2343,7 +2385,7 @@ const MainPage = () => {
   const handleJoinInvite = async (e) => {
     e.preventDefault();
 
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
 
     if (!token) {
       navigate("/login");
@@ -2399,7 +2441,6 @@ const MainPage = () => {
     try {
       await navigator.clipboard.writeText(inviteCode);
       setIsInviteCopied(true);
-      setInviteSuccess("");
       setInviteError("");
 
       setTimeout(() => {
@@ -2407,7 +2448,6 @@ const MainPage = () => {
       }, 2500);
     } catch (error) {
       setInviteError("Failed to copy invite code.");
-      setInviteSuccess("");
     }
   };
 

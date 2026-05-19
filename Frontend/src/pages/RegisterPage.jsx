@@ -7,19 +7,31 @@ const EMPTY_FIELDS_ERROR = "Please fill in all fields";
 const INVALID_EMAIL_ERROR = "Invalid email format";
 const EMAIL_EXISTS_ERROR = "Email already exists";
 const USERNAME_EXISTS_ERROR = "Username already exists";
-const PASSWORD_MISMATCH_ERRORS = new Set([
-  "Passwords do not match.",
-  "Passwords do not match"
-]);
-const PASSWORD_REQUIREMENT_ERRORS = new Set([
-  "Password must be at least of medium strength",
-  "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.",
-  "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character."
-]);
+const PASSWORD_MISMATCH_ERROR = "Passwords do not match";
+const PASSWORD_STRENGTH_ERROR = "Password must be at least of medium strength";
 const REGISTER_SUCCESS_MESSAGE =
   "Registration successful. Check your email to verify your account";
 
-const getPasswordChecks = (password) => ({
+const PASSWORD_MISMATCH_ERRORS = new Set([
+  "Passwords do not match",
+  "Passwords do not match."
+]);
+
+const PASSWORD_REQUIREMENT_ERRORS = new Set([
+  PASSWORD_STRENGTH_ERROR,
+  "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character",
+  "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.",
+  "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character",
+  "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character."
+]);
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+
+const normalizeError = (message = "") => message.trim().replace(/\.$/, "");
+
+const getPasswordChecks = (password = "") => ({
   minLength: password.length >= 8,
   hasUppercase: /[A-Z]/.test(password),
   hasLowercase: /[a-z]/.test(password),
@@ -27,19 +39,54 @@ const getPasswordChecks = (password) => ({
   hasSpecialChar: /[^A-Za-z0-9]/.test(password)
 });
 
+const getPassedPasswordCheckCount = (checks) =>
+  Object.values(checks).filter(Boolean).length;
+
 const getPasswordStrength = (checks) => {
-  const passedChecks = Object.values(checks).filter(Boolean).length;
+  const passedChecks = getPassedPasswordCheckCount(checks);
 
   if (passedChecks <= 2) {
-    return { label: "Weak", className: "password-strength-weak" };
+    return {
+      label: "Weak",
+      className: "password-strength-weak"
+    };
   }
 
   if (passedChecks <= 4) {
-    return { label: "Medium", className: "password-strength-medium" };
+    return {
+      label: "Medium",
+      className: "password-strength-medium"
+    };
   }
 
-  return { label: "Strong", className: "password-strength-strong" };
+  return {
+    label: "Strong",
+    className: "password-strength-strong"
+  };
 };
+
+const passwordRules = [
+  {
+    key: "minLength",
+    label: "At least 8 characters"
+  },
+  {
+    key: "hasUppercase",
+    label: "One uppercase letter"
+  },
+  {
+    key: "hasLowercase",
+    label: "One lowercase letter"
+  },
+  {
+    key: "hasNumber",
+    label: "One number"
+  },
+  {
+    key: "hasSpecialChar",
+    label: "One special character"
+  }
+];
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -53,6 +100,8 @@ const RegisterPage = () => {
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const normalizedError = useMemo(() => normalizeError(error), [error]);
+
   const passwordChecks = useMemo(
     () => getPasswordChecks(formData.password),
     [formData.password]
@@ -63,15 +112,20 @@ const RegisterPage = () => {
     [passwordChecks]
   );
 
-  const isEmptyFieldsError = error === EMPTY_FIELDS_ERROR;
+  const isEmptyFieldsError = normalizedError === EMPTY_FIELDS_ERROR;
   const isEmailError =
-    error === EMAIL_EXISTS_ERROR || error === INVALID_EMAIL_ERROR;
-  const isUsernameError = error === USERNAME_EXISTS_ERROR;
-  const isPasswordRequirementError = PASSWORD_REQUIREMENT_ERRORS.has(error);
-  const isPasswordMismatchError = PASSWORD_MISMATCH_ERRORS.has(error);
+    normalizedError === EMAIL_EXISTS_ERROR ||
+    normalizedError === INVALID_EMAIL_ERROR;
+  const isUsernameError = normalizedError === USERNAME_EXISTS_ERROR;
+  const isPasswordRequirementError =
+    PASSWORD_REQUIREMENT_ERRORS.has(error) ||
+    PASSWORD_REQUIREMENT_ERRORS.has(normalizedError);
+  const isPasswordMismatchError =
+    PASSWORD_MISMATCH_ERRORS.has(error) ||
+    PASSWORD_MISMATCH_ERRORS.has(normalizedError);
 
   const isGeneralError =
-    !!error &&
+    Boolean(normalizedError) &&
     !isEmptyFieldsError &&
     !isEmailError &&
     !isUsernameError &&
@@ -93,6 +147,11 @@ const RegisterPage = () => {
     isPasswordMismatchError ||
     (isEmptyFieldsError && !formData.confirmPassword);
 
+  const clearFeedback = () => {
+    setError("");
+    setSuccess("");
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -101,55 +160,56 @@ const RegisterPage = () => {
       [name]: value
     }));
 
-    setError("");
-    setSuccess("");
+    clearFeedback();
+  };
+
+  const validateForm = ({ email, username, password, confirmPassword }) => {
+    if (!email || !username || !password || !confirmPassword) {
+      return EMPTY_FIELDS_ERROR;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+      return INVALID_EMAIL_ERROR;
+    }
+
+    if (getPassedPasswordCheckCount(passwordChecks) <= 2) {
+      return PASSWORD_STRENGTH_ERROR;
+    }
+
+    if (password !== confirmPassword) {
+      return PASSWORD_MISMATCH_ERROR;
+    }
+
+    return "";
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const email = formData.email.trim().toLowerCase();
-    const username = formData.username.trim();
-    const password = formData.password;
-    const confirmPassword = formData.confirmPassword;
+    const nextFormData = {
+      email: normalizeEmail(formData.email),
+      username: formData.username.trim(),
+      password: formData.password,
+      confirmPassword: formData.confirmPassword
+    };
 
-    if (!email || !username || !password || !confirmPassword) {
-      setError(EMPTY_FIELDS_ERROR);
-      return;
-    }
+    const validationError = validateForm(nextFormData);
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(email)) {
-      setError(INVALID_EMAIL_ERROR);
-      return;
-    }
-
-    const passedChecks = Object.values(passwordChecks).filter(Boolean).length;
-
-    if (passedChecks <= 2) {
-      setError("Password must be at least of medium strength");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (validationError) {
+      setError(validationError);
+      setSuccess("");
       return;
     }
 
     try {
       setIsLoading(true);
-      setError("");
-      setSuccess("");
+      clearFeedback();
 
-      const data = await registerUser({
-        email,
-        username,
-        password,
-        confirmPassword
-      });
+      const data = await registerUser(nextFormData);
 
-      localStorage.setItem("pendingVerificationEmail", data.email || email);
+      const pendingEmail = normalizeEmail(data?.email || nextFormData.email);
+      localStorage.setItem("pendingVerificationEmail", pendingEmail);
+
       setSuccess(REGISTER_SUCCESS_MESSAGE);
 
       setFormData({
@@ -159,7 +219,8 @@ const RegisterPage = () => {
         confirmPassword: ""
       });
     } catch (err) {
-      setError(err.message || "Registration failed.");
+      setSuccess("");
+      setError(err.message || "Registration failed");
     } finally {
       setIsLoading(false);
     }
@@ -171,29 +232,33 @@ const RegisterPage = () => {
         <h1 className="auth-logo">YFNC</h1>
         <p className="auth-subtitle">Create an account to get started</p>
 
-        {(isEmptyFieldsError || isGeneralError) && (
-          <p className="auth-error auth-error-register-top">{error}</p>
-        )}
+        {(isEmptyFieldsError || isGeneralError) ? (
+          <p className="auth-error auth-error-register-top">{normalizedError}</p>
+        ) : null}
 
-        {success && <p className="auth-success">{success}</p>}
+        {success ? <p className="auth-success">{success}</p> : null}
 
-        {isEmailError && (
-          <p className="auth-error auth-error-register-top">{error}</p>
-        )}
+        {isEmailError ? (
+          <p className="auth-error auth-error-register-top">{normalizedError}</p>
+        ) : null}
 
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           <input
-            type="text"
+            type="email"
             name="email"
             placeholder="Email"
             value={formData.email}
             onChange={handleChange}
+            autoComplete="email"
+            disabled={isLoading}
             className={
               emailInputError ? "auth-input auth-input-error" : "auth-input"
             }
           />
 
-          {isUsernameError && <p className="auth-error">{error}</p>}
+          {isUsernameError ? (
+            <p className="auth-error">{normalizedError}</p>
+          ) : null}
 
           <input
             type="text"
@@ -201,6 +266,8 @@ const RegisterPage = () => {
             placeholder="Username"
             value={formData.username}
             onChange={handleChange}
+            autoComplete="username"
+            disabled={isLoading}
             className={
               usernameInputError ? "auth-input auth-input-error" : "auth-input"
             }
@@ -212,12 +279,14 @@ const RegisterPage = () => {
             placeholder="Password"
             value={formData.password}
             onChange={handleChange}
+            autoComplete="new-password"
+            disabled={isLoading}
             className={
               passwordInputError ? "auth-input auth-input-error" : "auth-input"
             }
           />
 
-          {formData.password && (
+          {formData.password ? (
             <div className="password-strength-wrapper">
               <p
                 className={`password-strength-text ${passwordStrength.className}`}
@@ -226,57 +295,29 @@ const RegisterPage = () => {
               </p>
 
               <div className="password-rules">
-                <p
-                  className={
-                    passwordChecks.minLength
-                      ? "password-rule password-rule-valid"
-                      : "password-rule"
-                  }
-                >
-                  At least 8 characters
-                </p>
-                <p
-                  className={
-                    passwordChecks.hasUppercase
-                      ? "password-rule password-rule-valid"
-                      : "password-rule"
-                  }
-                >
-                  One uppercase letter
-                </p>
-                <p
-                  className={
-                    passwordChecks.hasLowercase
-                      ? "password-rule password-rule-valid"
-                      : "password-rule"
-                  }
-                >
-                  One lowercase letter
-                </p>
-                <p
-                  className={
-                    passwordChecks.hasNumber
-                      ? "password-rule password-rule-valid"
-                      : "password-rule"
-                  }
-                >
-                  One number
-                </p>
-                <p
-                  className={
-                    passwordChecks.hasSpecialChar
-                      ? "password-rule password-rule-valid"
-                      : "password-rule"
-                  }
-                >
-                  One special character
-                </p>
+                {passwordRules.map((rule) => (
+                  <p
+                    key={rule.key}
+                    className={
+                      passwordChecks[rule.key]
+                        ? "password-rule password-rule-valid"
+                        : "password-rule"
+                    }
+                  >
+                    {rule.label}
+                  </p>
+                ))}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {isPasswordRequirementError && <p className="auth-error">{error}</p>}
-          {isPasswordMismatchError && <p className="auth-error">{error}</p>}
+          {isPasswordRequirementError ? (
+            <p className="auth-error">{normalizedError}</p>
+          ) : null}
+
+          {isPasswordMismatchError ? (
+            <p className="auth-error">{normalizedError}</p>
+          ) : null}
 
           <input
             type="password"
@@ -284,6 +325,8 @@ const RegisterPage = () => {
             placeholder="Confirm Password"
             value={formData.confirmPassword}
             onChange={handleChange}
+            autoComplete="new-password"
+            disabled={isLoading}
             className={
               confirmPasswordInputError
                 ? "auth-input auth-input-error"
@@ -291,7 +334,11 @@ const RegisterPage = () => {
             }
           />
 
-          <button type="submit" disabled={isLoading}>
+          <button
+            type="submit"
+            className="auth-submit-button"
+            disabled={isLoading}
+          >
             {isLoading ? "Registering..." : "Register"}
           </button>
         </form>

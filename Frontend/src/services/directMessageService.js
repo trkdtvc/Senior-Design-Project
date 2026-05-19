@@ -1,21 +1,58 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+const parseResponseBody = async (response) => {
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    return response.json().catch(() => null);
+  }
+
+  const text = await response.text().catch(() => "");
+
+  return text ? { message: text } : null;
+};
+
 const handleResponse = async (response) => {
-  const data = await response.json().catch(() => null);
+  const data = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new Error(data?.message || "Request failed.");
+    throw new Error(data?.message || data?.error || "Request failed.");
   }
 
   return data;
 };
 
+const getAuthHeaders = (token) => ({
+  Authorization: `Bearer ${token}`
+});
+
+const getJsonHeaders = (token) => ({
+  ...getAuthHeaders(token),
+  "Content-Type": "application/json"
+});
+
+const createDirectMessageFormData = ({
+  conversationId,
+  content = "",
+  attachment
+}) => {
+  const formData = new FormData();
+
+  formData.append("conversationId", conversationId);
+  formData.append("content", content);
+  formData.append("attachment", attachment);
+
+  return formData;
+};
+
 export const getDirectConversations = async (token) => {
   const response = await fetch(`${API_BASE_URL}/direct-messages/conversations`, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    headers: getAuthHeaders(token)
   });
 
   return handleResponse(response);
@@ -24,10 +61,7 @@ export const getDirectConversations = async (token) => {
 export const getOrCreateDirectConversation = async (token, friendId) => {
   const response = await fetch(`${API_BASE_URL}/direct-messages/conversations`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    headers: getJsonHeaders(token),
     body: JSON.stringify({ friendId })
   });
 
@@ -39,9 +73,7 @@ export const getDirectMessages = async (token, conversationId) => {
     `${API_BASE_URL}/direct-messages/conversations/${conversationId}/messages`,
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: getAuthHeaders(token)
     }
   );
 
@@ -49,27 +81,17 @@ export const getDirectMessages = async (token, conversationId) => {
 };
 
 export const sendDirectMessage = async (token, messageData) => {
-  const hasAttachment = !!messageData.attachment;
-
-  let body;
-  let headers = {
-    Authorization: `Bearer ${token}`
-  };
-
-  if (hasAttachment) {
-    body = new FormData();
-    body.append("conversationId", messageData.conversationId);
-    body.append("content", messageData.content || "");
-    body.append("attachment", messageData.attachment);
-  } else {
-    headers["Content-Type"] = "application/json";
-    body = JSON.stringify(messageData);
-  }
+  const hasAttachment = Boolean(messageData?.attachment);
 
   const response = await fetch(`${API_BASE_URL}/direct-messages`, {
     method: "POST",
-    headers,
-    body
+    headers: hasAttachment ? getAuthHeaders(token) : getJsonHeaders(token),
+    body: hasAttachment
+      ? createDirectMessageFormData(messageData)
+      : JSON.stringify({
+          conversationId: messageData.conversationId,
+          content: messageData.content || ""
+        })
   });
 
   return handleResponse(response);
@@ -80,9 +102,7 @@ export const deleteDirectConversation = async (token, conversationId) => {
     `${API_BASE_URL}/direct-messages/conversations/${conversationId}`,
     {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: getAuthHeaders(token)
     }
   );
 

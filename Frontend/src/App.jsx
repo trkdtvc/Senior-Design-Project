@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import MainPage from "./pages/MainPage";
@@ -8,15 +8,16 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 
-function App() {
-  const token = localStorage.getItem("token");
+const getStoredToken = () => localStorage.getItem("token");
 
+const RootRedirect = () => (
+  <Navigate to={getStoredToken() ? "/dashboard" : "/login"} replace />
+);
+
+function App() {
   return (
     <Routes>
-      <Route
-        path="/"
-        element={<Navigate to={token ? "/dashboard" : "/login"} replace />}
-      />
+      <Route path="/" element={<RootRedirect />} />
 
       <Route element={<PublicRoute />}>
         <Route path="/login" element={<LoginPage />} />
@@ -30,14 +31,14 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<MainPage />} />
         <Route path="/server/:serverId" element={<MainPage />} />
-        <Route path="/server/:serverId/channel/:channelId" element={<MainPage />} />
+        <Route
+          path="/server/:serverId/channel/:channelId"
+          element={<MainPage />}
+        />
         <Route path="/dm/:conversationId" element={<MainPage />} />
       </Route>
 
-      <Route
-        path="*"
-        element={<Navigate to={token ? "/dashboard" : "/login"} replace />}
-      />
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   );
 }

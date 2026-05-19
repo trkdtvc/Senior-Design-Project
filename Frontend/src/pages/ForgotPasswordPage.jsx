@@ -1,82 +1,99 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { forgotPassword as forgotPasswordRequest } from "../services/authService";
 import "../styles/auth.css";
 
+const STATUS = {
+  IDLE: "idle",
+  LOADING: "loading",
+  SUCCESS: "success",
+  ERROR: "error"
+};
+
 const EMAIL_REQUIRED_ERROR = "Email is required";
 const INVALID_EMAIL_ERROR = "Please enter a valid email address";
+const DEFAULT_SUCCESS_MESSAGE =
+  "If an account with that email exists, a password reset email has been sent";
+const DEFAULT_ERROR_MESSAGE = "Something went wrong. Please try again";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+
+const getMessageClassName = (status) => {
+  if (status === STATUS.SUCCESS) {
+    return "auth-feedback auth-feedback-success auth-feedback-center";
+  }
+
+  if (status === STATUS.LOADING) {
+    return "auth-feedback auth-feedback-neutral auth-feedback-center";
+  }
+
+  return "auth-feedback auth-feedback-error auth-feedback-center";
+};
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState("idle");
+  const [status, setStatus] = useState(STATUS.IDLE);
   const [message, setMessage] = useState("");
 
-  const trimmedEmail = email.trim();
+  const normalizedEmail = useMemo(() => normalizeEmail(email), [email]);
 
-  const isEmailRequiredError =
-    status === "error" && message === EMAIL_REQUIRED_ERROR;
+  const hasEmailError =
+    status === STATUS.ERROR &&
+    (message === EMAIL_REQUIRED_ERROR || message === INVALID_EMAIL_ERROR);
 
-  const isInvalidEmailError =
-    status === "error" && message === INVALID_EMAIL_ERROR;
-
-  const hasEmailError = isEmailRequiredError || isInvalidEmailError;
-
-  const getMessageClassName = () => {
-    if (status === "success") {
-      return "auth-feedback auth-feedback-success auth-feedback-center";
-    }
-
-    if (status === "loading") {
-      return "auth-feedback auth-feedback-neutral auth-feedback-center";
-    }
-
-    return "auth-feedback auth-feedback-error auth-feedback-center";
+  const clearFeedback = () => {
+    setStatus(STATUS.IDLE);
+    setMessage("");
   };
 
   const handleChange = (e) => {
     setEmail(e.target.value);
-    setStatus("idle");
-    setMessage("");
+    clearFeedback();
+  };
+
+  const validateEmail = () => {
+    if (!normalizedEmail) {
+      return EMAIL_REQUIRED_ERROR;
+    }
+
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return INVALID_EMAIL_ERROR;
+    }
+
+    return "";
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!trimmedEmail) {
-      setStatus("error");
-      setMessage(EMAIL_REQUIRED_ERROR);
-      return;
-    }
+    const validationError = validateEmail();
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(trimmedEmail)) {
-      setStatus("error");
-      setMessage(INVALID_EMAIL_ERROR);
+    if (validationError) {
+      setStatus(STATUS.ERROR);
+      setMessage(validationError);
       return;
     }
 
     try {
-      setStatus("loading");
+      setStatus(STATUS.LOADING);
       setMessage("");
 
-      const data = await forgotPasswordRequest(trimmedEmail.toLowerCase());
+      const data = await forgotPasswordRequest(normalizedEmail);
 
-      setStatus("success");
-      setMessage(
-        data.message ||
-          "If an account with that email exists, a password reset email has been sent"
-      );
+      setStatus(STATUS.SUCCESS);
+      setMessage(data?.message || DEFAULT_SUCCESS_MESSAGE);
       setEmail("");
     } catch (error) {
-      setStatus("error");
+      setStatus(STATUS.ERROR);
       setMessage(
-        error.response?.data?.message ||
-          error.message ||
-          "Something went wrong. Please try again."
+        error.response?.data?.message || error.message || DEFAULT_ERROR_MESSAGE
       );
     }
   };
+
+  const isLoading = status === STATUS.LOADING;
 
   return (
     <div className="auth-page">
@@ -88,7 +105,7 @@ const ForgotPasswordPage = () => {
         </p>
 
         {message ? (
-          <p className={`${getMessageClassName()} auth-forgot-message`}>
+          <p className={`${getMessageClassName(status)} auth-forgot-message`}>
             {message}
           </p>
         ) : null}
@@ -97,20 +114,21 @@ const ForgotPasswordPage = () => {
           <input
             id="email"
             name="email"
-            type="text"
+            type="email"
             placeholder="Email"
             value={email}
             onChange={handleChange}
-            disabled={status === "loading"}
+            autoComplete="email"
+            disabled={isLoading}
             className={hasEmailError ? "auth-input auth-input-error" : "auth-input"}
           />
 
           <button
             type="submit"
             className="auth-button"
-            disabled={status === "loading"}
+            disabled={isLoading}
           >
-            {status === "loading" ? "Sending..." : "Send reset link"}
+            {isLoading ? "Sending..." : "Send reset link"}
           </button>
         </form>
 

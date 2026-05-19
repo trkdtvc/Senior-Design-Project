@@ -1,53 +1,93 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { resendVerificationEmail, verifyEmail } from "../services/authService";
 import "../styles/auth.css";
 
-const getVerificationStateFromError = (rawMessage) => {
-  const normalizedMessage = (rawMessage || "").toLowerCase();
+const STATUS = {
+  LOADING: "loading",
+  SUCCESS: "success",
+  ERROR: "error"
+};
+
+const ERROR_TYPE = {
+  INVALID: "invalid",
+  EXPIRED: "expired",
+  ALREADY_VERIFIED: "already_verified"
+};
+
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+
+const getVerificationStateFromError = (rawMessage = "") => {
+  const normalizedMessage = rawMessage.toLowerCase();
 
   if (normalizedMessage.includes("expired")) {
     return {
-      status: "error",
-      errorType: "expired",
+      status: STATUS.ERROR,
+      errorType: ERROR_TYPE.EXPIRED,
       message: "This verification link has expired"
     };
   }
 
-  if (normalizedMessage.includes("already been used")) {
+  if (
+    normalizedMessage.includes("already been used") ||
+    normalizedMessage.includes("already verified")
+  ) {
     return {
-      status: "error",
-      errorType: "already_verified",
-      message: "This verification link has already been used."
-    };
-  }
-
-  if (normalizedMessage.includes("already verified")) {
-    return {
-      status: "error",
-      errorType: "already_verified",
+      status: STATUS.ERROR,
+      errorType: ERROR_TYPE.ALREADY_VERIFIED,
       message: "This email is already verified"
     };
   }
 
   return {
-    status: "error",
-    errorType: "invalid",
+    status: STATUS.ERROR,
+    errorType: ERROR_TYPE.INVALID,
     message: "This verification link is invalid"
   };
 };
 
+const getMessageClassName = (status, errorType) => {
+  if (status === STATUS.SUCCESS) {
+    return "auth-feedback auth-feedback-success auth-feedback-center";
+  }
+
+  if (status === STATUS.LOADING) {
+    return "auth-feedback auth-feedback-neutral auth-feedback-center";
+  }
+
+  if (
+    errorType === ERROR_TYPE.EXPIRED ||
+    errorType === ERROR_TYPE.ALREADY_VERIFIED
+  ) {
+    return "auth-feedback auth-feedback-warning auth-feedback-center";
+  }
+
+  return "auth-feedback auth-feedback-error auth-feedback-center";
+};
+
 const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();
-
-  const token = searchParams.get("token")?.trim() || "";
-  const emailFromQuery = searchParams.get("email")?.trim() || "";
   const attemptedTokenRef = useRef("");
 
-  const fallbackEmail =
-    emailFromQuery || localStorage.getItem("pendingVerificationEmail") || "";
+  const token = useMemo(
+    () => searchParams.get("token")?.trim() || "",
+    [searchParams]
+  );
 
-  const [status, setStatus] = useState("loading");
+  const emailFromQuery = useMemo(
+    () => normalizeEmail(searchParams.get("email") || ""),
+    [searchParams]
+  );
+
+  const fallbackEmail = useMemo(() => {
+    if (emailFromQuery) {
+      return emailFromQuery;
+    }
+
+    return normalizeEmail(localStorage.getItem("pendingVerificationEmail") || "");
+  }, [emailFromQuery]);
+
+  const [status, setStatus] = useState(STATUS.LOADING);
   const [errorType, setErrorType] = useState("");
   const [message, setMessage] = useState("Verifying your email...");
   const [isResending, setIsResending] = useState(false);
@@ -55,9 +95,15 @@ const VerifyEmailPage = () => {
   const [resendError, setResendError] = useState("");
 
   const shouldShowResendButton =
-    status === "error" &&
+    status === STATUS.ERROR &&
     Boolean(fallbackEmail) &&
-    errorType !== "already_verified";
+    errorType !== ERROR_TYPE.ALREADY_VERIFIED;
+
+  const setVerificationState = useCallback((nextState) => {
+    setStatus(nextState.status);
+    setErrorType(nextState.errorType || "");
+    setMessage(nextState.message);
+  }, []);
 
   useEffect(() => {
     const verifyUserEmail = async () => {
@@ -65,9 +111,11 @@ const VerifyEmailPage = () => {
       setResendError("");
 
       if (!token) {
-        setStatus("error");
-        setErrorType("invalid");
-        setMessage("This verification link is invalid");
+        setVerificationState({
+          status: STATUS.ERROR,
+          errorType: ERROR_TYPE.INVALID,
+          message: "This verification link is invalid"
+        });
         return;
       }
 
@@ -75,18 +123,17 @@ const VerifyEmailPage = () => {
         await verifyEmail(token, fallbackEmail);
 
         localStorage.removeItem("pendingVerificationEmail");
-        setStatus("success");
-        setErrorType("");
-        setMessage("Email successfully verified");
+
+        setVerificationState({
+          status: STATUS.SUCCESS,
+          errorType: "",
+          message: "Email successfully verified"
+        });
       } catch (err) {
         const backendMessage =
           err.response?.data?.message || err.message || "Verification failed";
 
-        const nextState = getVerificationStateFromError(backendMessage);
-
-        setStatus(nextState.status);
-        setErrorType(nextState.errorType);
-        setMessage(nextState.message);
+        setVerificationState(getVerificationStateFromError(backendMessage));
       }
     };
 
@@ -99,11 +146,12 @@ const VerifyEmailPage = () => {
     }
 
     verifyUserEmail();
-  }, [token, fallbackEmail]);
+  }, [token, fallbackEmail, setVerificationState]);
 
   const handleResend = async () => {
     if (!fallbackEmail) {
-      setResendError("No email found for resending the verification link.");
+      setResendMessage("");
+      setResendError("No email found for resending the verification link");
       return;
     }
 
@@ -114,56 +162,42 @@ const VerifyEmailPage = () => {
 
       const data = await resendVerificationEmail(fallbackEmail);
 
-      setResendMessage(
-        data.message || "Verification email resent successfully"
-      );
+      localStorage.setItem("pendingVerificationEmail", fallbackEmail);
+      setResendMessage(data.message || "Verification email resent successfully");
     } catch (err) {
       const backendMessage =
         err.response?.data?.message ||
         err.message ||
-        "Failed to resend verification email.";
+        "Failed to resend verification email";
 
       const normalizedMessage = backendMessage.toLowerCase();
 
       if (normalizedMessage.includes("already verified")) {
-        setStatus("error");
-        setErrorType("already_verified");
-        setMessage("This email is already verified");
+        setVerificationState({
+          status: STATUS.ERROR,
+          errorType: ERROR_TYPE.ALREADY_VERIFIED,
+          message: "This email is already verified"
+        });
+
         setResendMessage("");
         setResendError("");
         return;
       }
 
-      setResendError(backendMessage);
+      setResendMessage("");
+      setResendError(backendMessage.replace(/\.$/, ""));
     } finally {
       setIsResending(false);
     }
-  };
-
-  const getMessageClassName = () => {
-    if (status === "success") {
-      return "auth-feedback auth-feedback-success auth-feedback-center";
-    }
-
-    if (status === "loading") {
-      return "auth-feedback auth-feedback-neutral auth-feedback-center";
-    }
-
-    if (errorType === "expired" || errorType === "already_verified") {
-      return "auth-feedback auth-feedback-warning auth-feedback-center";
-    }
-
-    return "auth-feedback auth-feedback-error auth-feedback-center";
   };
 
   return (
     <div className="auth-page">
       <div className="auth-card auth-verify-card">
         <h1 className="auth-logo">YFNC</h1>
-        
 
         <div className="auth-verify-stack">
-          <p className={getMessageClassName()}>{message}</p>
+          <p className={getMessageClassName(status, errorType)}>{message}</p>
 
           {shouldShowResendButton ? (
             <div className="auth-verify-resend-wrap">

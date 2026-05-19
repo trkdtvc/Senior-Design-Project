@@ -3,8 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { loginUser, resendVerificationEmail } from "../services/authService";
 import "../styles/auth.css";
 
+const normalizeInput = (value = "") => value.trim();
+const normalizeEmail = (email = "") => email.trim().toLowerCase();
+
 const getFriendlyLoginError = (rawError, typedLogin) => {
-  const normalizedError = (rawError || "").trim().replace(/\.$/, "");
+  const normalizedError = normalizeInput(rawError).replace(/\.$/, "");
   const isEmailLogin = typedLogin.includes("@");
 
   if (
@@ -29,13 +32,30 @@ const LoginPage = () => {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState(
+    () => localStorage.getItem("pendingVerificationEmail") || ""
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
   const [resendError, setResendError] = useState("");
 
-  const typedLogin = formData.login.trim();
-  const friendlyError = getFriendlyLoginError(error, typedLogin);
+  const typedLogin = useMemo(() => normalizeInput(formData.login), [formData.login]);
+
+  const friendlyError = useMemo(
+    () => getFriendlyLoginError(error, typedLogin),
+    [error, typedLogin]
+  );
+
+  const resendTarget = useMemo(() => {
+    const normalizedLogin = normalizeEmail(formData.login);
+
+    if (normalizedLogin.includes("@")) {
+      return normalizedLogin;
+    }
+
+    return pendingVerificationEmail;
+  }, [formData.login, pendingVerificationEmail]);
 
   const isUnverifiedError =
     friendlyError === "Please verify your email before logging in";
@@ -49,21 +69,18 @@ const LoginPage = () => {
   const isEmptyFieldsError = friendlyError === "Please fill in all fields";
   const isSimpleLoginError = Boolean(friendlyError) && !isUnverifiedError;
 
-  const resendTarget = useMemo(() => {
-    const currentLogin = formData.login.trim().toLowerCase();
-
-    if (currentLogin.includes("@")) {
-      return currentLogin;
-    }
-
-    return localStorage.getItem("pendingVerificationEmail") || "";
-  }, [formData.login]);
-
   const loginInputError =
-    (isEmptyFieldsError && !formData.login.trim()) || isUserNotFoundError;
+    (isEmptyFieldsError && !typedLogin) || isUserNotFoundError;
 
   const passwordInputError =
     (isEmptyFieldsError && !formData.password.trim()) || isIncorrectPasswordError;
+
+  const clearFeedback = () => {
+    setError("");
+    setSuccess("");
+    setResendMessage("");
+    setResendError("");
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -73,37 +90,31 @@ const LoginPage = () => {
       [name]: value
     }));
 
-    setError("");
-    setSuccess("");
-    setResendMessage("");
-    setResendError("");
+    clearFeedback();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const trimmedLogin = formData.login.trim();
     const password = formData.password;
 
-    if (!trimmedLogin || !password.trim()) {
+    if (!typedLogin || !password.trim()) {
       setError("Please fill in all fields");
       return;
     }
 
     try {
       setIsLoading(true);
-      setError("");
-      setSuccess("");
-      setResendMessage("");
-      setResendError("");
+      clearFeedback();
 
       const data = await loginUser({
-        login: trimmedLogin,
+        login: typedLogin,
         password
       });
 
       localStorage.setItem("token", data.token);
       localStorage.removeItem("pendingVerificationEmail");
+      setPendingVerificationEmail("");
 
       setSuccess(data.message || "Login successful");
 
@@ -120,7 +131,10 @@ const LoginPage = () => {
       setError(message);
 
       if (responseEmail) {
-        localStorage.setItem("pendingVerificationEmail", responseEmail);
+        const normalizedResponseEmail = normalizeEmail(responseEmail);
+
+        localStorage.setItem("pendingVerificationEmail", normalizedResponseEmail);
+        setPendingVerificationEmail(normalizedResponseEmail);
       }
     } finally {
       setIsLoading(false);
@@ -142,9 +156,8 @@ const LoginPage = () => {
       const data = await resendVerificationEmail(resendTarget);
 
       localStorage.setItem("pendingVerificationEmail", resendTarget);
-      setResendMessage(
-        data.message || "Verification email resent successfully"
-      );
+      setPendingVerificationEmail(resendTarget);
+      setResendMessage(data.message || "Verification email resent successfully");
     } catch (err) {
       setResendMessage("");
       setResendError(err.message || "Failed to resend verification email.");

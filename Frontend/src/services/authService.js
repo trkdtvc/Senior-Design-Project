@@ -6,22 +6,51 @@ const JSON_HEADERS = {
 
 const normalizeEmail = (email = "") => email.trim().toLowerCase();
 
-const handleResponse = async (response) => {
-  let data = {};
-
-  try {
-    data = await response.json();
-  } catch {
-    data = {};
+const parseResponseBody = async (response) => {
+  if (response.status === 204) {
+    return null;
   }
 
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    return response.json().catch(() => ({}));
+  }
+
+  const text = await response.text().catch(() => "");
+
+  return text ? { message: text } : {};
+};
+
+const handleResponse = async (response) => {
+  const data = await parseResponseBody(response);
+
   if (!response.ok) {
-    const error = new Error(data.message || "Something went wrong");
-    error.response = { data, status: response.status };
+    const error = new Error(
+      data?.message || data?.error || "Something went wrong"
+    );
+
+    error.response = {
+      data,
+      status: response.status
+    };
+
     throw error;
   }
 
   return data;
+};
+
+const buildQueryString = (params) => {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, value);
+    }
+  });
+
+  return query.toString();
 };
 
 export const registerUser = async (userData) => {
@@ -48,16 +77,13 @@ export const loginUser = async (userData) => {
 };
 
 export const verifyEmail = async (token, email = "") => {
-  const query = new URLSearchParams({
-    token: token || ""
+  const queryString = buildQueryString({
+    token: token || "",
+    email: normalizeEmail(email)
   });
 
-  if (email) {
-    query.set("email", normalizeEmail(email));
-  }
-
   const response = await fetch(
-    `${API_BASE_URL}/auth/verify-email?${query.toString()}`
+    `${API_BASE_URL}/auth/verify-email?${queryString}`
   );
 
   return handleResponse(response);
@@ -67,7 +93,9 @@ export const resendVerificationEmail = async (email) => {
   const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ email: normalizeEmail(email) })
+    body: JSON.stringify({
+      email: normalizeEmail(email)
+    })
   });
 
   return handleResponse(response);
@@ -77,15 +105,21 @@ export const forgotPassword = async (email) => {
   const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ email: normalizeEmail(email) })
+    body: JSON.stringify({
+      email: normalizeEmail(email)
+    })
   });
 
   return handleResponse(response);
 };
 
 export const validateResetPasswordToken = async (token) => {
+  const queryString = buildQueryString({
+    token: token || ""
+  });
+
   const response = await fetch(
-    `${API_BASE_URL}/auth/reset-password/validate?token=${encodeURIComponent(token)}`
+    `${API_BASE_URL}/auth/reset-password/validate?${queryString}`
   );
 
   return handleResponse(response);
@@ -107,6 +141,7 @@ export const resetPassword = async (token, newPassword, confirmPassword) => {
 
 export const getMe = async (token) => {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    method: "GET",
     headers: {
       Authorization: `Bearer ${token}`
     }
