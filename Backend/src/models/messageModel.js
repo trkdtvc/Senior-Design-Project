@@ -31,6 +31,8 @@ const getAttachmentsByMessageIds = async (messageIds) => {
     return [];
   }
 
+  const placeholders = messageIds.map(() => "?").join(",");
+
   const [rows] = await pool.query(
     `SELECT
         attachment_id,
@@ -41,8 +43,8 @@ const getAttachmentsByMessageIds = async (messageIds) => {
         file_size,
         created_at
      FROM message_attachments
-     WHERE message_id IN (?)`,
-    [messageIds]
+     WHERE message_id IN (${placeholders})`,
+    messageIds
   );
 
   return rows;

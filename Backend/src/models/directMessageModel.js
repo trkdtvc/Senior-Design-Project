@@ -144,9 +144,10 @@ const getDirectAttachmentsByMessageIds = async (messageIds) => {
     return [];
   }
 
+  const placeholders = messageIds.map(() => "?").join(",");
+
   const [rows] = await pool.execute(
-    `
-      SELECT
+    `SELECT
         attachment_id,
         direct_message_id,
         file_url,
@@ -154,10 +155,9 @@ const getDirectAttachmentsByMessageIds = async (messageIds) => {
         file_type,
         file_size,
         created_at
-      FROM direct_message_attachments
-      WHERE direct_message_id IN (?)
-    `,
-    [messageIds]
+     FROM direct_message_attachments
+     WHERE direct_message_id IN (${placeholders})`,
+    messageIds
   );
 
   return rows;
