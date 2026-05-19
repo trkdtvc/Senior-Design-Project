@@ -8,6 +8,7 @@ const {
   deleteDirectConversationForMe
 } = require("../controllers/directMessageController");
 const { protect } = require("../middleware/authMiddleware");
+const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
 
 /**
  * @swagger
@@ -127,7 +128,12 @@ router.get(
  *       404:
  *         description: Direct conversation not found
  */
-router.post("/", protect, sendDirectMessageToConversation);
+router.post(
+  "/",
+  protect,
+  uploadMessageAttachment.single("attachment"),
+  sendDirectMessageToConversation
+);
 
 router.delete(
   "/conversations/:conversationId",

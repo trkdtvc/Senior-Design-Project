@@ -32,6 +32,32 @@ import "../styles/auth.css";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+
+const ATTACHMENT_ACCEPT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain",
+  "application/zip",
+  "application/x-zip-compressed"
+].join(",");
 
 const handleResponse = async (response) => {
   const data = await response.json().catch(() => null);
@@ -335,6 +361,172 @@ const formatBadgeCount = (count) => {
   return safeCount > 99 ? "99+" : String(safeCount);
 };
 
+const getMessageAttachments = (message) => {
+  if (Array.isArray(message?.attachments)) {
+    return message.attachments;
+  }
+
+  return [];
+};
+
+const getAttachmentUrl = (attachment) => {
+  const fileUrl =
+    attachment?.file_url ||
+    attachment?.fileUrl ||
+    attachment?.url ||
+    "";
+
+  if (!fileUrl) {
+    return "";
+  }
+
+  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
+    return fileUrl;
+  }
+
+  return `${FILE_BASE_URL}${fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`}`;
+};
+
+const getAttachmentName = (attachment) =>
+  attachment?.file_name || attachment?.fileName || "Attachment";
+
+const getAttachmentType = (attachment) =>
+  attachment?.file_type || attachment?.fileType || "";
+
+const getAttachmentSize = (attachment) =>
+  Number(attachment?.file_size || attachment?.fileSize || 0);
+
+const formatFileSize = (sizeInBytes) => {
+  if (!sizeInBytes) {
+    return "";
+  }
+
+  if (sizeInBytes < 1024 * 1024) {
+    return `${Math.round(sizeInBytes / 1024)} KB`;
+  }
+
+  return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const isImageAttachment = (attachment) =>
+  getAttachmentType(attachment).startsWith("image/");
+
+const isVideoAttachment = (attachment) =>
+  getAttachmentType(attachment).startsWith("video/");
+
+const isAudioAttachment = (attachment) =>
+  getAttachmentType(attachment).startsWith("audio/");
+
+const renderAttachmentPreview = (attachment) => {
+  const attachmentUrl = getAttachmentUrl(attachment);
+  const attachmentName = getAttachmentName(attachment);
+  const attachmentSize = formatFileSize(getAttachmentSize(attachment));
+
+  if (!attachmentUrl) {
+    return null;
+  }
+
+  if (isImageAttachment(attachment)) {
+    return (
+      <a href={attachmentUrl} target="_blank" rel="noreferrer">
+        <img
+          src={attachmentUrl}
+          alt={attachmentName}
+          style={{
+            maxWidth: "280px",
+            maxHeight: "240px",
+            borderRadius: "14px",
+            objectFit: "cover",
+            display: "block",
+            marginTop: "6px"
+          }}
+        />
+      </a>
+    );
+  }
+
+  if (isVideoAttachment(attachment)) {
+    return (
+      <video
+        controls
+        src={attachmentUrl}
+        style={{
+          maxWidth: "320px",
+          maxHeight: "240px",
+          borderRadius: "14px",
+          display: "block",
+          marginTop: "6px"
+        }}
+      />
+    );
+  }
+
+  if (isAudioAttachment(attachment)) {
+    return (
+      <audio
+        controls
+        src={attachmentUrl}
+        style={{
+          width: "280px",
+          display: "block",
+          marginTop: "6px"
+        }}
+      />
+    );
+  }
+
+  return (
+    <a
+      href={attachmentUrl}
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        maxWidth: "320px",
+        marginTop: "6px",
+        padding: "10px 12px",
+        borderRadius: "14px",
+        background: "rgba(255, 255, 255, 0.06)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        color: "#f2f3f5",
+        textDecoration: "none"
+      }}
+    >
+      <span style={{ fontSize: "22px" }}>📎</span>
+
+      <span style={{ minWidth: 0 }}>
+        <span
+          style={{
+            display: "block",
+            fontSize: "14px",
+            fontWeight: 700,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap"
+          }}
+        >
+          {attachmentName}
+        </span>
+
+        {attachmentSize ? (
+          <span
+            style={{
+              display: "block",
+              marginTop: "2px",
+              fontSize: "12px",
+              color: "rgba(255, 255, 255, 0.65)"
+            }}
+          >
+            {attachmentSize}
+          </span>
+        ) : null}
+      </span>
+    </a>
+  );
+};
+
 const MainPage = () => {
   const navigate = useNavigate();
   const {
@@ -346,6 +538,7 @@ const MainPage = () => {
   const messagesContainerRef = useRef(null);
   const messageInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const fileInputRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
   const socketRef = useRef(null);
   const previousServerIdRef = useRef(null);
@@ -417,6 +610,7 @@ const MainPage = () => {
 
   const [messageContent, setMessageContent] = useState("");
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [channelName, setChannelName] = useState("");
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [serverFormData, setServerFormData] = useState({
@@ -1907,8 +2101,10 @@ const MainPage = () => {
       return;
     }
 
-    if (!messageContent.trim()) {
-      setMessageError("Message content is required.");
+    const trimmedMessageContent = messageContent.trim();
+
+    if (!trimmedMessageContent && !selectedAttachment) {
+      setMessageError("Message content or attachment is required.");
       return;
     }
 
@@ -1925,7 +2121,8 @@ const MainPage = () => {
 
         await sendDirectMessage(token, {
           conversationId: activeConversationId,
-          content: messageContent.trim()
+          content: trimmedMessageContent,
+          attachment: selectedAttachment
         });
       } else {
         if (!activeChannelId) {
@@ -1935,12 +2132,19 @@ const MainPage = () => {
 
         await createMessage(token, {
           channel_id: activeChannelId,
-          content: messageContent.trim()
+          content: trimmedMessageContent,
+          attachment: selectedAttachment
         });
       }
 
       setMessageContent("");
       setIsEmojiPickerOpen(false);
+
+      setSelectedAttachment(null);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
 
       requestAnimationFrame(() => {
         resetMessageInputHeight();
@@ -1961,6 +2165,38 @@ const MainPage = () => {
     setMessageError("");
     e.target.style.height = "44px";
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+  };
+
+  const handleAttachmentChange = (e) => {
+    const file = e.target.files?.[0];
+
+    setMessageError("");
+
+    if (!file) {
+      setSelectedAttachment(null);
+      return;
+    }
+
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      setSelectedAttachment(null);
+      setMessageError("Attachment must be 25 MB or smaller.");
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      return;
+    }
+
+    setSelectedAttachment(file);
+  };
+
+  const handleRemoveSelectedAttachment = () => {
+    setSelectedAttachment(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleAddEmoji = (emojiData) => {
@@ -2005,7 +2241,7 @@ const MainPage = () => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
 
-      if (!messageContent.trim()) {
+      if (!messageContent.trim() && !selectedAttachment) {
         return;
       }
 
@@ -3116,6 +3352,8 @@ const MainPage = () => {
                     ? getDirectMessageContent(message)
                     : getMessageContent(message);
 
+                  const attachments = getMessageAttachments(message);
+
                   const key = isDmView
                     ? getDirectMessageId(message) || index
                     : getMessageId(message) || index;
@@ -3150,13 +3388,35 @@ const MainPage = () => {
                           </div>
                         ) : null}
 
-                        <p className="discord-message-text">
-                          {content}
+                        {content ? (
+                          <p className="discord-message-text">
+                            {content}
 
-                          {isOwnMessage && timestamp ? (
+                            {isOwnMessage && timestamp ? (
+                              <span className="discord-own-message-time">{timestamp}</span>
+                            ) : null}
+                          </p>
+                        ) : isOwnMessage && timestamp ? (
+                          <p className="discord-message-text">
                             <span className="discord-own-message-time">{timestamp}</span>
-                          ) : null}
-                        </p>
+                          </p>
+                        ) : null}
+
+                        {attachments.length > 0 ? (
+                          <div style={{ marginTop: content ? "4px" : "0" }}>
+                            {attachments.map((attachment) => (
+                              <div
+                                key={
+                                  attachment.attachment_id ||
+                                  attachment.direct_message_id ||
+                                  attachment.file_url
+                                }
+                              >
+                                {renderAttachmentPreview(attachment)}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -3173,6 +3433,54 @@ const MainPage = () => {
                 </p>
               )}
 
+              {selectedAttachment ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    marginBottom: "8px",
+                    padding: "9px 12px",
+                    borderRadius: "12px",
+                    background: "rgba(255, 255, 255, 0.06)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)"
+                  }}
+                >
+                  <span
+                    style={{
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      color: "#f2f3f5",
+                      fontSize: "14px"
+                    }}
+                  >
+                    📎 {selectedAttachment.name}{" "}
+                    <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>
+                      {formatFileSize(selectedAttachment.size)}
+                    </span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveSelectedAttachment}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#f2f3f5",
+                      cursor: "pointer",
+                      fontSize: "18px"
+                    }}
+                    aria-label="Remove attachment"
+                    title="Remove attachment"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
+
               <div className="discord-composer-shell">
                 <div
                   ref={emojiPickerRef}
@@ -3184,6 +3492,38 @@ const MainPage = () => {
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={ATTACHMENT_ACCEPT_TYPES}
+                    onChange={handleAttachmentChange}
+                    style={{ display: "none" }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={
+                      isSendingMessage ||
+                      (isDmView && !activeConversationId) ||
+                      (!isDmView && !activeChannelId)
+                    }
+                    title="Add attachment"
+                    aria-label="Add attachment"
+                    style={{
+                      width: "40px",
+                      height: "40px",
+                      border: "none",
+                      borderRadius: "12px",
+                      background: "rgba(255, 255, 255, 0.06)",
+                      color: "#f2f3f5",
+                      fontSize: "20px",
+                      cursor: "pointer",
+                      marginRight: "8px"
+                    }}
+                  >
+                    📎
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsEmojiPickerOpen((isOpen) => !isOpen)}

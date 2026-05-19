@@ -9,6 +9,57 @@ const createMessage = async (channelId, userId, content) => {
   return result;
 };
 
+const createMessageAttachment = async (messageId, attachmentData) => {
+  const [result] = await pool.query(
+    `INSERT INTO message_attachments
+      (message_id, file_url, file_name, file_type, file_size)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      messageId,
+      attachmentData.file_url,
+      attachmentData.file_name,
+      attachmentData.file_type,
+      attachmentData.file_size
+    ]
+  );
+
+  return result;
+};
+
+const getAttachmentsByMessageIds = async (messageIds) => {
+  if (!messageIds.length) {
+    return [];
+  }
+
+  const [rows] = await pool.query(
+    `SELECT
+        attachment_id,
+        message_id,
+        file_url,
+        file_name,
+        file_type,
+        file_size,
+        created_at
+     FROM message_attachments
+     WHERE message_id IN (?)`,
+    [messageIds]
+  );
+
+  return rows;
+};
+
+const attachFilesToMessages = async (messages) => {
+  const messageIds = messages.map((message) => message.message_id);
+  const attachments = await getAttachmentsByMessageIds(messageIds);
+
+  return messages.map((message) => ({
+    ...message,
+    attachments: attachments.filter(
+      (attachment) => String(attachment.message_id) === String(message.message_id)
+    )
+  }));
+};
+
 const getMessagesByChannelId = async (channelId) => {
   const [rows] = await pool.query(
     `SELECT
@@ -26,7 +77,7 @@ const getMessagesByChannelId = async (channelId) => {
     [channelId]
   );
 
-  return rows;
+  return attachFilesToMessages(rows);
 };
 
 const getChannelServerId = async (channelId) => {
@@ -67,6 +118,7 @@ const isUserMemberOfChannelServer = async (channelId, userId) => {
 
 module.exports = {
   createMessage,
+  createMessageAttachment,
   getMessagesByChannelId,
   getChannelServerId,
   getChannelServerMemberIds,

@@ -1,21 +1,35 @@
 const messageModel = require("../models/messageModel");
 
+const createAttachmentPayload = (file) => {
+  if (!file) {
+    return null;
+  }
+
+  return {
+    file_url: `/uploads/messages/${file.filename}`,
+    file_name: file.originalname,
+    file_type: file.mimetype,
+    file_size: file.size
+  };
+};
+
 const createMessage = async (req, res, next) => {
   try {
     const channelId = req.body.channel_id || req.body.channelId;
-    const content = req.body.content;
+    const content = req.body.content || "";
     const userId = req.user.user_id;
+    const attachmentPayload = createAttachmentPayload(req.file);
 
-    if (!channelId || !content) {
+    if (!channelId) {
       res.status(400);
-      throw new Error("Channel ID and content are required");
+      throw new Error("Channel ID is required");
     }
 
     const trimmedContent = content.trim();
 
-    if (!trimmedContent) {
+    if (!trimmedContent && !attachmentPayload) {
       res.status(400);
-      throw new Error("Channel ID and content are required");
+      throw new Error("Message content or attachment is required");
     }
 
     const isMember = await messageModel.isUserMemberOfChannelServer(channelId, userId);
@@ -26,15 +40,33 @@ const createMessage = async (req, res, next) => {
     }
 
     const result = await messageModel.createMessage(channelId, userId, trimmedContent);
+    const messageId = result.insertId;
+
+    let attachment = null;
+
+    if (attachmentPayload) {
+      const attachmentResult = await messageModel.createMessageAttachment(
+        messageId,
+        attachmentPayload
+      );
+
+      attachment = {
+        attachment_id: attachmentResult.insertId,
+        message_id: messageId,
+        ...attachmentPayload
+      };
+    }
+
     const serverId = await messageModel.getChannelServerId(channelId);
 
     const createdMessage = {
-      message_id: result.insertId,
+      message_id: messageId,
       channel_id: Number(channelId),
       server_id: serverId ? Number(serverId) : null,
       user_id: userId,
       username: req.user.username,
       content: trimmedContent,
+      attachments: attachment ? [attachment] : [],
       created_at: new Date().toISOString()
     };
 

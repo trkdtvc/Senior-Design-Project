@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const messageController = require("../controllers/messageController");
 const { protect } = require("../middleware/authMiddleware");
+const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
 
 /**
  * @swagger
@@ -44,7 +45,12 @@ const { protect } = require("../middleware/authMiddleware");
  *       403:
  *         description: You are not a member of this server
  */
-router.post("/", protect, messageController.createMessage);
+router.post(
+    "/",
+    protect,
+    uploadMessageAttachment.single("attachment"),
+    messageController.createMessage
+);
 
 /**
  * @swagger

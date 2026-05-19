@@ -7,8 +7,22 @@ const {
   getUserConversations,
   getMessagesByConversationId,
   createDirectMessage,
+  createDirectMessageAttachment,
   hideDirectConversationForUser
 } = require("../models/directMessageModel");
+
+const createAttachmentPayload = (file) => {
+  if (!file) {
+    return null;
+  }
+
+  return {
+    file_url: `/uploads/messages/${file.filename}`,
+    file_name: file.originalname,
+    file_type: file.mimetype,
+    file_size: file.size
+  };
+};
 
 const areUsersFriends = async (userAId, userBId) => {
   const [rows] = await pool.execute(
@@ -151,16 +165,19 @@ const getDirectMessages = async (req, res, next) => {
 const sendDirectMessageToConversation = async (req, res, next) => {
   try {
     const currentUserId = req.user.user_id;
-    const { conversationId, content } = req.body;
+    const { conversationId } = req.body;
+    const content = req.body.content || "";
+    const trimmedContent = content.trim();
+    const attachmentPayload = createAttachmentPayload(req.file);
 
     if (!conversationId) {
       res.status(400);
       throw new Error("Conversation ID is required");
     }
 
-    if (!content || !content.trim()) {
+    if (!trimmedContent && !attachmentPayload) {
       res.status(400);
-      throw new Error("Message content is required");
+      throw new Error("Message content or attachment is required");
     }
 
     const conversation = await getConversationById(conversationId);
@@ -180,8 +197,23 @@ const sendDirectMessageToConversation = async (req, res, next) => {
     const newMessage = await createDirectMessage(
       conversationId,
       currentUserId,
-      content.trim()
+      trimmedContent
     );
+
+    if (attachmentPayload) {
+      const attachmentResult = await createDirectMessageAttachment(
+        newMessage.direct_message_id,
+        attachmentPayload
+      );
+
+      newMessage.attachments = [
+        {
+          attachment_id: attachmentResult.insertId,
+          direct_message_id: newMessage.direct_message_id,
+          ...attachmentPayload
+        }
+      ];
+    }
 
     const io = req.app.get("io");
     const otherUserId =

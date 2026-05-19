@@ -49,13 +49,27 @@ export const getDirectMessages = async (token, conversationId) => {
 };
 
 export const sendDirectMessage = async (token, messageData) => {
+  const hasAttachment = !!messageData.attachment;
+
+  let body;
+  let headers = {
+    Authorization: `Bearer ${token}`
+  };
+
+  if (hasAttachment) {
+    body = new FormData();
+    body.append("conversationId", messageData.conversationId);
+    body.append("content", messageData.content || "");
+    body.append("attachment", messageData.attachment);
+  } else {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(messageData);
+  }
+
   const response = await fetch(`${API_BASE_URL}/direct-messages`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify(messageData)
+    headers,
+    body
   });
 
   return handleResponse(response);

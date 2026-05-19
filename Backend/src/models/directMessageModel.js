@@ -139,6 +139,43 @@ const getUserConversations = async (userId) => {
   return rows;
 };
 
+const getDirectAttachmentsByMessageIds = async (messageIds) => {
+  if (!messageIds.length) {
+    return [];
+  }
+
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        attachment_id,
+        direct_message_id,
+        file_url,
+        file_name,
+        file_type,
+        file_size,
+        created_at
+      FROM direct_message_attachments
+      WHERE direct_message_id IN (?)
+    `,
+    [messageIds]
+  );
+
+  return rows;
+};
+
+const attachFilesToDirectMessages = async (messages) => {
+  const messageIds = messages.map((message) => message.direct_message_id);
+  const attachments = await getDirectAttachmentsByMessageIds(messageIds);
+
+  return messages.map((message) => ({
+    ...message,
+    attachments: attachments.filter(
+      (attachment) =>
+        String(attachment.direct_message_id) === String(message.direct_message_id)
+    )
+  }));
+};
+
 const getMessagesByConversationId = async (conversationId, userId) => {
   const [rows] = await pool.execute(
     `
@@ -165,7 +202,7 @@ const getMessagesByConversationId = async (conversationId, userId) => {
     [userId, conversationId]
   );
 
-  return rows;
+  return attachFilesToDirectMessages(rows);
 };
 
 const createDirectMessage = async (conversationId, senderId, content) => {
@@ -204,7 +241,29 @@ const createDirectMessage = async (conversationId, senderId, content) => {
     [result.insertId]
   );
 
-  return rows[0];
+  return {
+    ...rows[0],
+    attachments: []
+  };
+};
+
+const createDirectMessageAttachment = async (directMessageId, attachmentData) => {
+  const [result] = await pool.execute(
+    `
+      INSERT INTO direct_message_attachments
+        (direct_message_id, file_url, file_name, file_type, file_size)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    [
+      directMessageId,
+      attachmentData.file_url,
+      attachmentData.file_name,
+      attachmentData.file_type,
+      attachmentData.file_size
+    ]
+  );
+
+  return result;
 };
 
 const hideDirectConversationForUser = async (conversationId, userId) => {
@@ -249,5 +308,6 @@ module.exports = {
   getUserConversations,
   getMessagesByConversationId,
   createDirectMessage,
+  createDirectMessageAttachment,
   hideDirectConversationForUser
 };
