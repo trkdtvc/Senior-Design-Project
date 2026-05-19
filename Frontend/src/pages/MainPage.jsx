@@ -29,6 +29,7 @@ import {
 } from "../services/serverInviteService";
 import { connectSocket, disconnectSocket } from "../services/socket";
 import "../styles/auth.css";
+import EmojiPicker, { Theme } from "emoji-picker-react";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -344,6 +345,7 @@ const MainPage = () => {
 
   const messagesContainerRef = useRef(null);
   const messageInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
   const socketRef = useRef(null);
   const previousServerIdRef = useRef(null);
@@ -414,6 +416,7 @@ const MainPage = () => {
   const [deleteServerError, setDeleteServerError] = useState("");
 
   const [messageContent, setMessageContent] = useState("");
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [serverFormData, setServerFormData] = useState({
@@ -1365,9 +1368,16 @@ const MainPage = () => {
   }, [displayedMessages]);
 
   useEffect(() => {
-    const handleGlobalClick = () => {
+    const handleGlobalClick = (event) => {
       setOpenChannelMenuId(null);
       setOpenConversationMenuId(null);
+
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target)
+      ) {
+        setIsEmojiPickerOpen(false);
+      }
     };
 
     window.addEventListener("click", handleGlobalClick);
@@ -1930,6 +1940,7 @@ const MainPage = () => {
       }
 
       setMessageContent("");
+      setIsEmojiPickerOpen(false);
 
       requestAnimationFrame(() => {
         resetMessageInputHeight();
@@ -1950,6 +1961,44 @@ const MainPage = () => {
     setMessageError("");
     e.target.style.height = "44px";
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+  };
+
+  const handleAddEmoji = (emojiData) => {
+    const emoji = emojiData?.emoji;
+
+    if (!emoji) {
+      return;
+    }
+
+    setMessageError("");
+
+    setMessageContent((previousContent) => {
+      const input = messageInputRef.current;
+
+      if (!input) {
+        return `${previousContent}${emoji}`;
+      }
+
+      const selectionStart = input.selectionStart ?? previousContent.length;
+      const selectionEnd = input.selectionEnd ?? previousContent.length;
+
+      const nextContent =
+        previousContent.slice(0, selectionStart) +
+        emoji +
+        previousContent.slice(selectionEnd);
+
+      requestAnimationFrame(() => {
+        input.focus();
+
+        const nextCursorPosition = selectionStart + emoji.length;
+        input.setSelectionRange(nextCursorPosition, nextCursorPosition);
+
+        input.style.height = "44px";
+        input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+      });
+
+      return nextContent;
+    });
   };
 
   const handleMessageKeyDown = (e) => {
@@ -3125,6 +3174,64 @@ const MainPage = () => {
               )}
 
               <div className="discord-composer-shell">
+                <div
+                  ref={emojiPickerRef}
+                  style={{
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    flexShrink: 0
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIsEmojiPickerOpen((isOpen) => !isOpen)}
+                    disabled={
+                      (isDmView && !activeConversationId) ||
+                      (!isDmView && !activeChannelId)
+                    }
+                    title="Add emoji"
+                    aria-label="Add emoji"
+                    style={{
+                      width: "40px",
+                      height: "40px",
+                      border: "none",
+                      borderRadius: "12px",
+                      background: "rgba(255, 255, 255, 0.06)",
+                      color: "#f2f3f5",
+                      fontSize: "20px",
+                      cursor: "pointer",
+                      marginRight: "8px"
+                    }}
+                  >
+                    😊
+                  </button>
+
+                  {isEmojiPickerOpen ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: "52px",
+                        left: "0",
+                        zIndex: 50
+                      }}
+                    >
+                      <EmojiPicker
+                        theme={Theme.DARK}
+                        onEmojiClick={handleAddEmoji}
+                        previewConfig={{
+                          showPreview: false
+                        }}
+                        searchDisabled={false}
+                        skinTonesDisabled={false}
+                        height={420}
+                        width={330}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+
                 <textarea
                   ref={messageInputRef}
                   className="message-input discord-composer-input"
