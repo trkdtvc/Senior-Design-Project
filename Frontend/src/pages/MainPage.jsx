@@ -13,7 +13,9 @@ import {
 } from "../services/channelService";
 import {
   getChannelMessages,
-  createMessage
+  createMessage,
+  updateMessage,
+  deleteMessage
 } from "../services/messageService";
 import { getServerMembers } from "../services/serverMemberService";
 import {
@@ -21,6 +23,8 @@ import {
   getOrCreateDirectConversation,
   getDirectMessages,
   sendDirectMessage,
+  updateDirectMessage,
+  deleteDirectMessage,
   deleteDirectConversation
 } from "../services/directMessageService";
 import {
@@ -176,6 +180,9 @@ const getMessageContent = (message) =>
 const getMessageTimestamp = (message) =>
   message?.created_at || message?.createdAt || message?.timestamp || null;
 
+const getMessageUpdatedTimestamp = (message) =>
+  message?.updated_at || message?.updatedAt || null;
+
 const getMemberId = (member) =>
   member?.member_id || member?.id || member?.memberId || null;
 
@@ -273,6 +280,55 @@ const getDirectMessageContent = (message) =>
 
 const getDirectMessageTimestamp = (message) =>
   message?.created_at || message?.createdAt || null;
+
+const getDirectMessageUpdatedTimestamp = (message) =>
+  message?.updated_at || message?.updatedAt || null;
+
+const getReplyPreview = (message) =>
+  message?.reply_to || message?.replyTo || null;
+
+const getReplyPreviewAuthor = (replyPreview) =>
+  replyPreview?.username ||
+  replyPreview?.sender_username ||
+  replyPreview?.senderUsername ||
+  "Unknown user";
+
+const getReplyPreviewContent = (replyPreview) =>
+  replyPreview?.content ||
+  replyPreview?.message_content ||
+  replyPreview?.message ||
+  "";
+
+const formatReplyPreviewContent = (content) => {
+  const safeContent = String(content || "").trim();
+
+  if (!safeContent) {
+    return "Attachment";
+  }
+
+  return safeContent.length > 90
+    ? `${safeContent.slice(0, 90)}...`
+    : safeContent;
+};
+
+const isEditedMessage = (message, createdAt, updatedAt) => {
+  if (message?.edited || message?.is_edited || message?.isEdited) {
+    return true;
+  }
+
+  if (!createdAt || !updatedAt) {
+    return false;
+  }
+
+  const createdTime = new Date(createdAt).getTime();
+  const updatedTime = new Date(updatedAt).getTime();
+
+  if (Number.isNaN(createdTime) || Number.isNaN(updatedTime)) {
+    return false;
+  }
+
+  return updatedTime > createdTime;
+};
 
 const getFriendRequestId = (request) =>
   request?.request_id || request?.id || request?.friend_request_id || null;
@@ -581,6 +637,11 @@ const MainPage = () => {
   const [openConversationMenuId, setOpenConversationMenuId] = useState(null);
   const [isDeletingConversation, setIsDeletingConversation] = useState(false);
   const [directConversationError, setDirectConversationError] = useState("");
+  const [deletingMessageKey, setDeletingMessageKey] = useState(null);
+  const [editingMessageKey, setEditingMessageKey] = useState(null);
+  const [editingMessageContent, setEditingMessageContent] = useState("");
+  const [savingEditedMessageKey, setSavingEditedMessageKey] = useState(null);
+  const [selectedReplyMessage, setSelectedReplyMessage] = useState(null);
 
   const [activeServerId, setActiveServerId] = useState(null);
   const [activeChannelId, setActiveChannelId] = useState(null);
@@ -834,6 +895,16 @@ const MainPage = () => {
     }
 
     messageInputRef.current.style.height = "44px";
+  };
+
+  const resetMessageEditingState = () => {
+    setEditingMessageKey(null);
+    setEditingMessageContent("");
+    setSavingEditedMessageKey(null);
+  };
+
+  const resetMessageReplyState = () => {
+    setSelectedReplyMessage(null);
   };
 
   const loadServers = useCallback(async (token) => {
@@ -1418,6 +1489,55 @@ const MainPage = () => {
       });
     };
 
+    const handleMessageDeleted = (deletedMessage) => {
+      const deletedMessageId =
+        deletedMessage?.message_id ||
+        deletedMessage?.messageId ||
+        deletedMessage?.id;
+
+      if (!deletedMessageId) {
+        return;
+      }
+
+      setChannelMessages((prevMessages) =>
+        prevMessages.filter(
+          (message) => String(getMessageId(message)) !== String(deletedMessageId)
+        )
+      );
+    };
+
+    const handleMessageUpdated = (updatedMessage) => {
+      const updatedMessageId =
+        updatedMessage?.message_id ||
+        updatedMessage?.messageId ||
+        updatedMessage?.id;
+
+      if (!updatedMessageId) {
+        return;
+      }
+
+      setChannelMessages((prevMessages) =>
+        prevMessages.map((message) => {
+          if (String(getMessageId(message)) !== String(updatedMessageId)) {
+            return message;
+          }
+
+          const existingAttachments = getMessageAttachments(message);
+          const incomingAttachments = getMessageAttachments(updatedMessage);
+
+          return {
+            ...message,
+            ...updatedMessage,
+            content: getMessageContent(updatedMessage),
+            attachments: existingAttachments.length
+              ? existingAttachments
+              : incomingAttachments,
+            edited: true
+          };
+        })
+      );
+    };
+
     const handleDirectMessage = (payload) => {
       if (!payload?.conversation_id || !payload?.directMessage) {
         return;
@@ -1458,6 +1578,69 @@ const MainPage = () => {
           };
         });
       }
+
+      const token = getAuthToken();
+
+      if (token) {
+        loadDirectConversationList(token);
+      }
+    };
+
+    const handleDirectMessageDeleted = (deletedMessage) => {
+      const deletedMessageId =
+        deletedMessage?.direct_message_id ||
+        deletedMessage?.directMessageId ||
+        deletedMessage?.id;
+
+      if (!deletedMessageId) {
+        return;
+      }
+
+      setDirectMessages((prevMessages) =>
+        prevMessages.filter(
+          (message) =>
+            String(getDirectMessageId(message)) !== String(deletedMessageId)
+        )
+      );
+
+      const token = getAuthToken();
+
+      if (token) {
+        loadDirectConversationList(token);
+      }
+    };
+
+    const handleDirectMessageUpdated = (payload) => {
+      const updatedMessage = payload?.directMessage || payload;
+      const updatedMessageId =
+        updatedMessage?.direct_message_id ||
+        updatedMessage?.directMessageId ||
+        updatedMessage?.id;
+
+      if (!updatedMessageId) {
+        return;
+      }
+
+      setDirectMessages((prevMessages) =>
+        prevMessages.map((message) => {
+          if (String(getDirectMessageId(message)) !== String(updatedMessageId)) {
+            return message;
+          }
+
+          const existingAttachments = getMessageAttachments(message);
+          const incomingAttachments = getMessageAttachments(updatedMessage);
+
+          return {
+            ...message,
+            ...updatedMessage,
+            content: getDirectMessageContent(updatedMessage),
+            attachments: existingAttachments.length
+              ? existingAttachments
+              : incomingAttachments,
+            edited: true
+          };
+        })
+      );
 
       const token = getAuthToken();
 
@@ -1564,7 +1747,11 @@ const MainPage = () => {
 
     socket.on("presence_update", handlePresenceUpdate);
     socket.on("new_message", handleNewMessage);
+    socket.on("message_updated", handleMessageUpdated);
+    socket.on("message_deleted", handleMessageDeleted);
     socket.on("direct_message", handleDirectMessage);
+    socket.on("direct_message_updated", handleDirectMessageUpdated);
+    socket.on("direct_message_deleted", handleDirectMessageDeleted);
     socket.on("friend_removed", handleFriendRemoved);
     socket.on("channel_message_notification", handleChannelMessageNotification);
     socket.on("friend_request_received", handleFriendRequestReceived);
@@ -1572,7 +1759,11 @@ const MainPage = () => {
     return () => {
       socket.off("presence_update", handlePresenceUpdate);
       socket.off("new_message", handleNewMessage);
+      socket.off("message_updated", handleMessageUpdated);
+      socket.off("message_deleted", handleMessageDeleted);
       socket.off("direct_message", handleDirectMessage);
+      socket.off("direct_message_updated", handleDirectMessageUpdated);
+      socket.off("direct_message_deleted", handleDirectMessageDeleted);
       socket.off("friend_removed", handleFriendRemoved);
       socket.off("channel_message_notification", handleChannelMessageNotification);
       socket.off("friend_request_received", handleFriendRequestReceived);
@@ -1659,6 +1850,8 @@ const MainPage = () => {
     setAddFriendSuccess("");
     setFriendRequestsError("");
     setRemoveFriendError("");
+    resetMessageEditingState();
+    resetMessageReplyState();
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -1677,6 +1870,8 @@ const MainPage = () => {
     setAddFriendSuccess("");
     setFriendRequestsError("");
     setRemoveFriendError("");
+    resetMessageEditingState();
+    resetMessageReplyState();
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -1696,6 +1891,8 @@ const MainPage = () => {
     setFriendRequestsError("");
     setRemoveFriendError("");
     setIsCreateServerModalOpen(false);
+    resetMessageEditingState();
+    resetMessageReplyState();
     navigate(`/server/${serverId}`);
 
     requestAnimationFrame(() => {
@@ -1713,6 +1910,8 @@ const MainPage = () => {
     setDeleteChannelError("");
     setMessageError("");
     setMessageContent("");
+    resetMessageEditingState();
+    resetMessageReplyState();
     navigate(`/server/${activeServerId}/channel/${channelId}`);
 
     requestAnimationFrame(() => {
@@ -1731,6 +1930,8 @@ const MainPage = () => {
     setAddFriendSuccess("");
     setFriendRequestsError("");
     setRemoveFriendError("");
+    resetMessageEditingState();
+    resetMessageReplyState();
     navigate(`/dm/${conversationId}`);
 
     requestAnimationFrame(() => {
@@ -2135,6 +2336,189 @@ const MainPage = () => {
     }
   };
 
+  const handleStartReplyingToMessage = (message) => {
+    const messageId = isDmView
+      ? getDirectMessageId(message)
+      : getMessageId(message);
+
+    if (!messageId) {
+      return;
+    }
+
+    resetMessageEditingState();
+    setMessageError("");
+    setSelectedReplyMessage(message);
+
+    requestAnimationFrame(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.focus();
+      }
+    });
+  };
+
+  const handleCancelReplyingToMessage = () => {
+    resetMessageReplyState();
+  };
+
+  const handleStartEditingMessage = (message) => {
+    const messageId = isDmView
+      ? getDirectMessageId(message)
+      : getMessageId(message);
+
+    if (!messageId) {
+      return;
+    }
+
+    const content = isDmView
+      ? getDirectMessageContent(message)
+      : getMessageContent(message);
+
+    setMessageError("");
+    resetMessageReplyState();
+    setEditingMessageKey(`${isDmView ? "dm" : "channel"}-${messageId}`);
+    setEditingMessageContent(content);
+  };
+
+  const handleCancelEditingMessage = () => {
+    resetMessageEditingState();
+  };
+
+  const handleSaveEditedMessage = async (message) => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const messageId = isDmView
+      ? getDirectMessageId(message)
+      : getMessageId(message);
+
+    if (!messageId) {
+      return;
+    }
+
+    const trimmedContent = editingMessageContent.trim();
+
+    if (!trimmedContent) {
+      setMessageError("Message content is required.");
+      return;
+    }
+
+    const messageKey = `${isDmView ? "dm" : "channel"}-${messageId}`;
+
+    try {
+      setSavingEditedMessageKey(messageKey);
+      setMessageError("");
+
+      if (isDmView) {
+        const response = await updateDirectMessage(token, messageId, trimmedContent);
+        const updatedMessage =
+          response?.directMessage || response?.data || response;
+
+        setDirectMessages((prevMessages) =>
+          prevMessages.map((existingMessage) => {
+            if (
+              String(getDirectMessageId(existingMessage)) !== String(messageId)
+            ) {
+              return existingMessage;
+            }
+
+            return {
+              ...existingMessage,
+              ...updatedMessage,
+              content: getDirectMessageContent(updatedMessage),
+              attachments: getMessageAttachments(existingMessage),
+              edited: true
+            };
+          })
+        );
+      } else {
+        const response = await updateMessage(token, messageId, trimmedContent);
+        const updatedMessage = response?.data || response?.message || response;
+
+        setChannelMessages((prevMessages) =>
+          prevMessages.map((existingMessage) => {
+            if (String(getMessageId(existingMessage)) !== String(messageId)) {
+              return existingMessage;
+            }
+
+            return {
+              ...existingMessage,
+              ...updatedMessage,
+              content: getMessageContent(updatedMessage),
+              attachments: getMessageAttachments(existingMessage),
+              edited: true
+            };
+          })
+        );
+      }
+
+      resetMessageEditingState();
+    } catch (error) {
+      setMessageError(error.message || "Failed to edit message.");
+    } finally {
+      setSavingEditedMessageKey(null);
+    }
+  };
+
+  const handleDeleteChatMessage = async (message) => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const messageId = isDmView
+      ? getDirectMessageId(message)
+      : getMessageId(message);
+
+    if (!messageId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this message? This cannot be undone."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const nextDeletingMessageKey = `${isDmView ? "dm" : "channel"}-${messageId}`;
+
+    try {
+      setDeletingMessageKey(nextDeletingMessageKey);
+      setMessageError("");
+
+      if (isDmView) {
+        await deleteDirectMessage(token, messageId);
+
+        setDirectMessages((prevMessages) =>
+          prevMessages.filter(
+            (existingMessage) =>
+              String(getDirectMessageId(existingMessage)) !== String(messageId)
+          )
+        );
+      } else {
+        await deleteMessage(token, messageId);
+
+        setChannelMessages((prevMessages) =>
+          prevMessages.filter(
+            (existingMessage) =>
+              String(getMessageId(existingMessage)) !== String(messageId)
+          )
+        );
+      }
+    } catch (error) {
+      setMessageError(error.message || "Failed to delete message.");
+    } finally {
+      setDeletingMessageKey(null);
+    }
+  };
+
   const handleSendMessage = async (e) => {
     if (e) {
       e.preventDefault();
@@ -2154,6 +2538,12 @@ const MainPage = () => {
       return;
     }
 
+    const replyToMessageId = selectedReplyMessage
+      ? isDmView
+        ? getDirectMessageId(selectedReplyMessage)
+        : getMessageId(selectedReplyMessage)
+      : null;
+
     try {
       setIsSendingMessage(true);
       setMessageError("");
@@ -2168,7 +2558,8 @@ const MainPage = () => {
         await sendDirectMessage(token, {
           conversationId: activeConversationId,
           content: trimmedMessageContent,
-          attachment: selectedAttachment
+          attachment: selectedAttachment,
+          reply_to_direct_message_id: replyToMessageId
         });
       } else {
         if (!activeChannelId) {
@@ -2179,12 +2570,14 @@ const MainPage = () => {
         await createMessage(token, {
           channel_id: activeChannelId,
           content: trimmedMessageContent,
-          attachment: selectedAttachment
+          attachment: selectedAttachment,
+          reply_to_message_id: replyToMessageId
         });
       }
 
       setMessageContent("");
       setIsEmojiPickerOpen(false);
+      resetMessageReplyState();
 
       setSelectedAttachment(null);
 
@@ -3380,9 +3773,21 @@ const MainPage = () => {
                 className="message-list discord-message-list"
               >
                 {displayedMessages.map((message, index) => {
-                  const timestamp = isDmView
-                    ? formatTimestamp(getDirectMessageTimestamp(message))
-                    : formatTimestamp(getMessageTimestamp(message));
+                  const createdTimestampValue = isDmView
+                    ? getDirectMessageTimestamp(message)
+                    : getMessageTimestamp(message);
+
+                  const updatedTimestampValue = isDmView
+                    ? getDirectMessageUpdatedTimestamp(message)
+                    : getMessageUpdatedTimestamp(message);
+
+                  const timestamp = formatTimestamp(createdTimestampValue);
+
+                  const messageWasEdited = isEditedMessage(
+                    message,
+                    createdTimestampValue,
+                    updatedTimestampValue
+                  );
 
                   const author = isDmView
                     ? getDirectMessageAuthor(message)
@@ -3391,6 +3796,8 @@ const MainPage = () => {
                   const content = isDmView
                     ? getDirectMessageContent(message)
                     : getMessageContent(message);
+
+                  const replyPreview = getReplyPreview(message);
 
                   const attachments = getMessageAttachments(message);
 
@@ -3406,6 +3813,15 @@ const MainPage = () => {
                     currentUserId &&
                     String(messageAuthorId) === String(currentUserId);
 
+                  const messageIdForDelete = isDmView
+                    ? getDirectMessageId(message)
+                    : getMessageId(message);
+
+                  const messageDeleteKey = `${isDmView ? "dm" : "channel"}-${messageIdForDelete}`;
+                  const isThisMessageDeleting = deletingMessageKey === messageDeleteKey;
+                  const isThisMessageEditing = editingMessageKey === messageDeleteKey;
+                  const isThisMessageSaving = savingEditedMessageKey === messageDeleteKey;
+
                   return (
                     <div
                       key={key}
@@ -3418,6 +3834,117 @@ const MainPage = () => {
                       ) : null}
 
                       <div className="discord-message-body">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: isOwnMessage ? "flex-end" : "flex-start",
+                            gap: "6px",
+                            marginBottom: "4px"
+                          }}
+                        >
+                          {!isThisMessageEditing ? (
+                            <button
+                              type="button"
+                              onClick={() => handleStartReplyingToMessage(message)}
+                              disabled={!messageIdForDelete}
+                              style={{
+                                border: "none",
+                                borderRadius: "999px",
+                                background: "rgba(255, 255, 255, 0.08)",
+                                color: "#f2f3f5",
+                                cursor: !messageIdForDelete ? "not-allowed" : "pointer",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                padding: "4px 8px",
+                                opacity: !messageIdForDelete ? 0.65 : 1
+                              }}
+                            >
+                              Reply
+                            </button>
+                          ) : null}
+
+                          {isOwnMessage && !isThisMessageEditing ? (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditingMessage(message)}
+                              disabled={!messageIdForDelete}
+                              style={{
+                                border: "none",
+                                borderRadius: "999px",
+                                background: "rgba(88, 101, 242, 0.18)",
+                                color: "#c7d2ff",
+                                cursor: !messageIdForDelete ? "not-allowed" : "pointer",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                padding: "4px 8px",
+                                opacity: !messageIdForDelete ? 0.65 : 1
+                              }}
+                            >
+                              Edit
+                            </button>
+                          ) : null}
+
+                          {isOwnMessage ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteChatMessage(message)}
+                              disabled={isThisMessageDeleting || !messageIdForDelete}
+                              style={{
+                                border: "none",
+                                borderRadius: "999px",
+                                background: "rgba(237, 66, 69, 0.18)",
+                                color: "#ffb3b6",
+                                cursor:
+                                  isThisMessageDeleting || !messageIdForDelete
+                                    ? "not-allowed"
+                                    : "pointer",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                padding: "4px 8px",
+                                opacity: isThisMessageDeleting || !messageIdForDelete ? 0.65 : 1
+                              }}
+                            >
+                              {isThisMessageDeleting ? "Deleting..." : "Delete"}
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {replyPreview ? (
+                          <div
+                            style={{
+                              maxWidth: "420px",
+                              marginBottom: "6px",
+                              padding: "7px 10px",
+                              borderLeft: "3px solid rgba(88, 101, 242, 0.9)",
+                              borderRadius: "10px",
+                              background: "rgba(255, 255, 255, 0.05)",
+                              color: "rgba(255, 255, 255, 0.78)"
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "12px",
+                                fontWeight: 800,
+                                color: "#c7d2ff",
+                                marginBottom: "2px"
+                              }}
+                            >
+                              Replying to {getReplyPreviewAuthor(replyPreview)}
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: "12px",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              }}
+                            >
+                              {formatReplyPreviewContent(getReplyPreviewContent(replyPreview))}
+                            </div>
+                          </div>
+                        ) : null}
+
                         {!isOwnMessage ? (
                           <div className="discord-message-meta">
                             <span className="discord-message-author">{author}</span>
@@ -3425,20 +3952,116 @@ const MainPage = () => {
                             {timestamp && (
                               <span className="discord-message-time">{timestamp}</span>
                             )}
+
+                            {messageWasEdited ? (
+                              <span className="discord-message-time">edited</span>
+                            ) : null}
                           </div>
                         ) : null}
 
-                        {content ? (
+                        {isThisMessageEditing ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px"
+                            }}
+                          >
+                            <textarea
+                              value={editingMessageContent}
+                              onChange={(e) => {
+                                setEditingMessageContent(e.target.value);
+                                setMessageError("");
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSaveEditedMessage(message);
+                                }
+
+                                if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  handleCancelEditingMessage();
+                                }
+                              }}
+                              style={{
+                                width: "100%",
+                                minHeight: "70px",
+                                resize: "vertical",
+                                border: "1px solid rgba(255, 255, 255, 0.12)",
+                                borderRadius: "12px",
+                                background: "rgba(255, 255, 255, 0.06)",
+                                color: "#f2f3f5",
+                                padding: "10px 12px",
+                                outline: "none",
+                                font: "inherit"
+                              }}
+                              autoFocus
+                            />
+
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "flex-end",
+                                gap: "8px"
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={handleCancelEditingMessage}
+                                disabled={isThisMessageSaving}
+                                style={{
+                                  border: "none",
+                                  borderRadius: "999px",
+                                  background: "rgba(255, 255, 255, 0.08)",
+                                  color: "#f2f3f5",
+                                  cursor: isThisMessageSaving ? "not-allowed" : "pointer",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  padding: "6px 10px",
+                                  opacity: isThisMessageSaving ? 0.65 : 1
+                                }}
+                              >
+                                Cancel
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEditedMessage(message)}
+                                disabled={isThisMessageSaving}
+                                style={{
+                                  border: "none",
+                                  borderRadius: "999px",
+                                  background: "rgba(88, 101, 242, 0.85)",
+                                  color: "#ffffff",
+                                  cursor: isThisMessageSaving ? "not-allowed" : "pointer",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  padding: "6px 10px",
+                                  opacity: isThisMessageSaving ? 0.65 : 1
+                                }}
+                              >
+                                {isThisMessageSaving ? "Saving..." : "Save"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : content ? (
                           <p className="discord-message-text">
                             {content}
 
                             {isOwnMessage && timestamp ? (
-                              <span className="discord-own-message-time">{timestamp}</span>
+                              <span className="discord-own-message-time">
+                                {timestamp}
+                                {messageWasEdited ? " · edited" : ""}
+                              </span>
                             ) : null}
                           </p>
                         ) : isOwnMessage && timestamp ? (
                           <p className="discord-message-text">
-                            <span className="discord-own-message-time">{timestamp}</span>
+                            <span className="discord-own-message-time">
+                              {timestamp}
+                              {messageWasEdited ? " · edited" : ""}
+                            </span>
                           </p>
                         ) : null}
 
@@ -3472,6 +4095,71 @@ const MainPage = () => {
                   {messageError}
                 </p>
               )}
+
+              {selectedReplyMessage ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    marginBottom: "8px",
+                    padding: "9px 12px",
+                    borderRadius: "12px",
+                    background: "rgba(88, 101, 242, 0.12)",
+                    border: "1px solid rgba(88, 101, 242, 0.35)"
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        color: "#c7d2ff",
+                        marginBottom: "2px"
+                      }}
+                    >
+                      Replying to{" "}
+                      {isDmView
+                        ? getDirectMessageAuthor(selectedReplyMessage)
+                        : getMessageAuthor(selectedReplyMessage)}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        color: "rgba(255, 255, 255, 0.78)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {formatReplyPreviewContent(
+                        isDmView
+                          ? getDirectMessageContent(selectedReplyMessage)
+                          : getMessageContent(selectedReplyMessage)
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCancelReplyingToMessage}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#f2f3f5",
+                      cursor: "pointer",
+                      fontSize: "18px",
+                      flexShrink: 0
+                    }}
+                    aria-label="Cancel reply"
+                    title="Cancel reply"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
 
               {selectedAttachment ? (
                 <div

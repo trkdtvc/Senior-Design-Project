@@ -5,6 +5,8 @@ const {
   getMyDirectConversations,
   getDirectMessages,
   sendDirectMessageToConversation,
+  updateDirectMessage,
+  deleteDirectMessage,
   deleteDirectConversationForMe
 } = require("../controllers/directMessageController");
 const { protect } = require("../middleware/authMiddleware");
@@ -25,29 +27,6 @@ const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
  *     tags: [Direct Messages]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - friendId
- *             properties:
- *               friendId:
- *                 type: integer
- *                 example: 2
- *     responses:
- *       200:
- *         description: Direct conversation already exists
- *       201:
- *         description: Direct conversation created successfully
- *       400:
- *         description: Invalid input
- *       403:
- *         description: Users are not confirmed friends
- *       404:
- *         description: Friend user not found
  */
 router.post("/conversations", protect, getOrCreateDirectConversation);
 
@@ -59,9 +38,6 @@ router.post("/conversations", protect, getOrCreateDirectConversation);
  *     tags: [Direct Messages]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Direct conversations fetched successfully
  */
 router.get("/conversations", protect, getMyDirectConversations);
 
@@ -73,20 +49,6 @@ router.get("/conversations", protect, getMyDirectConversations);
  *     tags: [Direct Messages]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: conversationId
- *         required: true
- *         schema:
- *           type: integer
- *         example: 1
- *     responses:
- *       200:
- *         description: Direct messages fetched successfully
- *       403:
- *         description: User is not part of the conversation
- *       404:
- *         description: Direct conversation not found
  */
 router.get(
   "/conversations/:conversationId/messages",
@@ -105,12 +67,11 @@ router.get(
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required:
  *               - conversationId
- *               - content
  *             properties:
  *               conversationId:
  *                 type: integer
@@ -118,15 +79,24 @@ router.get(
  *               content:
  *                 type: string
  *                 example: Hello bro
+ *               reply_to_direct_message_id:
+ *                 type: integer
+ *                 nullable: true
+ *                 example: 5
+ *               attachment:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       201:
  *         description: Direct message sent successfully
  *       400:
- *         description: Invalid input
+ *         description: Invalid input or invalid reply target
+ *       401:
+ *         description: Not authorized
  *       403:
  *         description: User is not part of the conversation
  *       404:
- *         description: Direct conversation not found
+ *         description: Direct conversation or reply target message not found
  */
 router.post(
   "/",
@@ -135,6 +105,75 @@ router.post(
   sendDirectMessageToConversation
 );
 
+/**
+ * @swagger
+ * /api/direct-messages/messages/{directMessageId}:
+ *   put:
+ *     summary: Edit your own direct message
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: directMessageId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the direct message
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - content
+ *             properties:
+ *               content:
+ *                 type: string
+ *                 example: Edited direct message content
+ *     responses:
+ *       200:
+ *         description: Direct message updated successfully
+ *       400:
+ *         description: Message content is required
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: You can only edit your own direct messages
+ *       404:
+ *         description: Direct message not found
+ */
+router.put(
+  "/messages/:directMessageId",
+  protect,
+  updateDirectMessage
+);
+
+/**
+ * @swagger
+ * /api/direct-messages/messages/{directMessageId}:
+ *   delete:
+ *     summary: Delete your own direct message
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete(
+  "/messages/:directMessageId",
+  protect,
+  deleteDirectMessage
+);
+
+/**
+ * @swagger
+ * /api/direct-messages/conversations/{conversationId}:
+ *   delete:
+ *     summary: Delete a direct conversation for the authenticated user only
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.delete(
   "/conversations/:conversationId",
   protect,

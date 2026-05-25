@@ -13,10 +13,27 @@ const createAttachmentPayload = (file) => {
   };
 };
 
+const buildReplyPreview = (message) => {
+  if (!message?.reply_to_message_id) {
+    return null;
+  }
+
+  return {
+    message_id: Number(message.reply_to_message_id),
+    user_id: message.reply_to_user_id ? Number(message.reply_to_user_id) : null,
+    username: message.reply_to_username || "Unknown user",
+    content: message.reply_to_content || ""
+  };
+};
+
 const createMessage = async (req, res, next) => {
   try {
     const channelId = req.body.channel_id || req.body.channelId;
     const content = req.body.content || "";
+    const replyToMessageId =
+      req.body.reply_to_message_id ||
+      req.body.replyToMessageId ||
+      null;
     const userId = req.user.user_id;
     const attachmentPayload = createAttachmentPayload(req.file);
 
@@ -39,7 +56,28 @@ const createMessage = async (req, res, next) => {
       throw new Error("You are not a member of this channel's server");
     }
 
-    const result = await messageModel.createMessage(channelId, userId, trimmedContent);
+    let replyToMessage = null;
+
+    if (replyToMessageId) {
+      replyToMessage = await messageModel.getMessageById(replyToMessageId);
+
+      if (!replyToMessage) {
+        res.status(404);
+        throw new Error("Reply target message not found");
+      }
+
+      if (String(replyToMessage.channel_id) !== String(channelId)) {
+        res.status(400);
+        throw new Error("You can only reply to messages in the same channel");
+      }
+    }
+
+    const result = await messageModel.createMessage(
+      channelId,
+      userId,
+      trimmedContent,
+      replyToMessageId || null
+    );
     const messageId = result.insertId;
 
     let attachment = null;
@@ -58,6 +96,7 @@ const createMessage = async (req, res, next) => {
     }
 
     const serverId = await messageModel.getChannelServerId(channelId);
+    const fullCreatedMessage = await messageModel.getMessageById(messageId);
 
     const createdMessage = {
       message_id: messageId,
@@ -66,8 +105,11 @@ const createMessage = async (req, res, next) => {
       user_id: userId,
       username: req.user.username,
       content: trimmedContent,
+      reply_to_message_id: replyToMessageId ? Number(replyToMessageId) : null,
+      reply_to: buildReplyPreview(fullCreatedMessage),
       attachments: attachment ? [attachment] : [],
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      updated_at: null
     };
 
     const io = req.app.get("io");
@@ -112,7 +154,141 @@ const getChannelMessages = async (req, res, next) => {
 
     const messages = await messageModel.getMessagesByChannelId(channelId);
 
-    res.status(200).json(messages);
+    const messagesWithReplies = messages.map((message) => ({
+      ...message,
+      reply_to: buildReplyPreview(message)
+    }));
+
+    res.status(200).json(messagesWithReplies);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.user_id;
+    const content = req.body.content || "";
+    const trimmedContent = content.trim();
+
+    if (!messageId) {
+      res.status(400);
+      throw new Error("Message ID is required");
+    }
+
+    if (!trimmedContent) {
+      res.status(400);
+      throw new Error("Message content is required");
+    }
+
+    const message = await messageModel.getMessageById(messageId);
+
+    if (!message) {
+      res.status(404);
+      throw new Error("Message not found");
+    }
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(
+      message.channel_id,
+      userId
+    );
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    if (Number(message.user_id) !== Number(userId)) {
+      res.status(403);
+      throw new Error("You can only edit your own messages");
+    }
+
+    await messageModel.updateMessageById(messageId, trimmedContent);
+
+    const updatedMessage = await messageModel.getMessageById(messageId);
+
+    const editedMessage = {
+      ...updatedMessage,
+      message_id: Number(updatedMessage.message_id),
+      channel_id: Number(updatedMessage.channel_id),
+      server_id: updatedMessage.server_id ? Number(updatedMessage.server_id) : null,
+      user_id: Number(updatedMessage.user_id),
+      content: updatedMessage.content,
+      reply_to: buildReplyPreview(updatedMessage),
+      edited: true
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`channel_${updatedMessage.channel_id}`).emit(
+        "message_updated",
+        editedMessage
+      );
+    }
+
+    res.status(200).json({
+      message: "Message updated successfully",
+      data: editedMessage
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.user_id;
+
+    if (!messageId) {
+      res.status(400);
+      throw new Error("Message ID is required");
+    }
+
+    const message = await messageModel.getMessageById(messageId);
+
+    if (!message) {
+      res.status(404);
+      throw new Error("Message not found");
+    }
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(
+      message.channel_id,
+      userId
+    );
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    if (Number(message.user_id) !== Number(userId)) {
+      res.status(403);
+      throw new Error("You can only delete your own messages");
+    }
+
+    await messageModel.deleteMessageAttachmentsByMessageId(messageId);
+    await messageModel.deleteMessageById(messageId);
+
+    const deletedMessage = {
+      message_id: Number(message.message_id),
+      channel_id: Number(message.channel_id),
+      server_id: message.server_id ? Number(message.server_id) : null,
+      user_id: Number(message.user_id)
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`channel_${message.channel_id}`).emit("message_deleted", deletedMessage);
+    }
+
+    res.status(200).json({
+      message: "Message deleted successfully",
+      data: deletedMessage
+    });
   } catch (error) {
     next(error);
   }
@@ -120,5 +296,7 @@ const getChannelMessages = async (req, res, next) => {
 
 module.exports = {
   createMessage,
-  getChannelMessages
+  getChannelMessages,
+  updateMessage,
+  deleteMessage
 };

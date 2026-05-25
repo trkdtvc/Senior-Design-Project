@@ -64,13 +64,16 @@ CREATE TABLE messages (
   channel_id INT NOT NULL,
   user_id INT NOT NULL,
   message_content TEXT NOT NULL,
+  reply_to_message_id INT DEFAULT NULL,
   created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (message_id),
   KEY channel_id (channel_id),
   KEY user_id (user_id),
+  KEY reply_to_message_id (reply_to_message_id),
   CONSTRAINT messages_ibfk_1 FOREIGN KEY (channel_id) REFERENCES channels (channel_id) ON DELETE CASCADE,
-  CONSTRAINT messages_ibfk_2 FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+  CONSTRAINT messages_ibfk_2 FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT messages_reply_to_message_fk FOREIGN KEY (reply_to_message_id) REFERENCES messages (message_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE roles (
@@ -155,13 +158,16 @@ CREATE TABLE direct_messages (
   conversation_id INT NOT NULL,
   sender_id INT NOT NULL,
   content TEXT NOT NULL,
+  reply_to_direct_message_id INT DEFAULT NULL,
   created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (direct_message_id),
   KEY conversation_id (conversation_id),
   KEY sender_id (sender_id),
+  KEY reply_to_direct_message_id (reply_to_direct_message_id),
   CONSTRAINT direct_messages_ibfk_1 FOREIGN KEY (conversation_id) REFERENCES direct_conversations (conversation_id) ON DELETE CASCADE,
-  CONSTRAINT direct_messages_ibfk_2 FOREIGN KEY (sender_id) REFERENCES users (user_id) ON DELETE CASCADE
+  CONSTRAINT direct_messages_ibfk_2 FOREIGN KEY (sender_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT direct_messages_reply_to_message_fk FOREIGN KEY (reply_to_direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE email_verification_tokens (

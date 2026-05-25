@@ -6,8 +6,12 @@ const {
   isUserInConversation,
   getUserConversations,
   getMessagesByConversationId,
+  getDirectMessageById,
   createDirectMessage,
   createDirectMessageAttachment,
+  updateDirectMessageById,
+  deleteDirectMessageAttachmentsByMessageId,
+  deleteDirectMessageById,
   hideDirectConversationForUser
 } = require("../models/directMessageModel");
 
@@ -21,6 +25,21 @@ const createAttachmentPayload = (file) => {
     file_name: file.originalname,
     file_type: file.mimetype,
     file_size: file.size
+  };
+};
+
+const buildDirectReplyPreview = (message) => {
+  if (!message?.reply_to_direct_message_id) {
+    return null;
+  }
+
+  return {
+    direct_message_id: Number(message.reply_to_direct_message_id),
+    sender_id: message.reply_to_sender_id
+      ? Number(message.reply_to_sender_id)
+      : null,
+    sender_username: message.reply_to_sender_username || "Unknown user",
+    content: message.reply_to_content || ""
   };
 };
 
@@ -107,8 +126,8 @@ const getOrCreateDirectConversation = async (req, res, next) => {
       created,
       conversation: {
         ...conversation,
-        other_user: otherUserRows[0] || null,
-      },
+        other_user: otherUserRows[0] || null
+      }
     });
   } catch (error) {
     next(error);
@@ -122,7 +141,7 @@ const getMyDirectConversations = async (req, res, next) => {
 
     res.status(200).json({
       message: "Direct conversations fetched successfully",
-      conversations,
+      conversations
     });
   } catch (error) {
     next(error);
@@ -153,9 +172,14 @@ const getDirectMessages = async (req, res, next) => {
       currentUserId
     );
 
+    const messagesWithReplies = messages.map((message) => ({
+      ...message,
+      reply_to: buildDirectReplyPreview(message)
+    }));
+
     res.status(200).json({
       message: "Direct messages fetched successfully",
-      messages,
+      messages: messagesWithReplies
     });
   } catch (error) {
     next(error);
@@ -167,6 +191,10 @@ const sendDirectMessageToConversation = async (req, res, next) => {
     const currentUserId = req.user.user_id;
     const { conversationId } = req.body;
     const content = req.body.content || "";
+    const replyToDirectMessageId =
+      req.body.reply_to_direct_message_id ||
+      req.body.replyToDirectMessageId ||
+      null;
     const trimmedContent = content.trim();
     const attachmentPayload = createAttachmentPayload(req.file);
 
@@ -194,10 +222,27 @@ const sendDirectMessageToConversation = async (req, res, next) => {
       throw new Error("You are not a participant in this direct conversation");
     }
 
+    let replyToMessage = null;
+
+    if (replyToDirectMessageId) {
+      replyToMessage = await getDirectMessageById(replyToDirectMessageId);
+
+      if (!replyToMessage) {
+        res.status(404);
+        throw new Error("Reply target direct message not found");
+      }
+
+      if (String(replyToMessage.conversation_id) !== String(conversationId)) {
+        res.status(400);
+        throw new Error("You can only reply to messages in the same direct conversation");
+      }
+    }
+
     const newMessage = await createDirectMessage(
       conversationId,
       currentUserId,
-      trimmedContent
+      trimmedContent,
+      replyToDirectMessageId || null
     );
 
     if (attachmentPayload) {
@@ -215,6 +260,8 @@ const sendDirectMessageToConversation = async (req, res, next) => {
       ];
     }
 
+    newMessage.reply_to = buildDirectReplyPreview(newMessage);
+
     const io = req.app.get("io");
     const otherUserId =
       Number(conversation.user_one_id) === Number(currentUserId)
@@ -225,7 +272,7 @@ const sendDirectMessageToConversation = async (req, res, next) => {
       conversation_id: Number(conversationId),
       sender_user_id: Number(currentUserId),
       recipient_user_id: otherUserId,
-      directMessage: newMessage,
+      directMessage: newMessage
     };
 
     if (io) {
@@ -235,7 +282,157 @@ const sendDirectMessageToConversation = async (req, res, next) => {
 
     res.status(201).json({
       message: "Direct message sent successfully",
-      directMessage: newMessage,
+      directMessage: newMessage
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateDirectMessage = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { directMessageId } = req.params;
+    const content = req.body.content || "";
+    const trimmedContent = content.trim();
+
+    if (!directMessageId) {
+      res.status(400);
+      throw new Error("Direct message ID is required");
+    }
+
+    if (!trimmedContent) {
+      res.status(400);
+      throw new Error("Message content is required");
+    }
+
+    const directMessage = await getDirectMessageById(directMessageId);
+
+    if (!directMessage) {
+      res.status(404);
+      throw new Error("Direct message not found");
+    }
+
+    const hasAccess = await isUserInConversation(
+      directMessage.conversation_id,
+      currentUserId
+    );
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    if (Number(directMessage.sender_id) !== Number(currentUserId)) {
+      res.status(403);
+      throw new Error("You can only edit your own direct messages");
+    }
+
+    await updateDirectMessageById(directMessageId, trimmedContent);
+
+    const updatedDirectMessage = await getDirectMessageById(directMessageId);
+
+    const otherUserId =
+      Number(updatedDirectMessage.user_one_id) === Number(currentUserId)
+        ? Number(updatedDirectMessage.user_two_id)
+        : Number(updatedDirectMessage.user_one_id);
+
+    const editedDirectMessage = {
+      direct_message_id: Number(updatedDirectMessage.direct_message_id),
+      conversation_id: Number(updatedDirectMessage.conversation_id),
+      sender_id: Number(updatedDirectMessage.sender_id),
+      sender_username: updatedDirectMessage.sender_username,
+      content: updatedDirectMessage.content,
+      reply_to_direct_message_id: updatedDirectMessage.reply_to_direct_message_id
+        ? Number(updatedDirectMessage.reply_to_direct_message_id)
+        : null,
+      reply_to: buildDirectReplyPreview(updatedDirectMessage),
+      created_at: updatedDirectMessage.created_at,
+      updated_at: updatedDirectMessage.updated_at,
+      attachments: [],
+      edited: true
+    };
+
+    const socketPayload = {
+      conversation_id: Number(updatedDirectMessage.conversation_id),
+      sender_user_id: Number(currentUserId),
+      recipient_user_id: otherUserId,
+      directMessage: editedDirectMessage
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`user_${currentUserId}`).emit("direct_message_updated", socketPayload);
+      io.to(`user_${otherUserId}`).emit("direct_message_updated", socketPayload);
+    }
+
+    res.status(200).json({
+      message: "Direct message updated successfully",
+      directMessage: editedDirectMessage
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteDirectMessage = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { directMessageId } = req.params;
+
+    if (!directMessageId) {
+      res.status(400);
+      throw new Error("Direct message ID is required");
+    }
+
+    const directMessage = await getDirectMessageById(directMessageId);
+
+    if (!directMessage) {
+      res.status(404);
+      throw new Error("Direct message not found");
+    }
+
+    const hasAccess = await isUserInConversation(
+      directMessage.conversation_id,
+      currentUserId
+    );
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    if (Number(directMessage.sender_id) !== Number(currentUserId)) {
+      res.status(403);
+      throw new Error("You can only delete your own direct messages");
+    }
+
+    await deleteDirectMessageAttachmentsByMessageId(directMessageId);
+    await deleteDirectMessageById(directMessageId);
+
+    const otherUserId =
+      Number(directMessage.user_one_id) === Number(currentUserId)
+        ? Number(directMessage.user_two_id)
+        : Number(directMessage.user_one_id);
+
+    const deletedMessage = {
+      direct_message_id: Number(directMessage.direct_message_id),
+      conversation_id: Number(directMessage.conversation_id),
+      sender_id: Number(directMessage.sender_id),
+      recipient_user_id: otherUserId
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`user_${currentUserId}`).emit("direct_message_deleted", deletedMessage);
+      io.to(`user_${otherUserId}`).emit("direct_message_deleted", deletedMessage);
+    }
+
+    res.status(200).json({
+      message: "Direct message deleted successfully",
+      data: deletedMessage
     });
   } catch (error) {
     next(error);
@@ -276,5 +473,7 @@ module.exports = {
   getMyDirectConversations,
   getDirectMessages,
   sendDirectMessageToConversation,
+  updateDirectMessage,
+  deleteDirectMessage,
   deleteDirectConversationForMe
 };

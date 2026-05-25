@@ -185,10 +185,16 @@ const getMessagesByConversationId = async (conversationId, userId) => {
         dm.sender_id,
         u.username AS sender_username,
         dm.content,
+        dm.reply_to_direct_message_id,
+        rdm.content AS reply_to_content,
+        rdm.sender_id AS reply_to_sender_id,
+        ru.username AS reply_to_sender_username,
         dm.created_at,
         dm.updated_at
       FROM direct_messages dm
       JOIN users u ON dm.sender_id = u.user_id
+      LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
+      LEFT JOIN users ru ON rdm.sender_id = ru.user_id
       LEFT JOIN direct_conversation_deletions dcd
         ON dcd.conversation_id = dm.conversation_id
        AND dcd.user_id = ?
@@ -205,13 +211,54 @@ const getMessagesByConversationId = async (conversationId, userId) => {
   return attachFilesToDirectMessages(rows);
 };
 
-const createDirectMessage = async (conversationId, senderId, content) => {
+const getDirectMessageById = async (directMessageId) => {
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        dm.direct_message_id,
+        dm.conversation_id,
+        dm.sender_id,
+        dm.content,
+        dm.reply_to_direct_message_id,
+        rdm.content AS reply_to_content,
+        rdm.sender_id AS reply_to_sender_id,
+        ru.username AS reply_to_sender_username,
+        dm.created_at,
+        dm.updated_at,
+        dc.user_one_id,
+        dc.user_two_id,
+        u.username AS sender_username
+      FROM direct_messages dm
+      JOIN direct_conversations dc ON dm.conversation_id = dc.conversation_id
+      JOIN users u ON dm.sender_id = u.user_id
+      LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
+      LEFT JOIN users ru ON rdm.sender_id = ru.user_id
+      WHERE dm.direct_message_id = ?
+      LIMIT 1
+    `,
+    [directMessageId]
+  );
+
+  return rows[0] || null;
+};
+
+const createDirectMessage = async (
+  conversationId,
+  senderId,
+  content,
+  replyToDirectMessageId = null
+) => {
   const [result] = await pool.execute(
     `
-      INSERT INTO direct_messages (conversation_id, sender_id, content)
-      VALUES (?, ?, ?)
+      INSERT INTO direct_messages (
+        conversation_id,
+        sender_id,
+        content,
+        reply_to_direct_message_id
+      )
+      VALUES (?, ?, ?, ?)
     `,
-    [conversationId, senderId, content]
+    [conversationId, senderId, content, replyToDirectMessageId]
   );
 
   await pool.execute(
@@ -231,10 +278,16 @@ const createDirectMessage = async (conversationId, senderId, content) => {
         dm.sender_id,
         u.username AS sender_username,
         dm.content,
+        dm.reply_to_direct_message_id,
+        rdm.content AS reply_to_content,
+        rdm.sender_id AS reply_to_sender_id,
+        ru.username AS reply_to_sender_username,
         dm.created_at,
         dm.updated_at
       FROM direct_messages dm
       JOIN users u ON dm.sender_id = u.user_id
+      LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
+      LEFT JOIN users ru ON rdm.sender_id = ru.user_id
       WHERE dm.direct_message_id = ?
       LIMIT 1
     `,
@@ -261,6 +314,43 @@ const createDirectMessageAttachment = async (directMessageId, attachmentData) =>
       attachmentData.file_type,
       attachmentData.file_size
     ]
+  );
+
+  return result;
+};
+
+const updateDirectMessageById = async (directMessageId, content) => {
+  const [result] = await pool.execute(
+    `
+      UPDATE direct_messages
+      SET content = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE direct_message_id = ?
+    `,
+    [content, directMessageId]
+  );
+
+  return result;
+};
+
+const deleteDirectMessageAttachmentsByMessageId = async (directMessageId) => {
+  const [result] = await pool.execute(
+    `
+      DELETE FROM direct_message_attachments
+      WHERE direct_message_id = ?
+    `,
+    [directMessageId]
+  );
+
+  return result;
+};
+
+const deleteDirectMessageById = async (directMessageId) => {
+  const [result] = await pool.execute(
+    `
+      DELETE FROM direct_messages
+      WHERE direct_message_id = ?
+    `,
+    [directMessageId]
   );
 
   return result;
@@ -307,7 +397,11 @@ module.exports = {
   isUserInConversation,
   getUserConversations,
   getMessagesByConversationId,
+  getDirectMessageById,
   createDirectMessage,
   createDirectMessageAttachment,
+  updateDirectMessageById,
+  deleteDirectMessageAttachmentsByMessageId,
+  deleteDirectMessageById,
   hideDirectConversationForUser
 };

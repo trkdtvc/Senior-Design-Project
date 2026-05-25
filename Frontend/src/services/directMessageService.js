@@ -38,13 +38,21 @@ const getJsonHeaders = (token) => ({
 const createDirectMessageFormData = ({
   conversationId,
   content = "",
-  attachment
+  attachment,
+  reply_to_direct_message_id
 }) => {
   const formData = new FormData();
 
   formData.append("conversationId", conversationId);
   formData.append("content", content);
-  formData.append("attachment", attachment);
+
+  if (reply_to_direct_message_id) {
+    formData.append("reply_to_direct_message_id", reply_to_direct_message_id);
+  }
+
+  if (attachment) {
+    formData.append("attachment", attachment);
+  }
 
   return formData;
 };
@@ -90,9 +98,36 @@ export const sendDirectMessage = async (token, messageData) => {
       ? createDirectMessageFormData(messageData)
       : JSON.stringify({
           conversationId: messageData.conversationId,
-          content: messageData.content || ""
+          content: messageData.content || "",
+          reply_to_direct_message_id:
+            messageData.reply_to_direct_message_id || null
         })
   });
+
+  return handleResponse(response);
+};
+
+export const updateDirectMessage = async (token, directMessageId, content) => {
+  const response = await fetch(
+    `${API_BASE_URL}/direct-messages/messages/${directMessageId}`,
+    {
+      method: "PUT",
+      headers: getJsonHeaders(token),
+      body: JSON.stringify({ content })
+    }
+  );
+
+  return handleResponse(response);
+};
+
+export const deleteDirectMessage = async (token, directMessageId) => {
+  const response = await fetch(
+    `${API_BASE_URL}/direct-messages/messages/${directMessageId}`,
+    {
+      method: "DELETE",
+      headers: getAuthHeaders(token)
+    }
+  );
 
   return handleResponse(response);
 };

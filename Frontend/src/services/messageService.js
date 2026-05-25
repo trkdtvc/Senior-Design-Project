@@ -35,12 +35,24 @@ const getJsonHeaders = (token) => ({
   "Content-Type": "application/json"
 });
 
-const createMessageFormData = ({ channel_id, content = "", attachment }) => {
+const createMessageFormData = ({
+  channel_id,
+  content = "",
+  attachment,
+  reply_to_message_id
+}) => {
   const formData = new FormData();
 
   formData.append("channel_id", channel_id);
   formData.append("content", content);
-  formData.append("attachment", attachment);
+
+  if (reply_to_message_id) {
+    formData.append("reply_to_message_id", reply_to_message_id);
+  }
+
+  if (attachment) {
+    formData.append("attachment", attachment);
+  }
 
   return formData;
 };
@@ -64,8 +76,28 @@ export const createMessage = async (token, messageData) => {
       ? createMessageFormData(messageData)
       : JSON.stringify({
           channel_id: messageData.channel_id,
-          content: messageData.content || ""
+          content: messageData.content || "",
+          reply_to_message_id: messageData.reply_to_message_id || null
         })
+  });
+
+  return handleResponse(response);
+};
+
+export const updateMessage = async (token, messageId, content) => {
+  const response = await fetch(`${API_BASE_URL}/messages/${messageId}`, {
+    method: "PUT",
+    headers: getJsonHeaders(token),
+    body: JSON.stringify({ content })
+  });
+
+  return handleResponse(response);
+};
+
+export const deleteMessage = async (token, messageId) => {
+  const response = await fetch(`${API_BASE_URL}/messages/${messageId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(token)
   });
 
   return handleResponse(response);
