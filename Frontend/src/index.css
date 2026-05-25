@@ -24,8 +24,8 @@ html {
 
 body {
   font-family: Inter, "Segoe UI", Arial, sans-serif;
-  background: #0a1020;
-  color: #f5f7ff;
+  background: #313338;
+  color: #f2f3f5;
   overflow: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -81,10 +81,10 @@ svg {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
+  background: rgba(181, 186, 193, 0.28);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(181, 186, 193, 0.42);
 }

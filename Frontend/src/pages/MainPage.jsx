@@ -489,14 +489,7 @@ const renderAttachmentPreview = (attachment) => {
         <img
           src={attachmentUrl}
           alt={attachmentName}
-          style={{
-            maxWidth: "280px",
-            maxHeight: "240px",
-            borderRadius: "14px",
-            objectFit: "cover",
-            display: "block",
-            marginTop: "6px"
-          }}
+          className="discord-attachment-media"
         />
       </a>
     );
@@ -507,13 +500,7 @@ const renderAttachmentPreview = (attachment) => {
       <video
         controls
         src={attachmentUrl}
-        style={{
-          maxWidth: "320px",
-          maxHeight: "240px",
-          borderRadius: "14px",
-          display: "block",
-          marginTop: "6px"
-        }}
+        className="discord-attachment-media"
       />
     );
   }
@@ -523,11 +510,7 @@ const renderAttachmentPreview = (attachment) => {
       <audio
         controls
         src={attachmentUrl}
-        style={{
-          width: "280px",
-          display: "block",
-          marginTop: "6px"
-        }}
+        className="discord-attachment-audio"
       />
     );
   }
@@ -537,47 +520,15 @@ const renderAttachmentPreview = (attachment) => {
       href={attachmentUrl}
       target="_blank"
       rel="noreferrer"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        maxWidth: "320px",
-        marginTop: "6px",
-        padding: "10px 12px",
-        borderRadius: "14px",
-        background: "rgba(255, 255, 255, 0.06)",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
-        color: "#f2f3f5",
-        textDecoration: "none"
-      }}
+      className="discord-attachment-file"
     >
-      <span style={{ fontSize: "22px" }}>📎</span>
+      <span className="discord-attachment-icon">📎</span>
 
-      <span style={{ minWidth: 0 }}>
-        <span
-          style={{
-            display: "block",
-            fontSize: "14px",
-            fontWeight: 700,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap"
-          }}
-        >
-          {attachmentName}
-        </span>
+      <span className="discord-attachment-meta">
+        <span className="discord-attachment-name">{attachmentName}</span>
 
         {attachmentSize ? (
-          <span
-            style={{
-              display: "block",
-              marginTop: "2px",
-              fontSize: "12px",
-              color: "rgba(255, 255, 255, 0.65)"
-            }}
-          >
-            {attachmentSize}
-          </span>
+          <span className="discord-attachment-size">{attachmentSize}</span>
         ) : null}
       </span>
     </a>
@@ -3059,11 +3010,7 @@ const MainPage = () => {
                                 String(current) === String(conversationId) ? null : current
                               )
                             }
-                            style={{
-                              position: "relative",
-                              display: "flex",
-                              alignItems: "center"
-                            }}
+                            className="discord-list-row"
                           >
                             <button
                               type="button"
@@ -3074,7 +3021,7 @@ const MainPage = () => {
                               className={`discord-dm-item${isActive ? " discord-dm-item-active" : ""
                                 }${unreadCount > 0 && !isActive ? " discord-dm-item-unread" : ""
                                 }`}
-                              style={{ flex: 1 }}
+
                             >
                               <div className="discord-dm-avatar">
                                 {getInitial(getConversationOtherUsername(conversation))}
@@ -3112,7 +3059,7 @@ const MainPage = () => {
 
                             {String(hoveredConversationId) === String(conversationId) ||
                               String(openConversationMenuId) === String(conversationId) ? (
-                              <div style={{ position: "relative", marginLeft: "6px" }}>
+                              <div className="discord-menu-anchor">
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -3129,35 +3076,14 @@ const MainPage = () => {
                                 </button>
 
                                 {String(openConversationMenuId) === String(conversationId) ? (
-                                  <div
-                                    style={{
-                                      position: "absolute",
-                                      top: "50%",
-                                      right: "calc(100% + 8px)",
-                                      transform: "translateY(-50%)",
-                                      minWidth: "110px",
-                                      background: "#111214",
-                                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                                      borderRadius: "8px",
-                                      padding: "3px",
-                                      zIndex: 20,
-                                      boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)"
-                                    }}
-                                  >
+                                  <div className="discord-popover-menu">
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteDirectConversation(conversation);
                                       }}
-                                      className="auth-button auth-button-danger compact-button"
-                                      style={{
-                                        width: "100%",
-                                        padding: "8px 10px",
-                                        fontSize: "13px",
-                                        lineHeight: "1.2",
-                                        borderRadius: "10px"
-                                      }}
+                                      className="auth-button auth-button-danger compact-button discord-menu-button-danger"
                                       disabled={isDeletingConversation}
                                     >
                                       {isDeletingConversation ? "Deleting..." : "Delete DM"}
@@ -3199,7 +3125,7 @@ const MainPage = () => {
                               onMouseLeave={() => setHoveredChannelId((current) =>
                                 String(current) === String(channelId) ? null : current
                               )}
-                              style={{ position: "relative", display: "flex", alignItems: "center" }}
+                              className="discord-list-row"
                             >
                               <button
                                 type="button"
@@ -3210,7 +3136,7 @@ const MainPage = () => {
                                 className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
                                   }${unreadCount > 0 && !isActive ? " discord-channel-button-unread" : ""
                                   }`}
-                                style={{ flex: 1 }}
+  
                               >
                                 <span className="channel-hash">#</span>
                                 <span className="channel-name">
@@ -3227,7 +3153,7 @@ const MainPage = () => {
                                 !isGeneralChannel &&
                                 (String(hoveredChannelId) === String(channelId) ||
                                   String(openChannelMenuId) === String(channelId)) ? (
-                                <div style={{ position: "relative", marginLeft: "6px" }}>
+                                <div className="discord-menu-anchor">
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -3242,21 +3168,7 @@ const MainPage = () => {
                                   </button>
 
                                   {String(openChannelMenuId) === String(channelId) ? (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        top: "50%",
-                                        right: "calc(100% + 8px)",
-                                        transform: "translateY(-50%)",
-                                        minWidth: "96px",
-                                        background: "#111214",
-                                        border: "1px solid rgba(255, 255, 255, 0.08)",
-                                        borderRadius: "8px",
-                                        padding: "3px",
-                                        zIndex: 20,
-                                        boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)"
-                                      }}
-                                    >
+                                    <div className="discord-popover-menu">
                                       <button
                                         type="button"
                                         onClick={(e) => {
@@ -3264,14 +3176,7 @@ const MainPage = () => {
                                           setOpenChannelMenuId(null);
                                           handleDeleteChannel(channel);
                                         }}
-                                        className="auth-button auth-button-danger compact-button"
-                                        style={{
-                                          width: "100%",
-                                          padding: "8px 10px",
-                                          fontSize: "13px",
-                                          lineHeight: "1.2",
-                                          borderRadius: "10px"
-                                        }}
+                                        className="auth-button auth-button-danger compact-button discord-menu-button-danger"
                                         disabled={isDeletingChannel}
                                       >
                                         {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
@@ -3334,38 +3239,9 @@ const MainPage = () => {
                         onClick={handleCopyInviteCode}
                         title="Copy code"
                         aria-label="Copy code"
-                        style={{
-                          width: "100%",
-                          border: "1px solid rgba(255, 255, 255, 0.08)",
-                          borderRadius: "12px",
-                          background: "rgba(255, 255, 255, 0.03)",
-                          padding: "14px 16px",
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "all 0.2s ease",
-                          marginBottom: "10px",
-                        }}
+                        className="discord-invite-code-button"
                       >
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: 700,
-                            letterSpacing: "0.04em",
-                            textTransform: "uppercase",
-                            color: "rgba(255, 255, 255, 0.7)",
-                            marginBottom: "6px"
-                          }}
-                        >
-
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: "15px",
-                            fontWeight: 700,
-                            color: "#f2f3f5"
-                          }}
-                        >
+                        <div className="discord-invite-code-value">
                           {isInviteCopied ? "✓" : inviteCode}
                         </div>
                       </button>
@@ -3678,7 +3554,7 @@ const MainPage = () => {
                                   </div>
                                 </div>
 
-                                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                                <div className="discord-request-actions-row">
                                   <button
                                     type="button"
                                     className="auth-button discord-friend-home-action"
@@ -3834,30 +3710,13 @@ const MainPage = () => {
                       ) : null}
 
                       <div className="discord-message-body">
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: isOwnMessage ? "flex-end" : "flex-start",
-                            gap: "6px",
-                            marginBottom: "4px"
-                          }}
-                        >
+                        <div className="discord-message-actions">
                           {!isThisMessageEditing ? (
                             <button
                               type="button"
                               onClick={() => handleStartReplyingToMessage(message)}
                               disabled={!messageIdForDelete}
-                              style={{
-                                border: "none",
-                                borderRadius: "999px",
-                                background: "rgba(255, 255, 255, 0.08)",
-                                color: "#f2f3f5",
-                                cursor: !messageIdForDelete ? "not-allowed" : "pointer",
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                padding: "4px 8px",
-                                opacity: !messageIdForDelete ? 0.65 : 1
-                              }}
+                              className="discord-message-action"
                             >
                               Reply
                             </button>
@@ -3868,17 +3727,7 @@ const MainPage = () => {
                               type="button"
                               onClick={() => handleStartEditingMessage(message)}
                               disabled={!messageIdForDelete}
-                              style={{
-                                border: "none",
-                                borderRadius: "999px",
-                                background: "rgba(88, 101, 242, 0.18)",
-                                color: "#c7d2ff",
-                                cursor: !messageIdForDelete ? "not-allowed" : "pointer",
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                padding: "4px 8px",
-                                opacity: !messageIdForDelete ? 0.65 : 1
-                              }}
+                              className="discord-message-action discord-message-action-edit"
                             >
                               Edit
                             </button>
@@ -3889,20 +3738,7 @@ const MainPage = () => {
                               type="button"
                               onClick={() => handleDeleteChatMessage(message)}
                               disabled={isThisMessageDeleting || !messageIdForDelete}
-                              style={{
-                                border: "none",
-                                borderRadius: "999px",
-                                background: "rgba(237, 66, 69, 0.18)",
-                                color: "#ffb3b6",
-                                cursor:
-                                  isThisMessageDeleting || !messageIdForDelete
-                                    ? "not-allowed"
-                                    : "pointer",
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                padding: "4px 8px",
-                                opacity: isThisMessageDeleting || !messageIdForDelete ? 0.65 : 1
-                              }}
+                              className="discord-message-action discord-message-action-danger"
                             >
                               {isThisMessageDeleting ? "Deleting..." : "Delete"}
                             </button>
@@ -3910,36 +3746,12 @@ const MainPage = () => {
                         </div>
 
                         {replyPreview ? (
-                          <div
-                            style={{
-                              maxWidth: "420px",
-                              marginBottom: "6px",
-                              padding: "7px 10px",
-                              borderLeft: "3px solid rgba(88, 101, 242, 0.9)",
-                              borderRadius: "10px",
-                              background: "rgba(255, 255, 255, 0.05)",
-                              color: "rgba(255, 255, 255, 0.78)"
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: "12px",
-                                fontWeight: 800,
-                                color: "#c7d2ff",
-                                marginBottom: "2px"
-                              }}
-                            >
+                          <div className="discord-reply-preview">
+                            <div className="discord-reply-author">
                               Replying to {getReplyPreviewAuthor(replyPreview)}
                             </div>
 
-                            <div
-                              style={{
-                                fontSize: "12px",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap"
-                              }}
-                            >
+                            <div className="discord-reply-content">
                               {formatReplyPreviewContent(getReplyPreviewContent(replyPreview))}
                             </div>
                           </div>
@@ -3960,13 +3772,7 @@ const MainPage = () => {
                         ) : null}
 
                         {isThisMessageEditing ? (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "8px"
-                            }}
-                          >
+                          <div className="discord-edit-form">
                             <textarea
                               value={editingMessageContent}
                               onChange={(e) => {
@@ -3984,43 +3790,16 @@ const MainPage = () => {
                                   handleCancelEditingMessage();
                                 }
                               }}
-                              style={{
-                                width: "100%",
-                                minHeight: "70px",
-                                resize: "vertical",
-                                border: "1px solid rgba(255, 255, 255, 0.12)",
-                                borderRadius: "12px",
-                                background: "rgba(255, 255, 255, 0.06)",
-                                color: "#f2f3f5",
-                                padding: "10px 12px",
-                                outline: "none",
-                                font: "inherit"
-                              }}
+                              className="discord-edit-textarea"
                               autoFocus
                             />
 
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "flex-end",
-                                gap: "8px"
-                              }}
-                            >
+                            <div className="discord-edit-actions">
                               <button
                                 type="button"
                                 onClick={handleCancelEditingMessage}
                                 disabled={isThisMessageSaving}
-                                style={{
-                                  border: "none",
-                                  borderRadius: "999px",
-                                  background: "rgba(255, 255, 255, 0.08)",
-                                  color: "#f2f3f5",
-                                  cursor: isThisMessageSaving ? "not-allowed" : "pointer",
-                                  fontSize: "12px",
-                                  fontWeight: 700,
-                                  padding: "6px 10px",
-                                  opacity: isThisMessageSaving ? 0.65 : 1
-                                }}
+                                className="auth-button auth-button-secondary discord-edit-button"
                               >
                                 Cancel
                               </button>
@@ -4029,17 +3808,7 @@ const MainPage = () => {
                                 type="button"
                                 onClick={() => handleSaveEditedMessage(message)}
                                 disabled={isThisMessageSaving}
-                                style={{
-                                  border: "none",
-                                  borderRadius: "999px",
-                                  background: "rgba(88, 101, 242, 0.85)",
-                                  color: "#ffffff",
-                                  cursor: isThisMessageSaving ? "not-allowed" : "pointer",
-                                  fontSize: "12px",
-                                  fontWeight: 700,
-                                  padding: "6px 10px",
-                                  opacity: isThisMessageSaving ? 0.65 : 1
-                                }}
+                                className="auth-button discord-edit-button"
                               >
                                 {isThisMessageSaving ? "Saving..." : "Save"}
                               </button>
@@ -4066,7 +3835,7 @@ const MainPage = () => {
                         ) : null}
 
                         {attachments.length > 0 ? (
-                          <div style={{ marginTop: content ? "4px" : "0" }}>
+                          <div className="discord-attachments">
                             {attachments.map((attachment) => (
                               <div
                                 key={
@@ -4097,43 +3866,16 @@ const MainPage = () => {
               )}
 
               {selectedReplyMessage ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    marginBottom: "8px",
-                    padding: "9px 12px",
-                    borderRadius: "12px",
-                    background: "rgba(88, 101, 242, 0.12)",
-                    border: "1px solid rgba(88, 101, 242, 0.35)"
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: "12px",
-                        fontWeight: 800,
-                        color: "#c7d2ff",
-                        marginBottom: "2px"
-                      }}
-                    >
+                <div className="discord-composer-preview">
+                  <div className="discord-composer-preview-body">
+                    <div className="discord-composer-preview-title">
                       Replying to{" "}
                       {isDmView
                         ? getDirectMessageAuthor(selectedReplyMessage)
                         : getMessageAuthor(selectedReplyMessage)}
                     </div>
 
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        color: "rgba(255, 255, 255, 0.78)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
+                    <div className="discord-composer-preview-content">
                       {formatReplyPreviewContent(
                         isDmView
                           ? getDirectMessageContent(selectedReplyMessage)
@@ -4145,14 +3887,7 @@ const MainPage = () => {
                   <button
                     type="button"
                     onClick={handleCancelReplyingToMessage}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: "#f2f3f5",
-                      cursor: "pointer",
-                      fontSize: "18px",
-                      flexShrink: 0
-                    }}
+                    className="discord-remove-preview-button"
                     aria-label="Cancel reply"
                     title="Cancel reply"
                   >
@@ -4162,31 +3897,10 @@ const MainPage = () => {
               ) : null}
 
               {selectedAttachment ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    marginBottom: "8px",
-                    padding: "9px 12px",
-                    borderRadius: "12px",
-                    background: "rgba(255, 255, 255, 0.06)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)"
-                  }}
-                >
-                  <span
-                    style={{
-                      minWidth: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      color: "#f2f3f5",
-                      fontSize: "14px"
-                    }}
-                  >
+                <div className="discord-selected-attachment">
+                  <span className="discord-selected-attachment-name">
                     📎 {selectedAttachment.name}{" "}
-                    <span style={{ color: "rgba(255, 255, 255, 0.6)" }}>
+                    <span className="discord-selected-attachment-size">
                       {formatFileSize(selectedAttachment.size)}
                     </span>
                   </span>
@@ -4194,13 +3908,7 @@ const MainPage = () => {
                   <button
                     type="button"
                     onClick={handleRemoveSelectedAttachment}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: "#f2f3f5",
-                      cursor: "pointer",
-                      fontSize: "18px"
-                    }}
+                    className="discord-remove-preview-button"
                     aria-label="Remove attachment"
                     title="Remove attachment"
                   >
@@ -4212,12 +3920,7 @@ const MainPage = () => {
               <div className="discord-composer-shell">
                 <div
                   ref={emojiPickerRef}
-                  style={{
-                    position: "relative",
-                    display: "flex",
-                    alignItems: "center",
-                    flexShrink: 0
-                  }}
+                  className="discord-composer-tools"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <input
@@ -4225,7 +3928,7 @@ const MainPage = () => {
                     type="file"
                     accept={ATTACHMENT_ACCEPT_TYPES}
                     onChange={handleAttachmentChange}
-                    style={{ display: "none" }}
+                    hidden
                   />
 
                   <button
@@ -4238,17 +3941,7 @@ const MainPage = () => {
                     }
                     title="Add attachment"
                     aria-label="Add attachment"
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      border: "none",
-                      borderRadius: "12px",
-                      background: "rgba(255, 255, 255, 0.06)",
-                      color: "#f2f3f5",
-                      fontSize: "20px",
-                      cursor: "pointer",
-                      marginRight: "8px"
-                    }}
+                    className="discord-icon-button"
                   >
                     📎
                   </button>
@@ -4261,30 +3954,13 @@ const MainPage = () => {
                     }
                     title="Add emoji"
                     aria-label="Add emoji"
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      border: "none",
-                      borderRadius: "12px",
-                      background: "rgba(255, 255, 255, 0.06)",
-                      color: "#f2f3f5",
-                      fontSize: "20px",
-                      cursor: "pointer",
-                      marginRight: "8px"
-                    }}
+                    className="discord-icon-button"
                   >
                     😊
                   </button>
 
                   {isEmojiPickerOpen ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: "52px",
-                        left: "0",
-                        zIndex: 50
-                      }}
-                    >
+                    <div className="discord-emoji-picker-popover">
                       <EmojiPicker
                         theme={Theme.DARK}
                         onEmojiClick={handleAddEmoji}
