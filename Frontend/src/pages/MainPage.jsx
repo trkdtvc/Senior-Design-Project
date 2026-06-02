@@ -802,6 +802,14 @@ const MainPage = () => {
     ? directSearchResults
     : channelSearchResults;
 
+  const activeMessageSearchLabel = isDmView
+    ? "direct message"
+    : "channel message";
+
+  const activeMessageSearchEmptyText = isDmView
+    ? `No direct messages found for "${messageSearchTerm.trim()}".`
+    : `No channel messages found for "${messageSearchTerm.trim()}".`;
+
   const totalUnreadDirectCount = useMemo(
     () => getTotalUnreadCount(unreadDirectCounts),
     [unreadDirectCounts]
@@ -3645,7 +3653,7 @@ const MainPage = () => {
                   </p>
                 ) : (
                   <p className="discord-message-search-status-text">
-                    Showing {activeMessageSearchResults.length} result
+                    Showing {activeMessageSearchResults.length} {activeMessageSearchLabel}
                     {activeMessageSearchResults.length === 1 ? "" : "s"} for “
                     {messageSearchTerm.trim()}”
                   </p>
@@ -3931,7 +3939,7 @@ const MainPage = () => {
             ) : displayedMessages.length === 0 ? (
               <div className="server-state-message discord-empty-state">
                 {isMessageSearchActive
-                  ? `No messages found for "${messageSearchTerm.trim()}".`
+                  ? activeMessageSearchEmptyText
                   : "No messages yet."}
               </div>
             ) : (
