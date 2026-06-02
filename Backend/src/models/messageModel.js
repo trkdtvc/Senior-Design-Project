@@ -184,6 +184,80 @@ const isUserMemberOfChannelServer = async (channelId, userId) => {
   return rows.length > 0;
 };
 
+const markChannelAsRead = async (channelId, userId) => {
+  const [latestRows] = await pool.query(
+    `SELECT message_id
+     FROM messages
+     WHERE channel_id = ?
+     ORDER BY message_id DESC
+     LIMIT 1`,
+    [channelId]
+  );
+
+  const lastReadMessageId = latestRows[0]?.message_id || null;
+
+  await pool.query(
+    `INSERT INTO channel_read_states (
+        user_id,
+        channel_id,
+        last_read_message_id,
+        last_read_at
+      )
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+        last_read_message_id = VALUES(last_read_message_id),
+        last_read_at = CURRENT_TIMESTAMP`,
+    [userId, channelId, lastReadMessageId]
+  );
+
+  return {
+    user_id: Number(userId),
+    channel_id: Number(channelId),
+    last_read_message_id: lastReadMessageId
+  };
+};
+
+const getUnreadChannelCountsByUserId = async (userId) => {
+  const [rows] = await pool.query(
+    `SELECT
+        c.server_id,
+        c.channel_id,
+        COUNT(m.message_id) AS unread_count
+     FROM server_members sm
+     JOIN channels c
+       ON c.server_id = sm.server_id
+     LEFT JOIN channel_read_states crs
+       ON crs.user_id = sm.user_id
+      AND crs.channel_id = c.channel_id
+     JOIN messages m
+       ON m.channel_id = c.channel_id
+      AND m.user_id <> sm.user_id
+      AND m.created_at >= sm.joined_at
+      AND (
+        crs.read_state_id IS NULL
+        OR (
+          crs.last_read_message_id IS NOT NULL
+          AND m.message_id > crs.last_read_message_id
+        )
+        OR (
+          crs.last_read_message_id IS NULL
+          AND crs.last_read_at IS NOT NULL
+          AND m.created_at > crs.last_read_at
+        )
+      )
+     WHERE sm.user_id = ?
+     GROUP BY c.server_id, c.channel_id
+     HAVING unread_count > 0`,
+    [userId]
+  );
+
+  return rows.map((row) => ({
+    server_id: row.server_id,
+    channel_id: row.channel_id,
+    unread_count: Number(row.unread_count || 0)
+  }));
+};
+
 module.exports = {
   createMessage,
   createMessageAttachment,
@@ -194,5 +268,7 @@ module.exports = {
   deleteMessageById,
   getChannelServerId,
   getChannelServerMemberIds,
-  isUserMemberOfChannelServer
+  isUserMemberOfChannelServer,
+  markChannelAsRead,
+  getUnreadChannelCountsByUserId
 };

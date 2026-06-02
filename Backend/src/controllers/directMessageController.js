@@ -12,7 +12,9 @@ const {
   updateDirectMessageById,
   deleteDirectMessageAttachmentsByMessageId,
   deleteDirectMessageById,
-  hideDirectConversationForUser
+  hideDirectConversationForUser,
+  markDirectConversationAsRead,
+  getUnreadDirectConversationCountsByUserId
 } = require("../models/directMessageModel");
 
 const createAttachmentPayload = (file) => {
@@ -468,6 +470,64 @@ const deleteDirectConversationForMe = async (req, res, next) => {
   }
 };
 
+const markDirectConversationRead = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { conversationId } = req.params;
+
+    if (!conversationId) {
+      res.status(400);
+      throw new Error("Conversation ID is required");
+    }
+
+    const conversation = await getConversationById(conversationId);
+
+    if (!conversation) {
+      res.status(404);
+      throw new Error("Direct conversation not found");
+    }
+
+    const hasAccess = await isUserInConversation(conversationId, currentUserId);
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    const readState = await markDirectConversationAsRead(
+      conversationId,
+      currentUserId
+    );
+
+    res.status(200).json({
+      message: "Direct conversation marked as read",
+      data: readState
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getUnreadDirectConversationCounts = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const unreadRows = await getUnreadDirectConversationCountsByUserId(currentUserId);
+
+    const conversations = {};
+
+    unreadRows.forEach((row) => {
+      conversations[String(row.conversation_id)] = Number(row.unread_count || 0);
+    });
+
+    res.status(200).json({
+      message: "Unread direct conversation counts fetched successfully",
+      conversations
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getOrCreateDirectConversation,
   getMyDirectConversations,
@@ -475,5 +535,7 @@ module.exports = {
   sendDirectMessageToConversation,
   updateDirectMessage,
   deleteDirectMessage,
-  deleteDirectConversationForMe
+  deleteDirectConversationForMe,
+  markDirectConversationRead,
+  getUnreadDirectConversationCounts
 };

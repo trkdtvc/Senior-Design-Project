@@ -294,9 +294,66 @@ const deleteMessage = async (req, res, next) => {
   }
 };
 
+const markChannelAsRead = async (req, res, next) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.user_id;
+
+    if (!channelId) {
+      res.status(400);
+      throw new Error("Channel ID is required");
+    }
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(channelId, userId);
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    const readState = await messageModel.markChannelAsRead(channelId, userId);
+
+    res.status(200).json({
+      message: "Channel marked as read",
+      data: readState
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getUnreadChannelCounts = async (req, res, next) => {
+  try {
+    const userId = req.user.user_id;
+    const unreadRows = await messageModel.getUnreadChannelCountsByUserId(userId);
+
+    const channels = {};
+    const servers = {};
+
+    unreadRows.forEach((row) => {
+      const channelKey = String(row.channel_id);
+      const serverKey = String(row.server_id);
+      const unreadCount = Number(row.unread_count || 0);
+
+      channels[channelKey] = unreadCount;
+      servers[serverKey] = Number(servers[serverKey] || 0) + unreadCount;
+    });
+
+    res.status(200).json({
+      message: "Unread channel counts fetched successfully",
+      channels,
+      servers
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createMessage,
   getChannelMessages,
   updateMessage,
-  deleteMessage
+  deleteMessage,
+  markChannelAsRead,
+  getUnreadChannelCounts
 };

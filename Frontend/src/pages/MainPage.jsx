@@ -15,7 +15,9 @@ import {
   getChannelMessages,
   createMessage,
   updateMessage,
-  deleteMessage
+  deleteMessage,
+  markChannelAsRead,
+  getUnreadChannelCounts
 } from "../services/messageService";
 import { getServerMembers } from "../services/serverMemberService";
 import {
@@ -25,7 +27,9 @@ import {
   sendDirectMessage,
   updateDirectMessage,
   deleteDirectMessage,
-  deleteDirectConversation
+  deleteDirectConversation,
+  markDirectConversationAsRead,
+  getUnreadDirectConversationCounts
 } from "../services/directMessageService";
 import {
   createServerInvite,
@@ -880,6 +884,27 @@ const MainPage = () => {
     return normalizedConversations;
   }, []);
 
+  const loadUnreadCounts = useCallback(async (token) => {
+    const [channelUnreadData, directUnreadData] = await Promise.all([
+      getUnreadChannelCounts(token),
+      getUnreadDirectConversationCounts(token)
+    ]);
+
+    setUnreadChannelCounts(
+      channelUnreadData?.channels || channelUnreadData?.data?.channels || {}
+    );
+
+    setUnreadServerCounts(
+      channelUnreadData?.servers || channelUnreadData?.data?.servers || {}
+    );
+
+    setUnreadDirectCounts(
+      directUnreadData?.conversations ||
+      directUnreadData?.data?.conversations ||
+      {}
+    );
+  }, []);
+
   const loadFriendRequests = useCallback(async (token) => {
     const [incomingResponse, outgoingResponse] = await Promise.all([
       fetch(`${API_BASE_URL}/friends/requests/incoming`, {
@@ -1015,6 +1040,34 @@ const MainPage = () => {
     return normalizedMessageData;
   }, []);
 
+  const persistChannelReadState = useCallback(async (channelId) => {
+    const token = getAuthToken();
+
+    if (!token || !channelId) {
+      return;
+    }
+
+    try {
+      await markChannelAsRead(token, channelId);
+    } catch (error) {
+      console.error("Failed to mark channel as read:", error);
+    }
+  }, []);
+
+  const persistDirectConversationReadState = useCallback(async (conversationId) => {
+    const token = getAuthToken();
+
+    if (!token || !conversationId) {
+      return;
+    }
+
+    try {
+      await markDirectConversationAsRead(token, conversationId);
+    } catch (error) {
+      console.error("Failed to mark direct conversation as read:", error);
+    }
+  }, []);
+
   useEffect(() => {
     const loadMainPageData = async () => {
       const token = getAuthToken();
@@ -1045,6 +1098,16 @@ const MainPage = () => {
           loadDirectConversationList(token),
           loadFriendRequests(token)
         ]);
+
+        try {
+          await loadUnreadCounts(token);
+        } catch (unreadError) {
+          console.error("Failed to load unread counts:", unreadError);
+
+          setUnreadChannelCounts({});
+          setUnreadServerCounts({});
+          setUnreadDirectCounts({});
+        }
       } catch (error) {
         disconnectSocket();
         localStorage.removeItem("token");
@@ -1056,7 +1119,14 @@ const MainPage = () => {
     };
 
     loadMainPageData();
-  }, [navigate, loadServers, loadFriends, loadDirectConversationList, loadFriendRequests]);
+  }, [
+    navigate,
+    loadServers,
+    loadFriends,
+    loadDirectConversationList,
+    loadFriendRequests,
+    loadUnreadCounts
+  ]);
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -1064,7 +1134,12 @@ const MainPage = () => {
     }
 
     clearDirectUnread(activeConversationId);
-  }, [activeConversationId, clearDirectUnread]);
+    persistDirectConversationReadState(activeConversationId);
+  }, [
+    activeConversationId,
+    clearDirectUnread,
+    persistDirectConversationReadState
+  ]);
 
   useEffect(() => {
     if (!activeServerId || !activeChannelId) {
@@ -1072,7 +1147,13 @@ const MainPage = () => {
     }
 
     clearChannelUnread(activeChannelId, activeServerId);
-  }, [activeServerId, activeChannelId, clearChannelUnread]);
+    persistChannelReadState(activeChannelId);
+  }, [
+    activeServerId,
+    activeChannelId,
+    clearChannelUnread,
+    persistChannelReadState
+  ]);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -1438,6 +1519,7 @@ const MainPage = () => {
 
         return [...prevMessages, incomingMessage];
       });
+      persistChannelReadState(activeChannelId);
     };
 
     const handleMessageDeleted = (deletedMessage) => {
@@ -1519,6 +1601,7 @@ const MainPage = () => {
 
           return [...prevMessages, payload.directMessage];
         });
+        persistDirectConversationReadState(conversationId);
       } else if (!isOwnMessage) {
         setUnreadDirectCounts((prevCounts) => {
           const key = String(conversationId);
@@ -1726,7 +1809,9 @@ const MainPage = () => {
     activeConversationId,
     loadDirectConversationList,
     fetchFriendRequests,
-    currentUserId
+    currentUserId,
+    persistChannelReadState,
+    persistDirectConversationReadState
   ]);
 
   useEffect(() => {
@@ -3136,7 +3221,7 @@ const MainPage = () => {
                                 className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
                                   }${unreadCount > 0 && !isActive ? " discord-channel-button-unread" : ""
                                   }`}
-  
+
                               >
                                 <span className="channel-hash">#</span>
                                 <span className="channel-name">

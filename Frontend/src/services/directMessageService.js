@@ -143,3 +143,24 @@ export const deleteDirectConversation = async (token, conversationId) => {
 
   return handleResponse(response);
 };
+
+export const markDirectConversationAsRead = async (token, conversationId) => {
+  const response = await fetch(
+    `${API_BASE_URL}/direct-messages/conversations/${conversationId}/read`,
+    {
+      method: "PATCH",
+      headers: getAuthHeaders(token)
+    }
+  );
+
+  return handleResponse(response);
+};
+
+export const getUnreadDirectConversationCounts = async (token) => {
+  const response = await fetch(`${API_BASE_URL}/direct-messages/unread-counts`, {
+    method: "GET",
+    headers: getAuthHeaders(token)
+  });
+
+  return handleResponse(response);
+};

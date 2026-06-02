@@ -7,7 +7,9 @@ const {
   sendDirectMessageToConversation,
   updateDirectMessage,
   deleteDirectMessage,
-  deleteDirectConversationForMe
+  deleteDirectConversationForMe,
+  markDirectConversationRead,
+  getUnreadDirectConversationCounts
 } = require("../controllers/directMessageController");
 const { protect } = require("../middleware/authMiddleware");
 const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
@@ -18,6 +20,22 @@ const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
  *   - name: Direct Messages
  *     description: Direct message management routes
  */
+
+/**
+ * @swagger
+ * /api/direct-messages/unread-counts:
+ *   get:
+ *     summary: Get unread direct conversation counts for the authenticated user
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Unread direct conversation counts fetched successfully
+ *       401:
+ *         description: Not authorized
+ */
+router.get("/unread-counts", protect, getUnreadDirectConversationCounts);
 
 /**
  * @swagger
@@ -54,6 +72,37 @@ router.get(
   "/conversations/:conversationId/messages",
   protect,
   getDirectMessages
+);
+
+/**
+ * @swagger
+ * /api/direct-messages/conversations/{conversationId}/read:
+ *   patch:
+ *     summary: Mark a direct conversation as read for the authenticated user
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: conversationId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the direct conversation
+ *     responses:
+ *       200:
+ *         description: Direct conversation marked as read
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: User is not part of the conversation
+ *       404:
+ *         description: Direct conversation not found
+ */
+router.patch(
+  "/conversations/:conversationId/read",
+  protect,
+  markDirectConversationRead
 );
 
 /**

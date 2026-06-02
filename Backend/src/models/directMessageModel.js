@@ -390,6 +390,95 @@ const hideDirectConversationForUser = async (conversationId, userId) => {
   };
 };
 
+const markDirectConversationAsRead = async (conversationId, userId) => {
+  const [latestRows] = await pool.execute(
+    `
+      SELECT dm.direct_message_id
+      FROM direct_messages dm
+      LEFT JOIN direct_conversation_deletions dcd
+        ON dcd.conversation_id = dm.conversation_id
+       AND dcd.user_id = ?
+      WHERE dm.conversation_id = ?
+        AND (
+          dcd.deletion_id IS NULL
+          OR dm.direct_message_id > dcd.deleted_after_message_id
+        )
+      ORDER BY dm.direct_message_id DESC
+      LIMIT 1
+    `,
+    [userId, conversationId]
+  );
+
+  const lastReadDirectMessageId = latestRows[0]?.direct_message_id || null;
+
+  await pool.execute(
+    `
+      INSERT INTO direct_conversation_read_states (
+        user_id,
+        conversation_id,
+        last_read_direct_message_id,
+        last_read_at
+      )
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON DUPLICATE KEY UPDATE
+        last_read_direct_message_id = VALUES(last_read_direct_message_id),
+        last_read_at = CURRENT_TIMESTAMP
+    `,
+    [userId, conversationId, lastReadDirectMessageId]
+  );
+
+  return {
+    user_id: Number(userId),
+    conversation_id: Number(conversationId),
+    last_read_direct_message_id: lastReadDirectMessageId
+  };
+};
+
+const getUnreadDirectConversationCountsByUserId = async (userId) => {
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        dc.conversation_id,
+        COUNT(dm.direct_message_id) AS unread_count
+      FROM direct_conversations dc
+      LEFT JOIN direct_conversation_deletions dcd
+        ON dcd.conversation_id = dc.conversation_id
+       AND dcd.user_id = ?
+      LEFT JOIN direct_conversation_read_states dcrs
+        ON dcrs.conversation_id = dc.conversation_id
+       AND dcrs.user_id = ?
+      JOIN direct_messages dm
+        ON dm.conversation_id = dc.conversation_id
+       AND dm.sender_id <> ?
+       AND (
+          dcd.deletion_id IS NULL
+          OR dm.direct_message_id > dcd.deleted_after_message_id
+       )
+       AND (
+          dcrs.read_state_id IS NULL
+          OR (
+            dcrs.last_read_direct_message_id IS NOT NULL
+            AND dm.direct_message_id > dcrs.last_read_direct_message_id
+          )
+          OR (
+            dcrs.last_read_direct_message_id IS NULL
+            AND dcrs.last_read_at IS NOT NULL
+            AND dm.created_at > dcrs.last_read_at
+          )
+       )
+      WHERE dc.user_one_id = ? OR dc.user_two_id = ?
+      GROUP BY dc.conversation_id
+      HAVING unread_count > 0
+    `,
+    [userId, userId, userId, userId, userId]
+  );
+
+  return rows.map((row) => ({
+    conversation_id: row.conversation_id,
+    unread_count: Number(row.unread_count || 0)
+  }));
+};
+
 module.exports = {
   getConversationByUsers,
   createConversation,
@@ -403,5 +492,7 @@ module.exports = {
   updateDirectMessageById,
   deleteDirectMessageAttachmentsByMessageId,
   deleteDirectMessageById,
-  hideDirectConversationForUser
+  hideDirectConversationForUser,
+  markDirectConversationAsRead,
+  getUnreadDirectConversationCountsByUserId
 };

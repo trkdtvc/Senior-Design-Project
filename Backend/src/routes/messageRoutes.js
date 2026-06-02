@@ -62,6 +62,47 @@ router.post(
 
 /**
  * @swagger
+ * /api/messages/unread-counts:
+ *   get:
+ *     summary: Get unread channel and server message counts for the authenticated user
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Unread channel and server counts fetched successfully
+ *       401:
+ *         description: Not authorized
+ */
+router.get("/unread-counts", protect, messageController.getUnreadChannelCounts);
+
+/**
+ * @swagger
+ * /api/messages/{channelId}/read:
+ *   patch:
+ *     summary: Mark a channel as read for the authenticated user
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the channel
+ *     responses:
+ *       200:
+ *         description: Channel marked as read
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: You are not a member of this channel's server
+ */
+router.patch("/:channelId/read", protect, messageController.markChannelAsRead);
+
+/**
+ * @swagger
  * /api/messages/{channelId}:
  *   get:
  *     summary: Get all messages for a channel

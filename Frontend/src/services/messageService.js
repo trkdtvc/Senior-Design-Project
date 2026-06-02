@@ -102,3 +102,21 @@ export const deleteMessage = async (token, messageId) => {
 
   return handleResponse(response);
 };
+
+export const markChannelAsRead = async (token, channelId) => {
+  const response = await fetch(`${API_BASE_URL}/messages/${channelId}/read`, {
+    method: "PATCH",
+    headers: getAuthHeaders(token)
+  });
+
+  return handleResponse(response);
+};
+
+export const getUnreadChannelCounts = async (token) => {
+  const response = await fetch(`${API_BASE_URL}/messages/unread-counts`, {
+    method: "GET",
+    headers: getAuthHeaders(token)
+  });
+
+  return handleResponse(response);
+};

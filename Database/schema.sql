@@ -76,6 +76,24 @@ CREATE TABLE messages (
   CONSTRAINT messages_reply_to_message_fk FOREIGN KEY (reply_to_message_id) REFERENCES messages (message_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE channel_read_states (
+  read_state_id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  channel_id INT NOT NULL,
+  last_read_message_id INT DEFAULT NULL,
+  last_read_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (read_state_id),
+  UNIQUE KEY unique_channel_read_state (user_id, channel_id),
+  KEY channel_id (channel_id),
+  KEY last_read_message_id (last_read_message_id),
+  CONSTRAINT channel_read_states_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT channel_read_states_channel_fk
+    FOREIGN KEY (channel_id) REFERENCES channels (channel_id) ON DELETE CASCADE,
+  CONSTRAINT channel_read_states_message_fk
+    FOREIGN KEY (last_read_message_id) REFERENCES messages (message_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE roles (
   role_id INT NOT NULL AUTO_INCREMENT,
   server_id INT NOT NULL,
@@ -168,6 +186,24 @@ CREATE TABLE direct_messages (
   CONSTRAINT direct_messages_ibfk_1 FOREIGN KEY (conversation_id) REFERENCES direct_conversations (conversation_id) ON DELETE CASCADE,
   CONSTRAINT direct_messages_ibfk_2 FOREIGN KEY (sender_id) REFERENCES users (user_id) ON DELETE CASCADE,
   CONSTRAINT direct_messages_reply_to_message_fk FOREIGN KEY (reply_to_direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE direct_conversation_read_states (
+  read_state_id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  conversation_id INT NOT NULL,
+  last_read_direct_message_id INT DEFAULT NULL,
+  last_read_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (read_state_id),
+  UNIQUE KEY unique_direct_conversation_read_state (user_id, conversation_id),
+  KEY conversation_id (conversation_id),
+  KEY last_read_direct_message_id (last_read_direct_message_id),
+  CONSTRAINT direct_conversation_read_states_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT direct_conversation_read_states_conversation_fk
+    FOREIGN KEY (conversation_id) REFERENCES direct_conversations (conversation_id) ON DELETE CASCADE,
+  CONSTRAINT direct_conversation_read_states_message_fk
+    FOREIGN KEY (last_read_direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE email_verification_tokens (
