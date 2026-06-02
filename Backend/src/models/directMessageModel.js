@@ -434,6 +434,63 @@ const markDirectConversationAsRead = async (conversationId, userId) => {
   };
 };
 
+
+const searchDirectMessagesByConversationId = async (
+  conversationId,
+  userId,
+  searchTerm
+) => {
+  const safeSearchTerm = `%${String(searchTerm || "").trim()}%`;
+
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        dm.direct_message_id,
+        dm.conversation_id,
+        dm.sender_id,
+        u.username AS sender_username,
+        dm.content,
+        dm.reply_to_direct_message_id,
+        rdm.content AS reply_to_content,
+        rdm.sender_id AS reply_to_sender_id,
+        ru.username AS reply_to_sender_username,
+        dm.created_at,
+        dm.updated_at
+      FROM direct_messages dm
+      JOIN users u ON dm.sender_id = u.user_id
+      LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
+      LEFT JOIN users ru ON rdm.sender_id = ru.user_id
+      LEFT JOIN direct_conversation_deletions dcd
+        ON dcd.conversation_id = dm.conversation_id
+       AND dcd.user_id = ?
+      WHERE dm.conversation_id = ?
+        AND dm.content LIKE ?
+        AND (
+          dcd.deletion_id IS NULL
+          OR dm.direct_message_id > dcd.deleted_after_message_id
+        )
+      ORDER BY dm.created_at ASC, dm.direct_message_id ASC
+      LIMIT 100
+    `,
+    [userId, conversationId, safeSearchTerm]
+  );
+
+  const messagesWithAttachments = await attachFilesToDirectMessages(rows);
+
+  return messagesWithAttachments.map((message) => ({
+    ...message,
+    reply_to: message.reply_to_direct_message_id
+      ? {
+          direct_message_id: message.reply_to_direct_message_id,
+          sender_id: message.reply_to_sender_id,
+          sender_username: message.reply_to_sender_username,
+          username: message.reply_to_sender_username,
+          content: message.reply_to_content
+        }
+      : null
+  }));
+};
+
 const getUnreadDirectConversationCountsByUserId = async (userId) => {
   const [rows] = await pool.execute(
     `
@@ -494,5 +551,6 @@ module.exports = {
   deleteDirectMessageById,
   hideDirectConversationForUser,
   markDirectConversationAsRead,
+  searchDirectMessagesByConversationId,
   getUnreadDirectConversationCountsByUserId
 };

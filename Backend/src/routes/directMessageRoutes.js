@@ -13,6 +13,10 @@ const {
 } = require("../controllers/directMessageController");
 const { protect } = require("../middleware/authMiddleware");
 const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
+const {
+  isUserInConversation,
+  searchDirectMessagesByConversationId
+} = require("../models/directMessageModel");
 
 /**
  * @swagger
@@ -72,6 +76,78 @@ router.get(
   "/conversations/:conversationId/messages",
   protect,
   getDirectMessages
+);
+
+
+/**
+ * @swagger
+ * /api/direct-messages/conversations/{conversationId}/search:
+ *   get:
+ *     summary: Search messages inside a direct conversation
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: conversationId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the direct conversation
+ *       - in: query
+ *         name: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Search term used to find matching direct messages
+ *     responses:
+ *       200:
+ *         description: Matching direct messages fetched successfully
+ *       400:
+ *         description: Search term is required
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: User is not part of the conversation
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  "/conversations/:conversationId/search",
+  protect,
+  async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const userId = req.user?.user_id || req.user?.id;
+      const searchTerm = String(
+        req.query.query || req.query.searchTerm || req.query.q || ""
+      ).trim();
+
+      if (!searchTerm) {
+        return res.status(400).json({ message: "Search term is required." });
+      }
+
+      const isMember = await isUserInConversation(conversationId, userId);
+
+      if (!isMember) {
+        return res.status(403).json({
+          message: "You are not allowed to search this conversation."
+        });
+      }
+
+      const messages = await searchDirectMessagesByConversationId(
+        conversationId,
+        userId,
+        searchTerm
+      );
+
+      return res.status(200).json({ messages });
+    } catch (error) {
+      return res.status(500).json({
+        message: error.message || "Failed to search direct messages."
+      });
+    }
+  }
 );
 
 /**

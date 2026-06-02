@@ -88,6 +88,20 @@ export const getDirectMessages = async (token, conversationId) => {
   return handleResponse(response);
 };
 
+export const searchDirectMessages = async (token, conversationId, searchTerm) => {
+  const query = encodeURIComponent(searchTerm);
+
+  const response = await fetch(
+    `${API_BASE_URL}/direct-messages/conversations/${conversationId}/search?query=${query}`,
+    {
+      method: "GET",
+      headers: getAuthHeaders(token)
+    }
+  );
+
+  return handleResponse(response);
+};
+
 export const sendDirectMessage = async (token, messageData) => {
   const hasAttachment = Boolean(messageData?.attachment);
 

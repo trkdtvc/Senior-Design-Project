@@ -25,6 +25,7 @@ import {
   getDirectConversations,
   getOrCreateDirectConversation,
   getDirectMessages,
+  searchDirectMessages,
   sendDirectMessage,
   updateDirectMessage,
   deleteDirectMessage,
@@ -289,8 +290,35 @@ const getDirectMessageTimestamp = (message) =>
 const getDirectMessageUpdatedTimestamp = (message) =>
   message?.updated_at || message?.updatedAt || null;
 
-const getReplyPreview = (message) =>
-  message?.reply_to || message?.replyTo || null;
+const getReplyPreview = (message) => {
+  const existingReplyPreview = message?.reply_to || message?.replyTo || null;
+
+  if (existingReplyPreview) {
+    return existingReplyPreview;
+  }
+
+  const replyContent =
+    message?.reply_to_content ||
+    message?.reply_to_message_content ||
+    message?.replyToContent ||
+    "";
+
+  const replyAuthor =
+    message?.reply_to_sender_username ||
+    message?.reply_to_username ||
+    message?.replyToSenderUsername ||
+    "";
+
+  if (!replyContent && !replyAuthor) {
+    return null;
+  }
+
+  return {
+    content: replyContent,
+    username: replyAuthor,
+    sender_username: replyAuthor
+  };
+};
 
 const getReplyPreviewAuthor = (replyPreview) =>
   replyPreview?.username ||
@@ -587,6 +615,7 @@ const MainPage = () => {
   const [channelMessages, setChannelMessages] = useState([]);
   const [channelSearchResults, setChannelSearchResults] = useState([]);
   const [directMessages, setDirectMessages] = useState([]);
+  const [directSearchResults, setDirectSearchResults] = useState([]);
   const [unreadDirectCounts, setUnreadDirectCounts] = useState({});
   const [unreadChannelCounts, setUnreadChannelCounts] = useState({});
   const [unreadServerCounts, setUnreadServerCounts] = useState({});
@@ -762,10 +791,16 @@ const MainPage = () => {
   );
 
   const displayedMessages = isDmView
-    ? directMessages
+    ? isMessageSearchActive
+      ? directSearchResults
+      : directMessages
     : isMessageSearchActive
       ? channelSearchResults
       : channelMessages;
+
+  const activeMessageSearchResults = isDmView
+    ? directSearchResults
+    : channelSearchResults;
 
   const totalUnreadDirectCount = useMemo(
     () => getTotalUnreadCount(unreadDirectCounts),
@@ -875,6 +910,7 @@ const MainPage = () => {
   const resetMessageSearchState = () => {
     setMessageSearchTerm("");
     setChannelSearchResults([]);
+    setDirectSearchResults([]);
     setIsMessageSearchActive(false);
     setIsSearchingMessages(false);
     setMessageSearchError("");
@@ -1652,12 +1688,14 @@ const MainPage = () => {
         return;
       }
 
-      setDirectMessages((prevMessages) =>
+      const removeDeletedDirectMessage = (prevMessages) =>
         prevMessages.filter(
           (message) =>
             String(getDirectMessageId(message)) !== String(deletedMessageId)
-        )
-      );
+        );
+
+      setDirectMessages(removeDeletedDirectMessage);
+      setDirectSearchResults(removeDeletedDirectMessage);
 
       const token = getAuthToken();
 
@@ -1677,7 +1715,7 @@ const MainPage = () => {
         return;
       }
 
-      setDirectMessages((prevMessages) =>
+      const updateDirectMessageList = (prevMessages) =>
         prevMessages.map((message) => {
           if (String(getDirectMessageId(message)) !== String(updatedMessageId)) {
             return message;
@@ -1695,8 +1733,10 @@ const MainPage = () => {
               : incomingAttachments,
             edited: true
           };
-        })
-      );
+        });
+
+      setDirectMessages(updateDirectMessageList);
+      setDirectSearchResults(updateDirectMessageList);
 
       const token = getAuthToken();
 
@@ -1876,7 +1916,7 @@ const MainPage = () => {
     };
   }, []);
 
-  const handleSearchChannelMessages = async (e) => {
+  const handleSearchMessages = async (e) => {
     e.preventDefault();
 
     const token = getAuthToken();
@@ -1886,7 +1926,11 @@ const MainPage = () => {
       return;
     }
 
-    if (isDmView || !activeChannelId) {
+    if (isDmView && !activeConversationId) {
+      return;
+    }
+
+    if (!isDmView && !activeChannelId) {
       return;
     }
 
@@ -1902,18 +1946,32 @@ const MainPage = () => {
       setMessageSearchError("");
       shouldAutoScrollRef.current = false;
 
-      const response = await searchChannelMessages(
-        token,
-        activeChannelId,
-        trimmedSearchTerm
-      );
+      const response = isDmView
+        ? await searchDirectMessages(
+            token,
+            activeConversationId,
+            trimmedSearchTerm
+          )
+        : await searchChannelMessages(
+            token,
+            activeChannelId,
+            trimmedSearchTerm
+          );
 
       const normalizedSearchResults = normalizeMessages(response);
 
-      setChannelSearchResults(normalizedSearchResults);
+      if (isDmView) {
+        setDirectSearchResults(normalizedSearchResults);
+        setChannelSearchResults([]);
+      } else {
+        setChannelSearchResults(normalizedSearchResults);
+        setDirectSearchResults([]);
+      }
+
       setIsMessageSearchActive(true);
     } catch (error) {
       setChannelSearchResults([]);
+      setDirectSearchResults([]);
       setIsMessageSearchActive(false);
       setMessageSearchError(error.message || "Failed to search messages.");
     } finally {
@@ -1924,6 +1982,7 @@ const MainPage = () => {
   const handleClearMessageSearch = () => {
     setMessageSearchTerm("");
     setChannelSearchResults([]);
+    setDirectSearchResults([]);
     setIsMessageSearchActive(false);
     setIsSearchingMessages(false);
     setMessageSearchError("");
@@ -2534,7 +2593,7 @@ const MainPage = () => {
         const updatedMessage =
           response?.directMessage || response?.data || response;
 
-        setDirectMessages((prevMessages) =>
+        const updateDirectMessageList = (prevMessages) =>
           prevMessages.map((existingMessage) => {
             if (
               String(getDirectMessageId(existingMessage)) !== String(messageId)
@@ -2549,8 +2608,10 @@ const MainPage = () => {
               attachments: getMessageAttachments(existingMessage),
               edited: true
             };
-          })
-        );
+          });
+
+        setDirectMessages(updateDirectMessageList);
+        setDirectSearchResults(updateDirectMessageList);
       } else {
         const response = await updateMessage(token, messageId, trimmedContent);
         const updatedMessage = response?.data || response?.message || response;
@@ -2615,12 +2676,14 @@ const MainPage = () => {
       if (isDmView) {
         await deleteDirectMessage(token, messageId);
 
-        setDirectMessages((prevMessages) =>
+        const removeDeletedDirectMessage = (prevMessages) =>
           prevMessages.filter(
             (existingMessage) =>
               String(getDirectMessageId(existingMessage)) !== String(messageId)
-          )
-        );
+          );
+
+        setDirectMessages(removeDeletedDirectMessage);
+        setDirectSearchResults(removeDeletedDirectMessage);
       } else {
         await deleteMessage(token, messageId);
 
@@ -2700,7 +2763,7 @@ const MainPage = () => {
       setIsEmojiPickerOpen(false);
       resetMessageReplyState();
 
-      if (!isDmView && isMessageSearchActive) {
+      if (isMessageSearchActive) {
         handleClearMessageSearch();
       }
 
@@ -3535,9 +3598,9 @@ const MainPage = () => {
               )}
             </div>
 
-            {!isDmView && activeChannelId ? (
+            {((!isDmView && activeChannelId) || (isDmView && activeConversationId)) ? (
               <form
-                onSubmit={handleSearchChannelMessages}
+                onSubmit={handleSearchMessages}
                 className="discord-message-search"
               >
                 <input
@@ -3548,7 +3611,7 @@ const MainPage = () => {
                     setMessageSearchTerm(e.target.value);
                     setMessageSearchError("");
                   }}
-                  placeholder="Search messages"
+                  placeholder={isDmView ? "Search direct messages" : "Search messages"}
                 />
 
                 {isMessageSearchActive ? (
@@ -3574,7 +3637,7 @@ const MainPage = () => {
           </div>
 
           <section className="server-messages-panel discord-messages-panel">
-            {!isDmView && (messageSearchError || isMessageSearchActive) ? (
+            {showComposer && (messageSearchError || isMessageSearchActive) ? (
               <div className="discord-message-search-status">
                 {messageSearchError ? (
                   <p className="auth-error server-inline-error server-inline-error-tight">
@@ -3582,8 +3645,8 @@ const MainPage = () => {
                   </p>
                 ) : (
                   <p className="discord-message-search-status-text">
-                    Showing {channelSearchResults.length} result
-                    {channelSearchResults.length === 1 ? "" : "s"} for “
+                    Showing {activeMessageSearchResults.length} result
+                    {activeMessageSearchResults.length === 1 ? "" : "s"} for “
                     {messageSearchTerm.trim()}”
                   </p>
                 )}
