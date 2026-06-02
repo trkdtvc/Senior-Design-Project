@@ -677,6 +677,11 @@ const MainPage = () => {
     server_name: "",
     description: ""
   });
+  const [isMentionMenuOpen, setIsMentionMenuOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionStartIndex, setMentionStartIndex] = useState(null);
+  const [mentionEndIndex, setMentionEndIndex] = useState(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
 
   const isDmView = !activeServerId;
 
@@ -937,6 +942,57 @@ const MainPage = () => {
     [members]
   );
 
+  const mentionSuggestions = useMemo(() => {
+    if (!isMentionMenuOpen || isDmView || !activeChannelId) {
+      return [];
+    }
+
+    const normalizedQuery = mentionQuery.trim().toLowerCase();
+    const uniqueMembers = new Map();
+
+    members.forEach((member) => {
+      const username = getMemberName(member);
+      const memberKey = String(getMemberUserId(member) || username);
+
+      if (!username || username === "Unknown user" || uniqueMembers.has(memberKey)) {
+        return;
+      }
+
+      uniqueMembers.set(memberKey, member);
+    });
+
+    return Array.from(uniqueMembers.values())
+      .filter((member) => {
+        const username = getMemberName(member).toLowerCase();
+
+        return !normalizedQuery || username.includes(normalizedQuery);
+      })
+      .sort((firstMember, secondMember) => {
+        const firstUsername = getMemberName(firstMember).toLowerCase();
+        const secondUsername = getMemberName(secondMember).toLowerCase();
+        const firstStartsWithQuery = normalizedQuery
+          ? firstUsername.startsWith(normalizedQuery)
+          : true;
+        const secondStartsWithQuery = normalizedQuery
+          ? secondUsername.startsWith(normalizedQuery)
+          : true;
+
+        if (firstStartsWithQuery !== secondStartsWithQuery) {
+          return firstStartsWithQuery ? -1 : 1;
+        }
+
+        const firstOnline = getMemberPresenceStatus(firstMember) === "online";
+        const secondOnline = getMemberPresenceStatus(secondMember) === "online";
+
+        if (firstOnline !== secondOnline) {
+          return firstOnline ? -1 : 1;
+        }
+
+        return firstUsername.localeCompare(secondUsername);
+      })
+      .slice(0, 8);
+  }, [activeChannelId, isDmView, isMentionMenuOpen, members, mentionQuery]);
+
   const currentUserPresence = isSocketReady
     ? "online"
     : normalizePresenceStatus(user?.presence_status ?? user?.is_online);
@@ -962,6 +1018,14 @@ const MainPage = () => {
     setSelectedReplyMessage(null);
   };
 
+  const closeMentionMenu = () => {
+    setIsMentionMenuOpen(false);
+    setMentionQuery("");
+    setMentionStartIndex(null);
+    setMentionEndIndex(null);
+    setActiveMentionIndex(0);
+  };
+
   const resetMessageSearchState = () => {
     setMessageSearchTerm("");
     setChannelSearchResults([]);
@@ -969,6 +1033,7 @@ const MainPage = () => {
     setIsMessageSearchActive(false);
     setIsSearchingMessages(false);
     setMessageSearchError("");
+    closeMentionMenu();
   };
 
   const loadServers = useCallback(async (token) => {
@@ -2011,6 +2076,10 @@ const MainPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    setActiveMentionIndex(0);
+  }, [mentionQuery, isMentionMenuOpen]);
+
   const handleSearchMessages = async (e) => {
     e.preventDefault();
 
@@ -2857,6 +2926,7 @@ const MainPage = () => {
       setMessageContent("");
       setIsEmojiPickerOpen(false);
       resetMessageReplyState();
+      closeMentionMenu();
 
       if (isMessageSearchActive) {
         handleClearMessageSearch();
@@ -2882,11 +2952,93 @@ const MainPage = () => {
     }
   };
 
+  const updateMentionMenuFromInput = (value, cursorPosition) => {
+    if (isDmView || !activeChannelId) {
+      closeMentionMenu();
+      return;
+    }
+
+    const safeCursorPosition = Number.isInteger(cursorPosition)
+      ? cursorPosition
+      : value.length;
+    const textBeforeCursor = value.slice(0, safeCursorPosition);
+    const mentionMatch = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z0-9_.-]*)$/);
+
+    if (!mentionMatch) {
+      closeMentionMenu();
+      return;
+    }
+
+    const atIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (atIndex < 0) {
+      closeMentionMenu();
+      return;
+    }
+
+    setMentionStartIndex(atIndex);
+    setMentionEndIndex(safeCursorPosition);
+    setMentionQuery(mentionMatch[1] || "");
+    setIsMentionMenuOpen(true);
+  };
+
+  const insertMention = (member) => {
+    const username = getMemberName(member);
+
+    if (!username || mentionStartIndex === null || mentionEndIndex === null) {
+      closeMentionMenu();
+      return;
+    }
+
+    const textBeforeMention = messageContent.slice(0, mentionStartIndex);
+    const textAfterMention = messageContent.slice(mentionEndIndex);
+    const normalizedTextAfterMention = textAfterMention.startsWith(" ")
+      ? textAfterMention.slice(1)
+      : textAfterMention;
+    const nextContent = `${textBeforeMention}@${username} ${normalizedTextAfterMention}`;
+    const nextCursorPosition = textBeforeMention.length + username.length + 2;
+
+    setMessageContent(nextContent);
+    closeMentionMenu();
+
+    requestAnimationFrame(() => {
+      if (!messageInputRef.current) {
+        return;
+      }
+
+      messageInputRef.current.focus();
+      messageInputRef.current.setSelectionRange(
+        nextCursorPosition,
+        nextCursorPosition
+      );
+      messageInputRef.current.style.height = "44px";
+      messageInputRef.current.style.height = `${Math.min(
+        messageInputRef.current.scrollHeight,
+        160
+      )}px`;
+    });
+  };
+
   const handleMessageInputChange = (e) => {
-    setMessageContent(e.target.value);
+    const nextValue = e.target.value;
+
+    setMessageContent(nextValue);
     setMessageError("");
     e.target.style.height = "44px";
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+    updateMentionMenuFromInput(nextValue, e.target.selectionStart);
+  };
+
+  const handleMessageInputCursorChange = (e) => {
+    updateMentionMenuFromInput(e.target.value, e.target.selectionStart);
+  };
+
+  const handleMessageInputKeyUp = (e) => {
+    if (["ArrowUp", "ArrowDown", "Enter", "Escape", "Tab"].includes(e.key)) {
+      return;
+    }
+
+    updateMentionMenuFromInput(e.target.value, e.target.selectionStart);
   };
 
   const handleAttachmentChange = (e) => {
@@ -2960,6 +3112,36 @@ const MainPage = () => {
   };
 
   const handleMessageKeyDown = (e) => {
+    if (isMentionMenuOpen && mentionSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveMentionIndex((currentIndex) =>
+          currentIndex + 1 >= mentionSuggestions.length ? 0 : currentIndex + 1
+        );
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveMentionIndex((currentIndex) =>
+          currentIndex - 1 < 0 ? mentionSuggestions.length - 1 : currentIndex - 1
+        );
+        return;
+      }
+
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mentionSuggestions[activeMentionIndex] || mentionSuggestions[0]);
+        return;
+      }
+    }
+
+    if (isMentionMenuOpen && e.key === "Escape") {
+      e.preventDefault();
+      closeMentionMenu();
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
 
@@ -4381,6 +4563,60 @@ const MainPage = () => {
                   ) : null}
                 </div>
 
+                {isMentionMenuOpen ? (
+                  <div className="discord-mention-suggestions">
+                    {mentionSuggestions.length > 0 ? (
+                      mentionSuggestions.map((member, index) => {
+                        const memberName = getMemberName(member);
+                        const memberEmail = getMemberEmail(member);
+                        const presenceStatus = getMemberPresenceStatus(member);
+
+                        return (
+                          <button
+                            key={getMemberUserId(member) || memberName}
+                            type="button"
+                            className={`discord-mention-suggestion${
+                              index === activeMentionIndex
+                                ? " discord-mention-suggestion-active"
+                                : ""
+                            }`}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              insertMention(member);
+                            }}
+                            onMouseEnter={() => setActiveMentionIndex(index)}
+                          >
+                            <span className="discord-mention-avatar">
+                              {getInitial(memberName)}
+                              <span
+                                className={`discord-status-dot ${getPresenceColorClass(
+                                  presenceStatus
+                                )}`}
+                              />
+                            </span>
+
+                            <span className="discord-mention-meta">
+                              <span className="discord-mention-name">
+                                @{memberName}
+                              </span>
+
+                              {memberEmail ? (
+                                <span className="discord-mention-email">
+                                  {memberEmail}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="discord-mention-empty">
+                        No matching members
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
                 <textarea
                   ref={messageInputRef}
                   className="message-input discord-composer-input"
@@ -4395,7 +4631,12 @@ const MainPage = () => {
                   }
                   value={messageContent}
                   onChange={handleMessageInputChange}
+                  onClick={handleMessageInputCursorChange}
+                  onKeyUp={handleMessageInputKeyUp}
                   onKeyDown={handleMessageKeyDown}
+                  onBlur={() => {
+                    window.setTimeout(() => closeMentionMenu(), 120);
+                  }}
                   disabled={
                     (isDmView && !activeConversationId) ||
                     (!isDmView && !activeChannelId)

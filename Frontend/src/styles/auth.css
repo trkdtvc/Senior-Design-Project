@@ -2378,3 +2378,100 @@ textarea.auth-input {
     margin-left: 0;
   }
 }
+/* MENTION AUTOCOMPLETE */
+
+.discord-composer-shell {
+  position: relative;
+}
+
+.discord-mention-suggestions {
+  position: absolute;
+  left: 60px;
+  right: 122px;
+  bottom: calc(100% + 10px);
+  z-index: 70;
+  max-height: 290px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-bg-muted);
+  box-shadow: var(--app-card-shadow);
+}
+
+.discord-mention-suggestion {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--app-transition), color var(--app-transition);
+}
+
+.discord-mention-suggestion:hover,
+.discord-mention-suggestion-active {
+  background: var(--app-bg-elevated-3);
+  color: var(--app-text);
+}
+
+.discord-mention-avatar {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--app-accent);
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.discord-mention-avatar .discord-status-dot {
+  right: -2px;
+  bottom: -2px;
+}
+
+.discord-mention-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.discord-mention-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.discord-mention-email,
+.discord-mention-empty {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.discord-mention-empty {
+  padding: 10px 12px;
+}
+
+@media (max-width: 640px) {
+  .discord-mention-suggestions {
+    left: 0;
+    right: 0;
+  }
+}
