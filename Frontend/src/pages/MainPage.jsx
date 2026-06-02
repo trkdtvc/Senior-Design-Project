@@ -505,6 +505,45 @@ const formatFileSize = (sizeInBytes) => {
   return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const renderHighlightedSearchText = (content, searchTerm) => {
+  const safeContent = String(content || "");
+  const safeSearchTerm = String(searchTerm || "").trim();
+
+  if (!safeSearchTerm) {
+    return safeContent;
+  }
+
+  const lowerContent = safeContent.toLowerCase();
+  const lowerSearchTerm = safeSearchTerm.toLowerCase();
+  const highlightedParts = [];
+  let currentIndex = 0;
+  let matchIndex = lowerContent.indexOf(lowerSearchTerm, currentIndex);
+
+  while (matchIndex !== -1) {
+    if (matchIndex > currentIndex) {
+      highlightedParts.push(safeContent.slice(currentIndex, matchIndex));
+    }
+
+    highlightedParts.push(
+      <mark
+        key={`search-highlight-${matchIndex}-${highlightedParts.length}`}
+        className="discord-message-search-highlight"
+      >
+        {safeContent.slice(matchIndex, matchIndex + safeSearchTerm.length)}
+      </mark>
+    );
+
+    currentIndex = matchIndex + safeSearchTerm.length;
+    matchIndex = lowerContent.indexOf(lowerSearchTerm, currentIndex);
+  }
+
+  if (currentIndex < safeContent.length) {
+    highlightedParts.push(safeContent.slice(currentIndex));
+  }
+
+  return highlightedParts;
+};
+
 const isImageAttachment = (attachment) =>
   getAttachmentType(attachment).startsWith("image/");
 
@@ -591,6 +630,7 @@ const MainPage = () => {
   const socketRef = useRef(null);
   const previousServerIdRef = useRef(null);
   const previousChannelIdRef = useRef(null);
+  const messageSearchRequestRef = useRef(0);
 
   const [user, setUser] = useState(null);
   const [removeFriendError, setRemoveFriendError] = useState("");
@@ -2080,13 +2120,96 @@ const MainPage = () => {
     setActiveMentionIndex(0);
   }, [mentionQuery, isMentionMenuOpen]);
 
-  const handleSearchMessages = async (e) => {
-    e.preventDefault();
+  const runMessageSearch = useCallback(
+    async (searchTerm, options = {}) => {
+      const token = getAuthToken();
+      const trimmedSearchTerm = String(searchTerm || "").trim();
 
-    const token = getAuthToken();
+      if (!token) {
+        navigate("/login");
+        return;
+      }
 
-    if (!token) {
-      navigate("/login");
+      if (isDmView && !activeConversationId) {
+        return;
+      }
+
+      if (!isDmView && !activeChannelId) {
+        return;
+      }
+
+      if (!trimmedSearchTerm) {
+        if (options.showRequiredError) {
+          setMessageSearchError("Search term is required.");
+        }
+
+        return;
+      }
+
+      const requestId = messageSearchRequestRef.current + 1;
+      messageSearchRequestRef.current = requestId;
+
+      try {
+        setIsSearchingMessages(true);
+        setMessageSearchError("");
+        shouldAutoScrollRef.current = false;
+
+        const response = isDmView
+          ? await searchDirectMessages(
+              token,
+              activeConversationId,
+              trimmedSearchTerm
+            )
+          : await searchChannelMessages(
+              token,
+              activeChannelId,
+              trimmedSearchTerm
+            );
+
+        if (requestId !== messageSearchRequestRef.current) {
+          return;
+        }
+
+        const normalizedSearchResults = normalizeMessages(response);
+
+        if (isDmView) {
+          setDirectSearchResults(normalizedSearchResults);
+          setChannelSearchResults([]);
+        } else {
+          setChannelSearchResults(normalizedSearchResults);
+          setDirectSearchResults([]);
+        }
+
+        setIsMessageSearchActive(true);
+      } catch (error) {
+        if (requestId !== messageSearchRequestRef.current) {
+          return;
+        }
+
+        setChannelSearchResults([]);
+        setDirectSearchResults([]);
+        setIsMessageSearchActive(false);
+        setMessageSearchError(error.message || "Failed to search messages.");
+      } finally {
+        if (requestId === messageSearchRequestRef.current) {
+          setIsSearchingMessages(false);
+        }
+      }
+    },
+    [isDmView, activeConversationId, activeChannelId, navigate]
+  );
+
+  useEffect(() => {
+    const trimmedSearchTerm = messageSearchTerm.trim();
+
+    if (!trimmedSearchTerm) {
+      messageSearchRequestRef.current += 1;
+      setChannelSearchResults([]);
+      setDirectSearchResults([]);
+      setIsMessageSearchActive(false);
+      setIsSearchingMessages(false);
+      setMessageSearchError("");
+      shouldAutoScrollRef.current = true;
       return;
     }
 
@@ -2098,52 +2221,28 @@ const MainPage = () => {
       return;
     }
 
-    const trimmedSearchTerm = messageSearchTerm.trim();
+    const debounceTimer = window.setTimeout(() => {
+      runMessageSearch(trimmedSearchTerm);
+    }, 350);
 
-    if (!trimmedSearchTerm) {
-      setMessageSearchError("Search term is required.");
-      return;
-    }
+    return () => {
+      window.clearTimeout(debounceTimer);
+    };
+  }, [
+    messageSearchTerm,
+    isDmView,
+    activeConversationId,
+    activeChannelId,
+    runMessageSearch
+  ]);
 
-    try {
-      setIsSearchingMessages(true);
-      setMessageSearchError("");
-      shouldAutoScrollRef.current = false;
-
-      const response = isDmView
-        ? await searchDirectMessages(
-            token,
-            activeConversationId,
-            trimmedSearchTerm
-          )
-        : await searchChannelMessages(
-            token,
-            activeChannelId,
-            trimmedSearchTerm
-          );
-
-      const normalizedSearchResults = normalizeMessages(response);
-
-      if (isDmView) {
-        setDirectSearchResults(normalizedSearchResults);
-        setChannelSearchResults([]);
-      } else {
-        setChannelSearchResults(normalizedSearchResults);
-        setDirectSearchResults([]);
-      }
-
-      setIsMessageSearchActive(true);
-    } catch (error) {
-      setChannelSearchResults([]);
-      setDirectSearchResults([]);
-      setIsMessageSearchActive(false);
-      setMessageSearchError(error.message || "Failed to search messages.");
-    } finally {
-      setIsSearchingMessages(false);
-    }
+  const handleSearchMessages = (e) => {
+    e.preventDefault();
+    runMessageSearch(messageSearchTerm, { showRequiredError: true });
   };
 
   const handleClearMessageSearch = () => {
+    messageSearchRequestRef.current += 1;
     setMessageSearchTerm("");
     setChannelSearchResults([]);
     setDirectSearchResults([]);
@@ -4403,7 +4502,10 @@ const MainPage = () => {
                           </div>
                         ) : content ? (
                           <p className="discord-message-text">
-                            {content}
+                            {renderHighlightedSearchText(
+                              content,
+                              isMessageSearchActive ? messageSearchTerm : ""
+                            )}
 
                             {isOwnMessage && timestamp ? (
                               <span className="discord-own-message-time">
