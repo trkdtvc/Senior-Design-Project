@@ -2248,3 +2248,133 @@ textarea.auth-input {
   gap: 8px;
   flex-shrink: 0;
 }
+
+.discord-chat-header {
+  justify-content: space-between;
+}
+
+.discord-message-search {
+  margin-left: auto;
+  width: min(430px, 44vw);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.discord-message-search-input {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-bg-input);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 0.86rem;
+  outline: none;
+}
+
+.discord-message-search-input::placeholder {
+  color: var(--app-text-muted);
+}
+
+.discord-message-search-input:focus {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.16);
+  background: #232428;
+}
+
+.discord-message-search-button {
+  width: auto;
+  height: 34px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: var(--app-accent);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background-color var(--app-transition),
+    opacity var(--app-transition);
+}
+
+.discord-message-search-button:hover {
+  background: var(--app-accent-hover);
+}
+
+.discord-message-search-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.discord-message-search-clear {
+  background: var(--app-bg-elevated-2);
+  color: var(--app-text-soft);
+}
+
+.discord-message-search-clear:hover {
+  background: var(--app-bg-elevated-3);
+  color: var(--app-text);
+}
+
+.discord-messages-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.message-list,
+.discord-message-list {
+  flex: 1;
+  height: auto;
+}
+
+.discord-message-search-status {
+  flex-shrink: 0;
+  padding: 10px 16px 0;
+}
+
+.discord-message-search-status .server-inline-error {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.discord-message-search-status-text {
+  margin: 0;
+  padding: 0;
+  color: var(--app-text-muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .discord-message-search {
+    width: min(320px, 48vw);
+  }
+
+  .discord-message-search-button {
+    padding: 0 9px;
+  }
+}
+
+@media (max-width: 640px) {
+  .discord-chat-header {
+    height: auto;
+    min-height: 48px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .discord-message-search {
+    width: 100%;
+    margin-left: 0;
+  }
+}

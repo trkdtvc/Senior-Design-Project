@@ -103,6 +103,43 @@ router.patch("/:channelId/read", protect, messageController.markChannelAsRead);
 
 /**
  * @swagger
+ * /api/messages/search/{channelId}:
+ *   get:
+ *     summary: Search messages inside a channel
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: The ID of the channel
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The search term
+ *     responses:
+ *       200:
+ *         description: Matching channel messages returned successfully
+ *       400:
+ *         description: Search term is required
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: You are not a member of this server
+ */
+router.get(
+  "/search/:channelId",
+  protect,
+  messageController.searchChannelMessages
+);
+
+/**
+ * @swagger
  * /api/messages/{channelId}:
  *   get:
  *     summary: Get all messages for a channel

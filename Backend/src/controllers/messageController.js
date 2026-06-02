@@ -165,6 +165,48 @@ const getChannelMessages = async (req, res, next) => {
   }
 };
 
+const searchChannelMessages = async (req, res, next) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.user_id;
+    const searchTerm = (req.query.q || req.query.query || "").trim();
+
+    if (!channelId) {
+      res.status(400);
+      throw new Error("Channel ID is required");
+    }
+
+    if (!searchTerm) {
+      res.status(400);
+      throw new Error("Search term is required");
+    }
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(channelId, userId);
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    const messages = await messageModel.searchMessagesByChannelId(
+      channelId,
+      searchTerm
+    );
+
+    const messagesWithReplies = messages.map((message) => ({
+      ...message,
+      reply_to: buildReplyPreview(message)
+    }));
+
+    res.status(200).json({
+      message: "Channel messages searched successfully",
+      data: messagesWithReplies
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const updateMessage = async (req, res, next) => {
   try {
     const { messageId } = req.params;
@@ -352,6 +394,7 @@ const getUnreadChannelCounts = async (req, res, next) => {
 module.exports = {
   createMessage,
   getChannelMessages,
+  searchChannelMessages,
   updateMessage,
   deleteMessage,
   markChannelAsRead,

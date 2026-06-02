@@ -89,6 +89,36 @@ const getMessagesByChannelId = async (channelId) => {
   return attachFilesToMessages(rows);
 };
 
+const searchMessagesByChannelId = async (channelId, searchTerm) => {
+  const searchValue = `%${searchTerm}%`;
+
+  const [rows] = await pool.query(
+    `SELECT
+        m.message_id,
+        m.channel_id,
+        m.user_id,
+        m.message_content AS content,
+        m.reply_to_message_id,
+        rm.message_content AS reply_to_content,
+        rm.user_id AS reply_to_user_id,
+        ru.username AS reply_to_username,
+        m.created_at,
+        m.updated_at,
+        u.username
+     FROM messages m
+     JOIN users u ON m.user_id = u.user_id
+     LEFT JOIN messages rm ON m.reply_to_message_id = rm.message_id
+     LEFT JOIN users ru ON rm.user_id = ru.user_id
+     WHERE m.channel_id = ?
+       AND m.message_content LIKE ?
+     ORDER BY m.created_at DESC
+     LIMIT 50`,
+    [channelId, searchValue]
+  );
+
+  return attachFilesToMessages(rows);
+};
+
 const getMessageById = async (messageId) => {
   const [rows] = await pool.query(
     `SELECT
@@ -262,6 +292,7 @@ module.exports = {
   createMessage,
   createMessageAttachment,
   getMessagesByChannelId,
+  searchMessagesByChannelId,
   getMessageById,
   updateMessageById,
   deleteMessageAttachmentsByMessageId,

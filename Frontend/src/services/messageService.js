@@ -66,6 +66,20 @@ export const getChannelMessages = async (token, channelId) => {
   return handleResponse(response);
 };
 
+export const searchChannelMessages = async (token, channelId, searchTerm) => {
+  const encodedSearchTerm = encodeURIComponent(searchTerm);
+
+  const response = await fetch(
+    `${API_BASE_URL}/messages/search/${channelId}?q=${encodedSearchTerm}`,
+    {
+      method: "GET",
+      headers: getAuthHeaders(token)
+    }
+  );
+
+  return handleResponse(response);
+};
+
 export const createMessage = async (token, messageData) => {
   const hasAttachment = Boolean(messageData?.attachment);
 

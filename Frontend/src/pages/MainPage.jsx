@@ -13,6 +13,7 @@ import {
 } from "../services/channelService";
 import {
   getChannelMessages,
+  searchChannelMessages,
   createMessage,
   updateMessage,
   deleteMessage,
@@ -584,6 +585,7 @@ const MainPage = () => {
   const [channels, setChannels] = useState([]);
   const [members, setMembers] = useState([]);
   const [channelMessages, setChannelMessages] = useState([]);
+  const [channelSearchResults, setChannelSearchResults] = useState([]);
   const [directMessages, setDirectMessages] = useState([]);
   const [unreadDirectCounts, setUnreadDirectCounts] = useState({});
   const [unreadChannelCounts, setUnreadChannelCounts] = useState({});
@@ -629,6 +631,10 @@ const MainPage = () => {
   const [selectedAttachment, setSelectedAttachment] = useState(null);
   const [channelName, setChannelName] = useState("");
   const [sidebarSearch, setSidebarSearch] = useState("");
+  const [messageSearchTerm, setMessageSearchTerm] = useState("");
+  const [isMessageSearchActive, setIsMessageSearchActive] = useState(false);
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [messageSearchError, setMessageSearchError] = useState("");
   const [serverFormData, setServerFormData] = useState({
     server_name: "",
     description: ""
@@ -755,7 +761,11 @@ const MainPage = () => {
     [activeServer, currentUserId, members]
   );
 
-  const displayedMessages = isDmView ? directMessages : channelMessages;
+  const displayedMessages = isDmView
+    ? directMessages
+    : isMessageSearchActive
+      ? channelSearchResults
+      : channelMessages;
 
   const totalUnreadDirectCount = useMemo(
     () => getTotalUnreadCount(unreadDirectCounts),
@@ -860,6 +870,14 @@ const MainPage = () => {
 
   const resetMessageReplyState = () => {
     setSelectedReplyMessage(null);
+  };
+
+  const resetMessageSearchState = () => {
+    setMessageSearchTerm("");
+    setChannelSearchResults([]);
+    setIsMessageSearchActive(false);
+    setIsSearchingMessages(false);
+    setMessageSearchError("");
   };
 
   const loadServers = useCallback(async (token) => {
@@ -1532,11 +1550,13 @@ const MainPage = () => {
         return;
       }
 
-      setChannelMessages((prevMessages) =>
+      const removeDeletedMessage = (prevMessages) =>
         prevMessages.filter(
           (message) => String(getMessageId(message)) !== String(deletedMessageId)
-        )
-      );
+        );
+
+      setChannelMessages(removeDeletedMessage);
+      setChannelSearchResults(removeDeletedMessage);
     };
 
     const handleMessageUpdated = (updatedMessage) => {
@@ -1549,7 +1569,7 @@ const MainPage = () => {
         return;
       }
 
-      setChannelMessages((prevMessages) =>
+      const updateMessageList = (prevMessages) =>
         prevMessages.map((message) => {
           if (String(getMessageId(message)) !== String(updatedMessageId)) {
             return message;
@@ -1567,8 +1587,10 @@ const MainPage = () => {
               : incomingAttachments,
             edited: true
           };
-        })
-      );
+        });
+
+      setChannelMessages(updateMessageList);
+      setChannelSearchResults(updateMessageList);
     };
 
     const handleDirectMessage = (payload) => {
@@ -1854,6 +1876,60 @@ const MainPage = () => {
     };
   }, []);
 
+  const handleSearchChannelMessages = async (e) => {
+    e.preventDefault();
+
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (isDmView || !activeChannelId) {
+      return;
+    }
+
+    const trimmedSearchTerm = messageSearchTerm.trim();
+
+    if (!trimmedSearchTerm) {
+      setMessageSearchError("Search term is required.");
+      return;
+    }
+
+    try {
+      setIsSearchingMessages(true);
+      setMessageSearchError("");
+      shouldAutoScrollRef.current = false;
+
+      const response = await searchChannelMessages(
+        token,
+        activeChannelId,
+        trimmedSearchTerm
+      );
+
+      const normalizedSearchResults = normalizeMessages(response);
+
+      setChannelSearchResults(normalizedSearchResults);
+      setIsMessageSearchActive(true);
+    } catch (error) {
+      setChannelSearchResults([]);
+      setIsMessageSearchActive(false);
+      setMessageSearchError(error.message || "Failed to search messages.");
+    } finally {
+      setIsSearchingMessages(false);
+    }
+  };
+
+  const handleClearMessageSearch = () => {
+    setMessageSearchTerm("");
+    setChannelSearchResults([]);
+    setIsMessageSearchActive(false);
+    setIsSearchingMessages(false);
+    setMessageSearchError("");
+    shouldAutoScrollRef.current = true;
+  };
+
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current;
 
@@ -1888,6 +1964,7 @@ const MainPage = () => {
     setRemoveFriendError("");
     resetMessageEditingState();
     resetMessageReplyState();
+    resetMessageSearchState();
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -1908,6 +1985,7 @@ const MainPage = () => {
     setRemoveFriendError("");
     resetMessageEditingState();
     resetMessageReplyState();
+    resetMessageSearchState();
     navigate("/dashboard");
 
     requestAnimationFrame(() => {
@@ -1929,6 +2007,7 @@ const MainPage = () => {
     setIsCreateServerModalOpen(false);
     resetMessageEditingState();
     resetMessageReplyState();
+    resetMessageSearchState();
     navigate(`/server/${serverId}`);
 
     requestAnimationFrame(() => {
@@ -1948,6 +2027,7 @@ const MainPage = () => {
     setMessageContent("");
     resetMessageEditingState();
     resetMessageReplyState();
+    resetMessageSearchState();
     navigate(`/server/${activeServerId}/channel/${channelId}`);
 
     requestAnimationFrame(() => {
@@ -1968,6 +2048,7 @@ const MainPage = () => {
     setRemoveFriendError("");
     resetMessageEditingState();
     resetMessageReplyState();
+    resetMessageSearchState();
     navigate(`/dm/${conversationId}`);
 
     requestAnimationFrame(() => {
@@ -2474,7 +2555,7 @@ const MainPage = () => {
         const response = await updateMessage(token, messageId, trimmedContent);
         const updatedMessage = response?.data || response?.message || response;
 
-        setChannelMessages((prevMessages) =>
+        const updateChannelMessageList = (prevMessages) =>
           prevMessages.map((existingMessage) => {
             if (String(getMessageId(existingMessage)) !== String(messageId)) {
               return existingMessage;
@@ -2487,8 +2568,10 @@ const MainPage = () => {
               attachments: getMessageAttachments(existingMessage),
               edited: true
             };
-          })
-        );
+          });
+
+        setChannelMessages(updateChannelMessageList);
+        setChannelSearchResults(updateChannelMessageList);
       }
 
       resetMessageEditingState();
@@ -2541,12 +2624,14 @@ const MainPage = () => {
       } else {
         await deleteMessage(token, messageId);
 
-        setChannelMessages((prevMessages) =>
+        const removeDeletedChannelMessage = (prevMessages) =>
           prevMessages.filter(
             (existingMessage) =>
               String(getMessageId(existingMessage)) !== String(messageId)
-          )
-        );
+          );
+
+        setChannelMessages(removeDeletedChannelMessage);
+        setChannelSearchResults(removeDeletedChannelMessage);
       }
     } catch (error) {
       setMessageError(error.message || "Failed to delete message.");
@@ -2614,6 +2699,10 @@ const MainPage = () => {
       setMessageContent("");
       setIsEmojiPickerOpen(false);
       resetMessageReplyState();
+
+      if (!isDmView && isMessageSearchActive) {
+        handleClearMessageSearch();
+      }
 
       setSelectedAttachment(null);
 
@@ -3445,9 +3534,62 @@ const MainPage = () => {
                 </>
               )}
             </div>
+
+            {!isDmView && activeChannelId ? (
+              <form
+                onSubmit={handleSearchChannelMessages}
+                className="discord-message-search"
+              >
+                <input
+                  type="text"
+                  className="discord-message-search-input"
+                  value={messageSearchTerm}
+                  onChange={(e) => {
+                    setMessageSearchTerm(e.target.value);
+                    setMessageSearchError("");
+                  }}
+                  placeholder="Search messages"
+                />
+
+                {isMessageSearchActive ? (
+                  <button
+                    type="button"
+                    onClick={handleClearMessageSearch}
+                    className="discord-message-search-button discord-message-search-clear"
+                    disabled={isSearchingMessages}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className="discord-message-search-button"
+                  disabled={isSearchingMessages || !messageSearchTerm.trim()}
+                >
+                  {isSearchingMessages ? "Searching..." : "Search"}
+                </button>
+              </form>
+            ) : null}
           </div>
 
           <section className="server-messages-panel discord-messages-panel">
+            {!isDmView && (messageSearchError || isMessageSearchActive) ? (
+              <div className="discord-message-search-status">
+                {messageSearchError ? (
+                  <p className="auth-error server-inline-error server-inline-error-tight">
+                    {messageSearchError}
+                  </p>
+                ) : (
+                  <p className="discord-message-search-status-text">
+                    Showing {channelSearchResults.length} result
+                    {channelSearchResults.length === 1 ? "" : "s"} for “
+                    {messageSearchTerm.trim()}”
+                  </p>
+                )}
+              </div>
+            ) : null}
+
             {showDmHomeView ? (
               <div className="discord-home-panel">
                 {activeDmSection === "friends" ? (
@@ -3725,7 +3867,9 @@ const MainPage = () => {
               </div>
             ) : displayedMessages.length === 0 ? (
               <div className="server-state-message discord-empty-state">
-                No messages yet.
+                {isMessageSearchActive
+                  ? `No messages found for "${messageSearchTerm.trim()}".`
+                  : "No messages yet."}
               </div>
             ) : (
               <div
