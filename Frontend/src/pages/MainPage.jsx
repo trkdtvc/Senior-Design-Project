@@ -18,7 +18,8 @@ import {
   updateMessage,
   deleteMessage,
   markChannelAsRead,
-  getUnreadChannelCounts
+  getUnreadChannelCounts,
+  getUnreadMentionCounts
 } from "../services/messageService";
 import { getServerMembers } from "../services/serverMemberService";
 import {
@@ -451,6 +452,12 @@ const formatBadgeCount = (count) => {
   return safeCount > 99 ? "99+" : String(safeCount);
 };
 
+const formatMentionBadgeCount = (count) => {
+  const formattedCount = formatBadgeCount(count);
+
+  return formattedCount ? `@${formattedCount}` : "";
+};
+
 const getMessageAttachments = (message) => {
   if (Array.isArray(message?.attachments)) {
     return message.attachments;
@@ -619,6 +626,8 @@ const MainPage = () => {
   const [unreadDirectCounts, setUnreadDirectCounts] = useState({});
   const [unreadChannelCounts, setUnreadChannelCounts] = useState({});
   const [unreadServerCounts, setUnreadServerCounts] = useState({});
+  const [mentionChannelCounts, setMentionChannelCounts] = useState({});
+  const [mentionServerCounts, setMentionServerCounts] = useState({});
   const [hoveredConversationId, setHoveredConversationId] = useState(null);
   const [openConversationMenuId, setOpenConversationMenuId] = useState(null);
   const [isDeletingConversation, setIsDeletingConversation] = useState(false);
@@ -736,45 +745,83 @@ const MainPage = () => {
       }
 
       const unreadCount = getUnreadValue(unreadChannelCounts, channelId);
+      const mentionCount = getUnreadValue(mentionChannelCounts, channelId);
 
-      if (!unreadCount) {
+      if (!unreadCount && !mentionCount) {
         return;
       }
 
-      setUnreadChannelCounts((prevCounts) => {
-        const key = String(channelId);
+      if (unreadCount) {
+        setUnreadChannelCounts((prevCounts) => {
+          const key = String(channelId);
 
-        if (!prevCounts[key]) {
-          return prevCounts;
-        }
-
-        const nextCounts = { ...prevCounts };
-        delete nextCounts[key];
-        return nextCounts;
-      });
-
-      if (serverId) {
-        setUnreadServerCounts((prevCounts) => {
-          const key = String(serverId);
-          const nextServerCount = Math.max(
-            Number(prevCounts[key] || 0) - unreadCount,
-            0
-          );
-
-          if (nextServerCount === 0) {
-            const nextCounts = { ...prevCounts };
-            delete nextCounts[key];
-            return nextCounts;
+          if (!prevCounts[key]) {
+            return prevCounts;
           }
 
-          return {
-            ...prevCounts,
-            [key]: nextServerCount
-          };
+          const nextCounts = { ...prevCounts };
+          delete nextCounts[key];
+          return nextCounts;
         });
+
+        if (serverId) {
+          setUnreadServerCounts((prevCounts) => {
+            const key = String(serverId);
+            const nextServerCount = Math.max(
+              Number(prevCounts[key] || 0) - unreadCount,
+              0
+            );
+
+            if (nextServerCount === 0) {
+              const nextCounts = { ...prevCounts };
+              delete nextCounts[key];
+              return nextCounts;
+            }
+
+            return {
+              ...prevCounts,
+              [key]: nextServerCount
+            };
+          });
+        }
+      }
+
+      if (mentionCount) {
+        setMentionChannelCounts((prevCounts) => {
+          const key = String(channelId);
+
+          if (!prevCounts[key]) {
+            return prevCounts;
+          }
+
+          const nextCounts = { ...prevCounts };
+          delete nextCounts[key];
+          return nextCounts;
+        });
+
+        if (serverId) {
+          setMentionServerCounts((prevCounts) => {
+            const key = String(serverId);
+            const nextServerCount = Math.max(
+              Number(prevCounts[key] || 0) - mentionCount,
+              0
+            );
+
+            if (nextServerCount === 0) {
+              const nextCounts = { ...prevCounts };
+              delete nextCounts[key];
+              return nextCounts;
+            }
+
+            return {
+              ...prevCounts,
+              [key]: nextServerCount
+            };
+          });
+        }
       }
     },
-    [activeServerId, unreadChannelCounts]
+    [activeServerId, mentionChannelCounts, unreadChannelCounts]
   );
 
   const currentUserIsOwner = useMemo(
@@ -947,10 +994,12 @@ const MainPage = () => {
   }, []);
 
   const loadUnreadCounts = useCallback(async (token) => {
-    const [channelUnreadData, directUnreadData] = await Promise.all([
-      getUnreadChannelCounts(token),
-      getUnreadDirectConversationCounts(token)
-    ]);
+    const [channelUnreadData, directUnreadData, mentionUnreadData] =
+      await Promise.all([
+        getUnreadChannelCounts(token),
+        getUnreadDirectConversationCounts(token),
+        getUnreadMentionCounts(token)
+      ]);
 
     setUnreadChannelCounts(
       channelUnreadData?.channels || channelUnreadData?.data?.channels || {}
@@ -964,6 +1013,14 @@ const MainPage = () => {
       directUnreadData?.conversations ||
       directUnreadData?.data?.conversations ||
       {}
+    );
+
+    setMentionChannelCounts(
+      mentionUnreadData?.channels || mentionUnreadData?.data?.channels || {}
+    );
+
+    setMentionServerCounts(
+      mentionUnreadData?.servers || mentionUnreadData?.data?.servers || {}
     );
   }, []);
 
@@ -1169,6 +1226,8 @@ const MainPage = () => {
           setUnreadChannelCounts({});
           setUnreadServerCounts({});
           setUnreadDirectCounts({});
+          setMentionChannelCounts({});
+          setMentionServerCounts({});
         }
       } catch (error) {
         disconnectSocket();
@@ -1764,6 +1823,14 @@ const MainPage = () => {
         payload.server_id || payload.serverId || payload.message?.server_id;
       const senderUserId =
         payload.sender_user_id || payload.senderId || payload.message?.user_id;
+      const mentionedUserIds =
+        payload.mentioned_user_ids ||
+        payload.mentionedUserIds ||
+        payload.message?.mentioned_user_ids ||
+        [];
+      const currentUserWasMentioned = mentionedUserIds.some(
+        (mentionedUserId) => String(mentionedUserId) === String(currentUserId)
+      );
 
       if (!channelId || !serverId || !senderUserId || !currentUserId) {
         return;
@@ -1795,6 +1862,26 @@ const MainPage = () => {
           [key]: Number(prevCounts[key] || 0) + 1
         };
       });
+
+      if (currentUserWasMentioned) {
+        setMentionChannelCounts((prevCounts) => {
+          const key = String(channelId);
+
+          return {
+            ...prevCounts,
+            [key]: Number(prevCounts[key] || 0) + 1
+          };
+        });
+
+        setMentionServerCounts((prevCounts) => {
+          const key = String(serverId);
+
+          return {
+            ...prevCounts,
+            [key]: Number(prevCounts[key] || 0) + 1
+          };
+        });
+      }
     };
 
     const handleFriendRequestReceived = (payload) => {
@@ -3079,6 +3166,9 @@ const MainPage = () => {
                 const serverId = getServerId(server);
                 const serverName = getServerName(server);
                 const isActive = String(serverId) === String(activeServerId);
+                const serverUnreadCount = getUnreadValue(unreadServerCounts, serverId);
+                const serverMentionCount = getUnreadValue(mentionServerCounts, serverId);
+                const hasServerActivity = serverUnreadCount > 0 || serverMentionCount > 0;
 
 
                 return (
@@ -3087,7 +3177,7 @@ const MainPage = () => {
                     type="button"
                     onClick={() => handleSelectServer(serverId)}
                     className={`discord-guild-button${isActive ? " discord-guild-button-active" : ""
-                      }${getUnreadValue(unreadServerCounts, serverId) > 0 && !isActive
+                      }${hasServerActivity && !isActive
                         ? " discord-guild-button-unread"
                         : ""
                       }`}
@@ -3097,9 +3187,13 @@ const MainPage = () => {
                       {getInitial(serverName)}
                     </span>
 
-                    {getUnreadValue(unreadServerCounts, serverId) > 0 ? (
+                    {serverMentionCount > 0 ? (
                       <span className="discord-notification-badge discord-guild-notification-badge">
-                        {formatBadgeCount(getUnreadValue(unreadServerCounts, serverId))}
+                        {formatMentionBadgeCount(serverMentionCount)}
+                      </span>
+                    ) : serverUnreadCount > 0 ? (
+                      <span className="discord-notification-badge discord-guild-notification-badge">
+                        {formatBadgeCount(serverUnreadCount)}
                       </span>
                     ) : null}
                   </button>
@@ -3362,6 +3456,11 @@ const MainPage = () => {
                             unreadChannelCounts,
                             channelId
                           );
+                          const mentionCount = getUnreadValue(
+                            mentionChannelCounts,
+                            channelId
+                          );
+                          const hasChannelActivity = unreadCount > 0 || mentionCount > 0;
 
                           return (
                             <div
@@ -3379,7 +3478,7 @@ const MainPage = () => {
                                   setOpenChannelMenuId(null);
                                 }}
                                 className={`channel-button discord-channel-button${isActive ? " channel-button-active" : ""
-                                  }${unreadCount > 0 && !isActive ? " discord-channel-button-unread" : ""
+                                  }${hasChannelActivity && !isActive ? " discord-channel-button-unread" : ""
                                   }`}
 
                               >
@@ -3387,6 +3486,12 @@ const MainPage = () => {
                                 <span className="channel-name">
                                   {getChannelName(channel)}
                                 </span>
+                                {mentionCount > 0 ? (
+                                  <span className="discord-notification-badge discord-list-notification-badge">
+                                    {formatMentionBadgeCount(mentionCount)}
+                                  </span>
+                                ) : null}
+
                                 {unreadCount > 0 ? (
                                   <span className="discord-notification-badge discord-list-notification-badge">
                                     {formatBadgeCount(unreadCount)}

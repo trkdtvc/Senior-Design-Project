@@ -26,6 +26,34 @@ const buildReplyPreview = (message) => {
   };
 };
 
+const extractMentionedUserIds = async (channelId, content, senderUserId) => {
+  const mentionMatches = String(content || "").matchAll(/@([a-zA-Z0-9_.-]+)/g);
+  const mentionedUsernames = new Set(
+    Array.from(mentionMatches)
+      .map((match) => match[1]?.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  if (mentionedUsernames.size === 0) {
+    return [];
+  }
+
+  const serverMembers = await messageModel.getMentionableServerMembersByChannelId(
+    channelId
+  );
+
+  return serverMembers
+    .filter((member) => {
+      const memberUsername = String(member.username || "").toLowerCase();
+
+      return (
+        mentionedUsernames.has(memberUsername) &&
+        String(member.user_id) !== String(senderUserId)
+      );
+    })
+    .map((member) => Number(member.user_id));
+};
+
 const createMessage = async (req, res, next) => {
   try {
     const channelId = req.body.channel_id || req.body.channelId;
@@ -80,6 +108,14 @@ const createMessage = async (req, res, next) => {
     );
     const messageId = result.insertId;
 
+    const mentionedUserIds = trimmedContent
+      ? await extractMentionedUserIds(channelId, trimmedContent, userId)
+      : [];
+
+    if (mentionedUserIds.length > 0) {
+      await messageModel.createMessageMentions(messageId, mentionedUserIds);
+    }
+
     let attachment = null;
 
     if (attachmentPayload) {
@@ -107,6 +143,7 @@ const createMessage = async (req, res, next) => {
       content: trimmedContent,
       reply_to_message_id: replyToMessageId ? Number(replyToMessageId) : null,
       reply_to: buildReplyPreview(fullCreatedMessage),
+      mentioned_user_ids: mentionedUserIds,
       attachments: attachment ? [attachment] : [],
       created_at: new Date().toISOString(),
       updated_at: null
@@ -125,6 +162,7 @@ const createMessage = async (req, res, next) => {
             server_id: Number(serverId),
             channel_id: Number(channelId),
             sender_user_id: Number(userId),
+            mentioned_user_ids: mentionedUserIds,
             message: createdMessage
           });
         });
@@ -391,6 +429,33 @@ const getUnreadChannelCounts = async (req, res, next) => {
   }
 };
 
+const getUnreadMentionCounts = async (req, res, next) => {
+  try {
+    const userId = req.user.user_id;
+    const mentionRows = await messageModel.getUnreadMentionCountsByUserId(userId);
+
+    const channels = {};
+    const servers = {};
+
+    mentionRows.forEach((row) => {
+      const channelKey = String(row.channel_id);
+      const serverKey = String(row.server_id);
+      const mentionCount = Number(row.mention_count || 0);
+
+      channels[channelKey] = mentionCount;
+      servers[serverKey] = Number(servers[serverKey] || 0) + mentionCount;
+    });
+
+    res.status(200).json({
+      message: "Unread mention counts fetched successfully",
+      channels,
+      servers
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createMessage,
   getChannelMessages,
@@ -398,5 +463,6 @@ module.exports = {
   updateMessage,
   deleteMessage,
   markChannelAsRead,
-  getUnreadChannelCounts
+  getUnreadChannelCounts,
+  getUnreadMentionCounts
 };

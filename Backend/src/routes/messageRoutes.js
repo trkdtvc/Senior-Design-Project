@@ -78,6 +78,22 @@ router.get("/unread-counts", protect, messageController.getUnreadChannelCounts);
 
 /**
  * @swagger
+ * /api/messages/mention-counts:
+ *   get:
+ *     summary: Get unread mention counts for the authenticated user
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Unread mention counts fetched successfully
+ *       401:
+ *         description: Not authorized
+ */
+router.get("/mention-counts", protect, messageController.getUnreadMentionCounts);
+
+/**
+ * @swagger
  * /api/messages/{channelId}/read:
  *   patch:
  *     summary: Mark a channel as read for the authenticated user

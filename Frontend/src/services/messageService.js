@@ -134,3 +134,12 @@ export const getUnreadChannelCounts = async (token) => {
 
   return handleResponse(response);
 };
+
+export const getUnreadMentionCounts = async (token) => {
+  const response = await fetch(`${API_BASE_URL}/messages/mention-counts`, {
+    method: "GET",
+    headers: getAuthHeaders(token)
+  });
+
+  return handleResponse(response);
+};

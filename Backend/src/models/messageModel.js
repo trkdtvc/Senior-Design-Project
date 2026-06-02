@@ -27,6 +27,30 @@ const createMessageAttachment = async (messageId, attachmentData) => {
   return result;
 };
 
+const createMessageMentions = async (messageId, mentionedUserIds = []) => {
+  const uniqueMentionedUserIds = [
+    ...new Set(mentionedUserIds.map(Number).filter(Boolean))
+  ];
+
+  if (uniqueMentionedUserIds.length === 0) {
+    return { affectedRows: 0 };
+  }
+
+  const placeholders = uniqueMentionedUserIds.map(() => "(?, ?)").join(", ");
+  const values = uniqueMentionedUserIds.flatMap((mentionedUserId) => [
+    messageId,
+    mentionedUserId
+  ]);
+
+  const [result] = await pool.query(
+    `INSERT IGNORE INTO message_mentions (message_id, mentioned_user_id)
+     VALUES ${placeholders}`,
+    values
+  );
+
+  return result;
+};
+
 const getAttachmentsByMessageIds = async (messageIds) => {
   if (!messageIds.length) {
     return [];
@@ -202,6 +226,21 @@ const getChannelServerMemberIds = async (channelId) => {
   return rows;
 };
 
+const getMentionableServerMembersByChannelId = async (channelId) => {
+  const [rows] = await pool.query(
+    `SELECT
+        sm.user_id,
+        u.username
+     FROM channels c
+     JOIN server_members sm ON c.server_id = sm.server_id
+     JOIN users u ON sm.user_id = u.user_id
+     WHERE c.channel_id = ?`,
+    [channelId]
+  );
+
+  return rows;
+};
+
 const isUserMemberOfChannelServer = async (channelId, userId) => {
   const [rows] = await pool.query(
     `SELECT sm.*
@@ -288,9 +327,54 @@ const getUnreadChannelCountsByUserId = async (userId) => {
   }));
 };
 
+const getUnreadMentionCountsByUserId = async (userId) => {
+  const [rows] = await pool.query(
+    `SELECT
+        c.server_id,
+        m.channel_id,
+        COUNT(mm.mention_id) AS mention_count
+     FROM message_mentions mm
+     JOIN messages m
+       ON mm.message_id = m.message_id
+     JOIN channels c
+       ON m.channel_id = c.channel_id
+     JOIN server_members sm
+       ON sm.server_id = c.server_id
+      AND sm.user_id = mm.mentioned_user_id
+     LEFT JOIN channel_read_states crs
+       ON crs.user_id = mm.mentioned_user_id
+      AND crs.channel_id = m.channel_id
+     WHERE mm.mentioned_user_id = ?
+       AND m.user_id <> ?
+       AND m.created_at >= sm.joined_at
+       AND (
+        crs.read_state_id IS NULL
+        OR (
+          crs.last_read_message_id IS NOT NULL
+          AND m.message_id > crs.last_read_message_id
+        )
+        OR (
+          crs.last_read_message_id IS NULL
+          AND crs.last_read_at IS NOT NULL
+          AND m.created_at > crs.last_read_at
+        )
+       )
+     GROUP BY c.server_id, m.channel_id
+     HAVING mention_count > 0`,
+    [userId, userId]
+  );
+
+  return rows.map((row) => ({
+    server_id: row.server_id,
+    channel_id: row.channel_id,
+    mention_count: Number(row.mention_count || 0)
+  }));
+};
+
 module.exports = {
   createMessage,
   createMessageAttachment,
+  createMessageMentions,
   getMessagesByChannelId,
   searchMessagesByChannelId,
   getMessageById,
@@ -299,7 +383,9 @@ module.exports = {
   deleteMessageById,
   getChannelServerId,
   getChannelServerMemberIds,
+  getMentionableServerMembersByChannelId,
   isUserMemberOfChannelServer,
   markChannelAsRead,
-  getUnreadChannelCountsByUserId
+  getUnreadChannelCountsByUserId,
+  getUnreadMentionCountsByUserId
 };
