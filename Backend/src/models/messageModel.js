@@ -1,5 +1,18 @@
 const { pool } = require("../config/db");
 
+const DEFAULT_MESSAGE_LIMIT = 30;
+const MAX_MESSAGE_LIMIT = 60;
+
+const normalizeLimit = (value) => {
+  const parsedLimit = Number.parseInt(value, 10);
+
+  if (Number.isNaN(parsedLimit) || parsedLimit <= 0) {
+    return DEFAULT_MESSAGE_LIMIT;
+  }
+
+  return Math.min(parsedLimit, MAX_MESSAGE_LIMIT);
+};
+
 const createMessage = async (channelId, userId, content, replyToMessageId = null) => {
   const [result] = await pool.query(
     `INSERT INTO messages (channel_id, user_id, message_content, reply_to_message_id)
@@ -87,30 +100,160 @@ const attachFilesToMessages = async (messages) => {
   }));
 };
 
-const getMessagesByChannelId = async (channelId) => {
+const baseMessageSelect = `
+  SELECT
+    m.message_id,
+    m.channel_id,
+    m.user_id,
+    m.message_content AS content,
+    m.reply_to_message_id,
+    rm.message_content AS reply_to_content,
+    rm.user_id AS reply_to_user_id,
+    ru.username AS reply_to_username,
+    m.created_at,
+    m.updated_at,
+    u.username
+  FROM messages m
+  JOIN users u ON m.user_id = u.user_id
+  LEFT JOIN messages rm ON m.reply_to_message_id = rm.message_id
+  LEFT JOIN users ru ON rm.user_id = ru.user_id
+`;
+
+const hasOlderMessages = async (channelId, oldestMessageId) => {
+  if (!oldestMessageId) {
+    return false;
+  }
+
   const [rows] = await pool.query(
-    `SELECT
-        m.message_id,
-        m.channel_id,
-        m.user_id,
-        m.message_content AS content,
-        m.reply_to_message_id,
-        rm.message_content AS reply_to_content,
-        rm.user_id AS reply_to_user_id,
-        ru.username AS reply_to_username,
-        m.created_at,
-        m.updated_at,
-        u.username
-     FROM messages m
-     JOIN users u ON m.user_id = u.user_id
-     LEFT JOIN messages rm ON m.reply_to_message_id = rm.message_id
-     LEFT JOIN users ru ON rm.user_id = ru.user_id
+    `SELECT message_id
+     FROM messages
+     WHERE channel_id = ? AND message_id < ?
+     LIMIT 1`,
+    [channelId, oldestMessageId]
+  );
+
+  return rows.length > 0;
+};
+
+const hasNewerMessages = async (channelId, newestMessageId) => {
+  if (!newestMessageId) {
+    return false;
+  }
+
+  const [rows] = await pool.query(
+    `SELECT message_id
+     FROM messages
+     WHERE channel_id = ? AND message_id > ?
+     LIMIT 1`,
+    [channelId, newestMessageId]
+  );
+
+  return rows.length > 0;
+};
+
+const getMessagePaginationMeta = async (channelId, messages) => {
+  if (!messages.length) {
+    return {
+      hasOlder: false,
+      hasNewer: false,
+      oldestMessageId: null,
+      newestMessageId: null
+    };
+  }
+
+  const oldestMessageId = messages[0].message_id;
+  const newestMessageId = messages[messages.length - 1].message_id;
+
+  const [olderExists, newerExists] = await Promise.all([
+    hasOlderMessages(channelId, oldestMessageId),
+    hasNewerMessages(channelId, newestMessageId)
+  ]);
+
+  return {
+    hasOlder: olderExists,
+    hasNewer: newerExists,
+    oldestMessageId,
+    newestMessageId
+  };
+};
+
+const getLatestChannelMessages = async (channelId, limit) => {
+  const safeLimit = normalizeLimit(limit);
+
+  const [rows] = await pool.query(
+    `${baseMessageSelect}
      WHERE m.channel_id = ?
-     ORDER BY m.created_at ASC`,
+     ORDER BY m.message_id DESC
+     LIMIT ${safeLimit}`,
     [channelId]
   );
 
-  return attachFilesToMessages(rows);
+  return rows.reverse();
+};
+
+const getOlderChannelMessages = async (channelId, beforeMessageId, limit) => {
+  const safeLimit = normalizeLimit(limit);
+
+  const [rows] = await pool.query(
+    `${baseMessageSelect}
+     WHERE m.channel_id = ?
+       AND m.message_id < ?
+     ORDER BY m.message_id DESC
+     LIMIT ${safeLimit}`,
+    [channelId, beforeMessageId]
+  );
+
+  return rows.reverse();
+};
+
+const getChannelMessagesAround = async (channelId, aroundMessageId, limit) => {
+  const safeLimit = normalizeLimit(limit);
+  const olderLimit = Math.floor((safeLimit - 1) / 2);
+  const newerLimit = safeLimit - olderLimit - 1;
+
+  const [olderAndTargetRows] = await pool.query(
+    `${baseMessageSelect}
+     WHERE m.channel_id = ?
+       AND m.message_id <= ?
+     ORDER BY m.message_id DESC
+     LIMIT ${olderLimit + 1}`,
+    [channelId, aroundMessageId]
+  );
+
+  const [newerRows] = await pool.query(
+    `${baseMessageSelect}
+     WHERE m.channel_id = ?
+       AND m.message_id > ?
+     ORDER BY m.message_id ASC
+     LIMIT ${newerLimit}`,
+    [channelId, aroundMessageId]
+  );
+
+  return [...olderAndTargetRows.reverse(), ...newerRows];
+};
+
+const getMessagesByChannelId = async (channelId, options = {}) => {
+  const limit = normalizeLimit(options.limit);
+  let rows = [];
+
+  if (options.aroundMessageId) {
+    rows = await getChannelMessagesAround(channelId, options.aroundMessageId, limit);
+  } else if (options.beforeMessageId) {
+    rows = await getOlderChannelMessages(channelId, options.beforeMessageId, limit);
+  } else {
+    rows = await getLatestChannelMessages(channelId, limit);
+  }
+
+  const messages = await attachFilesToMessages(rows);
+  const pagination = await getMessagePaginationMeta(channelId, messages);
+
+  return {
+    messages,
+    pagination: {
+      ...pagination,
+      limit
+    }
+  };
 };
 
 const searchMessagesByChannelId = async (channelId, searchTerm) => {
@@ -120,27 +263,24 @@ const searchMessagesByChannelId = async (channelId, searchTerm) => {
     `SELECT
         m.message_id,
         m.channel_id,
-        m.user_id,
         m.message_content AS content,
-        m.reply_to_message_id,
-        rm.message_content AS reply_to_content,
-        rm.user_id AS reply_to_user_id,
-        ru.username AS reply_to_username,
         m.created_at,
-        m.updated_at,
         u.username
      FROM messages m
      JOIN users u ON m.user_id = u.user_id
-     LEFT JOIN messages rm ON m.reply_to_message_id = rm.message_id
-     LEFT JOIN users ru ON rm.user_id = ru.user_id
      WHERE m.channel_id = ?
        AND m.message_content LIKE ?
-     ORDER BY m.created_at DESC
-     LIMIT 50`,
+     ORDER BY m.message_id ASC`,
     [channelId, searchValue]
   );
 
-  return attachFilesToMessages(rows);
+  return rows.map((row) => ({
+    message_id: Number(row.message_id),
+    channel_id: Number(row.channel_id),
+    content: row.content,
+    created_at: row.created_at,
+    username: row.username
+  }));
 };
 
 const getMessageById = async (messageId) => {

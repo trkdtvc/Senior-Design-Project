@@ -135,13 +135,18 @@ router.get(
         });
       }
 
-      const messages = await searchDirectMessagesByConversationId(
+      const matches = await searchDirectMessagesByConversationId(
         conversationId,
         userId,
         searchTerm
       );
 
-      return res.status(200).json({ messages });
+      return res.status(200).json({
+        message: "Direct message matches fetched successfully",
+        query: searchTerm,
+        total: matches.length,
+        matches
+      });
     } catch (error) {
       return res.status(500).json({
         message: error.message || "Failed to search direct messages."

@@ -57,8 +57,27 @@ const createMessageFormData = ({
   return formData;
 };
 
-export const getChannelMessages = async (token, channelId) => {
-  const response = await fetch(`${API_BASE_URL}/messages/${channelId}`, {
+const buildMessageQuery = (params = {}) => {
+  const queryParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      queryParams.set(key, value);
+    }
+  });
+
+  const queryString = queryParams.toString();
+  return queryString ? `?${queryString}` : "";
+};
+
+export const getChannelMessages = async (token, channelId, options = {}) => {
+  const queryString = buildMessageQuery({
+    limit: options.limit,
+    beforeMessageId: options.beforeMessageId,
+    aroundMessageId: options.aroundMessageId
+  });
+
+  const response = await fetch(`${API_BASE_URL}/messages/${channelId}${queryString}`, {
     method: "GET",
     headers: getAuthHeaders(token)
   });

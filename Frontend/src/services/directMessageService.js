@@ -76,9 +76,28 @@ export const getOrCreateDirectConversation = async (token, friendId) => {
   return handleResponse(response);
 };
 
-export const getDirectMessages = async (token, conversationId) => {
+const buildDirectMessageQuery = (params = {}) => {
+  const queryParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      queryParams.set(key, value);
+    }
+  });
+
+  const queryString = queryParams.toString();
+  return queryString ? `?${queryString}` : "";
+};
+
+export const getDirectMessages = async (token, conversationId, options = {}) => {
+  const queryString = buildDirectMessageQuery({
+    limit: options.limit,
+    beforeDirectMessageId: options.beforeDirectMessageId,
+    aroundDirectMessageId: options.aroundDirectMessageId
+  });
+
   const response = await fetch(
-    `${API_BASE_URL}/direct-messages/conversations/${conversationId}/messages`,
+    `${API_BASE_URL}/direct-messages/conversations/${conversationId}/messages${queryString}`,
     {
       method: "GET",
       headers: getAuthHeaders(token)

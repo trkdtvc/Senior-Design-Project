@@ -1,5 +1,18 @@
 const { pool } = require("../config/db");
 
+const DEFAULT_DIRECT_MESSAGE_LIMIT = 30;
+const MAX_DIRECT_MESSAGE_LIMIT = 60;
+
+const normalizeLimit = (value) => {
+  const parsedLimit = Number.parseInt(value, 10);
+
+  if (Number.isNaN(parsedLimit) || parsedLimit <= 0) {
+    return DEFAULT_DIRECT_MESSAGE_LIMIT;
+  }
+
+  return Math.min(parsedLimit, MAX_DIRECT_MESSAGE_LIMIT);
+};
+
 const normalizeUserPair = (userAId, userBId) => {
   const first = Number(userAId);
   const second = Number(userBId);
@@ -176,39 +189,197 @@ const attachFilesToDirectMessages = async (messages) => {
   }));
 };
 
-const getMessagesByConversationId = async (conversationId, userId) => {
+const directMessageSelect = `
+  SELECT
+    dm.direct_message_id,
+    dm.conversation_id,
+    dm.sender_id,
+    u.username AS sender_username,
+    dm.content,
+    dm.reply_to_direct_message_id,
+    rdm.content AS reply_to_content,
+    rdm.sender_id AS reply_to_sender_id,
+    ru.username AS reply_to_sender_username,
+    dm.created_at,
+    dm.updated_at
+  FROM direct_messages dm
+  JOIN users u ON dm.sender_id = u.user_id
+  LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
+  LEFT JOIN users ru ON rdm.sender_id = ru.user_id
+  LEFT JOIN direct_conversation_deletions dcd
+    ON dcd.conversation_id = dm.conversation_id
+   AND dcd.user_id = ?
+`;
+
+const visibleDirectMessageWhere = `
+  dm.conversation_id = ?
+  AND (
+    dcd.deletion_id IS NULL
+    OR dm.direct_message_id > dcd.deleted_after_message_id
+  )
+`;
+
+const hasOlderDirectMessages = async (conversationId, userId, oldestDirectMessageId) => {
+  if (!oldestDirectMessageId) {
+    return false;
+  }
+
   const [rows] = await pool.execute(
-    `
-      SELECT
-        dm.direct_message_id,
-        dm.conversation_id,
-        dm.sender_id,
-        u.username AS sender_username,
-        dm.content,
-        dm.reply_to_direct_message_id,
-        rdm.content AS reply_to_content,
-        rdm.sender_id AS reply_to_sender_id,
-        ru.username AS reply_to_sender_username,
-        dm.created_at,
-        dm.updated_at
-      FROM direct_messages dm
-      JOIN users u ON dm.sender_id = u.user_id
-      LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
-      LEFT JOIN users ru ON rdm.sender_id = ru.user_id
-      LEFT JOIN direct_conversation_deletions dcd
-        ON dcd.conversation_id = dm.conversation_id
-       AND dcd.user_id = ?
-      WHERE dm.conversation_id = ?
-        AND (
+    `SELECT dm.direct_message_id
+     FROM direct_messages dm
+     LEFT JOIN direct_conversation_deletions dcd
+       ON dcd.conversation_id = dm.conversation_id
+      AND dcd.user_id = ?
+     WHERE dm.conversation_id = ?
+       AND dm.direct_message_id < ?
+       AND (
           dcd.deletion_id IS NULL
           OR dm.direct_message_id > dcd.deleted_after_message_id
-        )
-      ORDER BY dm.created_at ASC, dm.direct_message_id ASC
-    `,
+       )
+     LIMIT 1`,
+    [userId, conversationId, oldestDirectMessageId]
+  );
+
+  return rows.length > 0;
+};
+
+const hasNewerDirectMessages = async (conversationId, userId, newestDirectMessageId) => {
+  if (!newestDirectMessageId) {
+    return false;
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT dm.direct_message_id
+     FROM direct_messages dm
+     LEFT JOIN direct_conversation_deletions dcd
+       ON dcd.conversation_id = dm.conversation_id
+      AND dcd.user_id = ?
+     WHERE dm.conversation_id = ?
+       AND dm.direct_message_id > ?
+       AND (
+          dcd.deletion_id IS NULL
+          OR dm.direct_message_id > dcd.deleted_after_message_id
+       )
+     LIMIT 1`,
+    [userId, conversationId, newestDirectMessageId]
+  );
+
+  return rows.length > 0;
+};
+
+const getDirectPaginationMeta = async (conversationId, userId, messages) => {
+  if (!messages.length) {
+    return {
+      hasOlder: false,
+      hasNewer: false,
+      oldestDirectMessageId: null,
+      newestDirectMessageId: null
+    };
+  }
+
+  const oldestDirectMessageId = messages[0].direct_message_id;
+  const newestDirectMessageId = messages[messages.length - 1].direct_message_id;
+
+  const [olderExists, newerExists] = await Promise.all([
+    hasOlderDirectMessages(conversationId, userId, oldestDirectMessageId),
+    hasNewerDirectMessages(conversationId, userId, newestDirectMessageId)
+  ]);
+
+  return {
+    hasOlder: olderExists,
+    hasNewer: newerExists,
+    oldestDirectMessageId,
+    newestDirectMessageId
+  };
+};
+
+const getLatestDirectMessages = async (conversationId, userId, limit) => {
+  const safeLimit = normalizeLimit(limit);
+
+  const [rows] = await pool.execute(
+    `${directMessageSelect}
+     WHERE ${visibleDirectMessageWhere}
+     ORDER BY dm.direct_message_id DESC
+     LIMIT ${safeLimit}`,
     [userId, conversationId]
   );
 
-  return attachFilesToDirectMessages(rows);
+  return rows.reverse();
+};
+
+const getOlderDirectMessages = async (conversationId, userId, beforeDirectMessageId, limit) => {
+  const safeLimit = normalizeLimit(limit);
+
+  const [rows] = await pool.execute(
+    `${directMessageSelect}
+     WHERE ${visibleDirectMessageWhere}
+       AND dm.direct_message_id < ?
+     ORDER BY dm.direct_message_id DESC
+     LIMIT ${safeLimit}`,
+    [userId, conversationId, beforeDirectMessageId]
+  );
+
+  return rows.reverse();
+};
+
+const getDirectMessagesAround = async (conversationId, userId, aroundDirectMessageId, limit) => {
+  const safeLimit = normalizeLimit(limit);
+  const olderLimit = Math.floor((safeLimit - 1) / 2);
+  const newerLimit = safeLimit - olderLimit - 1;
+
+  const [olderAndTargetRows] = await pool.execute(
+    `${directMessageSelect}
+     WHERE ${visibleDirectMessageWhere}
+       AND dm.direct_message_id <= ?
+     ORDER BY dm.direct_message_id DESC
+     LIMIT ${olderLimit + 1}`,
+    [userId, conversationId, aroundDirectMessageId]
+  );
+
+  const [newerRows] = await pool.execute(
+    `${directMessageSelect}
+     WHERE ${visibleDirectMessageWhere}
+       AND dm.direct_message_id > ?
+     ORDER BY dm.direct_message_id ASC
+     LIMIT ${newerLimit}`,
+    [userId, conversationId, aroundDirectMessageId]
+  );
+
+  return [...olderAndTargetRows.reverse(), ...newerRows];
+};
+
+const getMessagesByConversationId = async (conversationId, userId, options = {}) => {
+  const limit = normalizeLimit(options.limit);
+  let rows = [];
+
+  if (options.aroundDirectMessageId) {
+    rows = await getDirectMessagesAround(
+      conversationId,
+      userId,
+      options.aroundDirectMessageId,
+      limit
+    );
+  } else if (options.beforeDirectMessageId) {
+    rows = await getOlderDirectMessages(
+      conversationId,
+      userId,
+      options.beforeDirectMessageId,
+      limit
+    );
+  } else {
+    rows = await getLatestDirectMessages(conversationId, userId, limit);
+  }
+
+  const messages = await attachFilesToDirectMessages(rows);
+  const pagination = await getDirectPaginationMeta(conversationId, userId, messages);
+
+  return {
+    messages,
+    pagination: {
+      ...pagination,
+      limit
+    }
+  };
 };
 
 const getDirectMessageById = async (directMessageId) => {
@@ -434,7 +605,6 @@ const markDirectConversationAsRead = async (conversationId, userId) => {
   };
 };
 
-
 const searchDirectMessagesByConversationId = async (
   conversationId,
   userId,
@@ -447,19 +617,11 @@ const searchDirectMessagesByConversationId = async (
       SELECT
         dm.direct_message_id,
         dm.conversation_id,
-        dm.sender_id,
-        u.username AS sender_username,
         dm.content,
-        dm.reply_to_direct_message_id,
-        rdm.content AS reply_to_content,
-        rdm.sender_id AS reply_to_sender_id,
-        ru.username AS reply_to_sender_username,
         dm.created_at,
-        dm.updated_at
+        u.username AS sender_username
       FROM direct_messages dm
       JOIN users u ON dm.sender_id = u.user_id
-      LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
-      LEFT JOIN users ru ON rdm.sender_id = ru.user_id
       LEFT JOIN direct_conversation_deletions dcd
         ON dcd.conversation_id = dm.conversation_id
        AND dcd.user_id = ?
@@ -469,25 +631,17 @@ const searchDirectMessagesByConversationId = async (
           dcd.deletion_id IS NULL
           OR dm.direct_message_id > dcd.deleted_after_message_id
         )
-      ORDER BY dm.created_at ASC, dm.direct_message_id ASC
-      LIMIT 100
+      ORDER BY dm.direct_message_id ASC
     `,
     [userId, conversationId, safeSearchTerm]
   );
 
-  const messagesWithAttachments = await attachFilesToDirectMessages(rows);
-
-  return messagesWithAttachments.map((message) => ({
-    ...message,
-    reply_to: message.reply_to_direct_message_id
-      ? {
-          direct_message_id: message.reply_to_direct_message_id,
-          sender_id: message.reply_to_sender_id,
-          sender_username: message.reply_to_sender_username,
-          username: message.reply_to_sender_username,
-          content: message.reply_to_content
-        }
-      : null
+  return rows.map((row) => ({
+    direct_message_id: Number(row.direct_message_id),
+    conversation_id: Number(row.conversation_id),
+    content: row.content,
+    created_at: row.created_at,
+    sender_username: row.sender_username
   }));
 };
 

@@ -154,6 +154,11 @@ const getDirectMessages = async (req, res, next) => {
   try {
     const currentUserId = req.user.user_id;
     const { conversationId } = req.params;
+    const limit = req.query.limit;
+    const beforeDirectMessageId =
+      req.query.beforeDirectMessageId || req.query.before;
+    const aroundDirectMessageId =
+      req.query.aroundDirectMessageId || req.query.around;
 
     const conversation = await getConversationById(conversationId);
 
@@ -169,9 +174,14 @@ const getDirectMessages = async (req, res, next) => {
       throw new Error("You are not a participant in this direct conversation");
     }
 
-    const messages = await getMessagesByConversationId(
+    const { messages, pagination } = await getMessagesByConversationId(
       conversationId,
-      currentUserId
+      currentUserId,
+      {
+        limit,
+        beforeDirectMessageId,
+        aroundDirectMessageId
+      }
     );
 
     const messagesWithReplies = messages.map((message) => ({
@@ -181,7 +191,8 @@ const getDirectMessages = async (req, res, next) => {
 
     res.status(200).json({
       message: "Direct messages fetched successfully",
-      messages: messagesWithReplies
+      messages: messagesWithReplies,
+      pagination
     });
   } catch (error) {
     next(error);

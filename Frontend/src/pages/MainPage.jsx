@@ -45,6 +45,7 @@ import EmojiPicker, { Theme } from "emoji-picker-react";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+const MESSAGE_PAGE_SIZE = 30;
 const getAuthToken = () => localStorage.getItem("token");
 
 const ATTACHMENT_ACCEPT_TYPES = [
@@ -631,6 +632,10 @@ const MainPage = () => {
   const previousServerIdRef = useRef(null);
   const previousChannelIdRef = useRef(null);
   const messageSearchRequestRef = useRef(0);
+  const scrollRestoreRef = useRef(null);
+  const searchJumpPendingRef = useRef(null);
+  const channelMessagesRef = useRef([]);
+  const directMessagesRef = useRef([]);
 
   const [user, setUser] = useState(null);
   const [removeFriendError, setRemoveFriendError] = useState("");
@@ -663,6 +668,9 @@ const MainPage = () => {
   const [channelSearchResults, setChannelSearchResults] = useState([]);
   const [directMessages, setDirectMessages] = useState([]);
   const [directSearchResults, setDirectSearchResults] = useState([]);
+  const [hasOlderChannelMessages, setHasOlderChannelMessages] = useState(false);
+  const [hasOlderDirectMessages, setHasOlderDirectMessages] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [unreadDirectCounts, setUnreadDirectCounts] = useState({});
   const [unreadChannelCounts, setUnreadChannelCounts] = useState({});
   const [unreadServerCounts, setUnreadServerCounts] = useState({});
@@ -713,6 +721,9 @@ const MainPage = () => {
   const [isMessageSearchActive, setIsMessageSearchActive] = useState(false);
   const [isSearchingMessages, setIsSearchingMessages] = useState(false);
   const [messageSearchError, setMessageSearchError] = useState("");
+  const [messageSearchMatches, setMessageSearchMatches] = useState([]);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const [activeSearchMessageId, setActiveSearchMessageId] = useState(null);
   const [serverFormData, setServerFormData] = useState({
     server_name: "",
     description: ""
@@ -762,6 +773,9 @@ const MainPage = () => {
         : null,
     [activeConversation]
   );
+
+  channelMessagesRef.current = channelMessages;
+  directMessagesRef.current = directMessages;
 
   const currentUserId = user?.user_id || user?.id || null;
 
@@ -882,21 +896,14 @@ const MainPage = () => {
     [activeServer, currentUserId, members]
   );
 
-  const displayedMessages = isDmView
-    ? isMessageSearchActive
-      ? directSearchResults
-      : directMessages
-    : isMessageSearchActive
-      ? channelSearchResults
-      : channelMessages;
-
-  const activeMessageSearchResults = isDmView
-    ? directSearchResults
-    : channelSearchResults;
+  const displayedMessages = isDmView ? directMessages : channelMessages;
 
   const activeMessageSearchLabel = isDmView
     ? "direct message"
     : "channel message";
+
+  const activeSearchCount = messageSearchMatches.length;
+  const hasActiveSearchResults = isMessageSearchActive && activeSearchCount > 0;
 
   const activeMessageSearchEmptyText = isDmView
     ? `No direct messages found for "${messageSearchTerm.trim()}".`
@@ -1073,6 +1080,9 @@ const MainPage = () => {
     setIsMessageSearchActive(false);
     setIsSearchingMessages(false);
     setMessageSearchError("");
+    setMessageSearchMatches([]);
+    setActiveSearchIndex(0);
+    setActiveSearchMessageId(null);
     closeMentionMenu();
   };
 
@@ -1238,31 +1248,79 @@ const MainPage = () => {
     return normalizedMembers;
   }, []);
 
-  const loadChannelMessageList = useCallback(async (token, channelId) => {
-    if (!channelId) {
-      setChannelMessages([]);
-      setMessageError("");
-      return [];
-    }
+  const loadChannelMessageList = useCallback(
+    async (token, channelId, options = {}) => {
+      if (!channelId) {
+        setChannelMessages([]);
+        setHasOlderChannelMessages(false);
+        setMessageError("");
+        return [];
+      }
 
-    const messageData = await getChannelMessages(token, channelId);
-    const normalizedMessageData = normalizeMessages(messageData);
-    setChannelMessages(normalizedMessageData);
-    return normalizedMessageData;
-  }, []);
+      const messageData = await getChannelMessages(token, channelId, {
+        limit: MESSAGE_PAGE_SIZE,
+        ...options
+      });
+      const normalizedMessageData = normalizeMessages(messageData);
+      const pagination = messageData?.pagination || messageData?.data?.pagination || {};
 
-  const loadDirectMessageList = useCallback(async (token, conversationId) => {
-    if (!conversationId) {
-      setDirectMessages([]);
-      setMessageError("");
-      return [];
-    }
+      if (options.beforeMessageId) {
+        setChannelMessages((prevMessages) => [
+          ...normalizedMessageData,
+          ...prevMessages.filter(
+            (existingMessage) =>
+              !normalizedMessageData.some(
+                (newMessage) =>
+                  String(getMessageId(newMessage)) === String(getMessageId(existingMessage))
+              )
+          )
+        ]);
+      } else {
+        setChannelMessages(normalizedMessageData);
+      }
 
-    const messageData = await getDirectMessages(token, conversationId);
-    const normalizedMessageData = normalizeMessages(messageData);
-    setDirectMessages(normalizedMessageData);
-    return normalizedMessageData;
-  }, []);
+      setHasOlderChannelMessages(Boolean(pagination.hasOlder));
+      return normalizedMessageData;
+    },
+    []
+  );
+
+  const loadDirectMessageList = useCallback(
+    async (token, conversationId, options = {}) => {
+      if (!conversationId) {
+        setDirectMessages([]);
+        setHasOlderDirectMessages(false);
+        setMessageError("");
+        return [];
+      }
+
+      const messageData = await getDirectMessages(token, conversationId, {
+        limit: MESSAGE_PAGE_SIZE,
+        ...options
+      });
+      const normalizedMessageData = normalizeMessages(messageData);
+      const pagination = messageData?.pagination || messageData?.data?.pagination || {};
+
+      if (options.beforeDirectMessageId) {
+        setDirectMessages((prevMessages) => [
+          ...normalizedMessageData,
+          ...prevMessages.filter(
+            (existingMessage) =>
+              !normalizedMessageData.some(
+                (newMessage) =>
+                  String(getDirectMessageId(newMessage)) === String(getDirectMessageId(existingMessage))
+              )
+          )
+        ]);
+      } else {
+        setDirectMessages(normalizedMessageData);
+      }
+
+      setHasOlderDirectMessages(Boolean(pagination.hasOlder));
+      return normalizedMessageData;
+    },
+    []
+  );
 
   const persistChannelReadState = useCallback(async (channelId) => {
     const token = getAuthToken();
@@ -1484,7 +1542,6 @@ const MainPage = () => {
 
     const loadSelectedChannelMessages = async () => {
       try {
-        setIsMessagesLoading(true);
         setMessageError("");
         shouldAutoScrollRef.current = true;
         await loadChannelMessageList(token, activeChannelId);
@@ -2089,7 +2146,36 @@ const MainPage = () => {
   useEffect(() => {
     const container = messagesContainerRef.current;
 
-    if (!container || !shouldAutoScrollRef.current) {
+    if (!container) {
+      return;
+    }
+
+    if (scrollRestoreRef.current) {
+      const { previousScrollHeight, previousScrollTop } = scrollRestoreRef.current;
+      scrollRestoreRef.current = null;
+      container.scrollTop =
+        container.scrollHeight - previousScrollHeight + previousScrollTop;
+      return;
+    }
+
+    if (searchJumpPendingRef.current) {
+      const pendingMessageId = searchJumpPendingRef.current;
+      searchJumpPendingRef.current = null;
+
+      requestAnimationFrame(() => {
+        const targetMessage = container.querySelector(
+          `[data-message-key="${pendingMessageId}"]`
+        );
+
+        if (targetMessage) {
+          targetMessage.scrollIntoView({ block: "center" });
+        }
+      });
+
+      return;
+    }
+
+    if (!shouldAutoScrollRef.current) {
       return;
     }
 
@@ -2119,6 +2205,127 @@ const MainPage = () => {
   useEffect(() => {
     setActiveMentionIndex(0);
   }, [mentionQuery, isMentionMenuOpen]);
+
+  const getSearchMatchMessageId = useCallback(
+    (match) =>
+      isDmView
+        ? match?.direct_message_id || match?.directMessageId || match?.id
+        : match?.message_id || match?.messageId || match?.id,
+    [isDmView]
+  );
+
+  const scrollToLoadedMessage = useCallback((messageId) => {
+    const container = messagesContainerRef.current;
+
+    if (!container || !messageId) {
+      return false;
+    }
+
+    const targetMessage = container.querySelector(
+      `[data-message-key="${messageId}"]`
+    );
+
+    if (!targetMessage) {
+      return false;
+    }
+
+    targetMessage.scrollIntoView({ block: "center" });
+    return true;
+  }, []);
+
+  const jumpToSearchMatch = useCallback(
+    async (nextIndex, matchesOverride = []) => {
+      const matches = matchesOverride;
+
+      if (!matches.length) {
+        setActiveSearchIndex(0);
+        setActiveSearchMessageId(null);
+        return;
+      }
+
+      const safeIndex = Math.min(Math.max(nextIndex, 0), matches.length - 1);
+      const targetMessageId = getSearchMatchMessageId(matches[safeIndex]);
+
+      if (!targetMessageId) {
+        return;
+      }
+
+      setActiveSearchIndex(safeIndex);
+      setActiveSearchMessageId(targetMessageId);
+      shouldAutoScrollRef.current = false;
+
+      const currentMessages = isDmView
+        ? directMessagesRef.current
+        : channelMessagesRef.current;
+      const targetAlreadyLoaded = currentMessages.some((message) => {
+        const currentMessageId = isDmView
+          ? getDirectMessageId(message)
+          : getMessageId(message);
+
+        return String(currentMessageId) === String(targetMessageId);
+      });
+
+      if (targetAlreadyLoaded) {
+        requestAnimationFrame(() => {
+          scrollToLoadedMessage(targetMessageId);
+        });
+        return;
+      }
+
+      const token = getAuthToken();
+
+      if (!token) {
+        navigate("/login");
+        return;
+      }
+
+      try {
+        setMessageError("");
+        searchJumpPendingRef.current = String(targetMessageId);
+
+        if (isDmView) {
+          if (!activeConversationId) {
+            return;
+          }
+
+          const response = await getDirectMessages(token, activeConversationId, {
+            limit: MESSAGE_PAGE_SIZE,
+            aroundDirectMessageId: targetMessageId
+          });
+          const normalizedMessages = normalizeMessages(response);
+          const pagination = response?.pagination || response?.data?.pagination || {};
+
+          setDirectMessages(normalizedMessages);
+          setHasOlderDirectMessages(Boolean(pagination.hasOlder));
+        } else {
+          if (!activeChannelId) {
+            return;
+          }
+
+          const response = await getChannelMessages(token, activeChannelId, {
+            limit: MESSAGE_PAGE_SIZE,
+            aroundMessageId: targetMessageId
+          });
+          const normalizedMessages = normalizeMessages(response);
+          const pagination = response?.pagination || response?.data?.pagination || {};
+
+          setChannelMessages(normalizedMessages);
+          setHasOlderChannelMessages(Boolean(pagination.hasOlder));
+        }
+      } catch (error) {
+        setMessageError(error.message || "Failed to jump to search result.");
+        searchJumpPendingRef.current = null;
+      }
+    },
+    [
+      activeChannelId,
+      activeConversationId,
+      getSearchMatchMessageId,
+      isDmView,
+      navigate,
+      scrollToLoadedMessage
+    ]
+  );
 
   const runMessageSearch = useCallback(
     async (searchTerm, options = {}) => {
@@ -2170,24 +2377,29 @@ const MainPage = () => {
           return;
         }
 
-        const normalizedSearchResults = normalizeMessages(response);
+        const matches =
+          response?.matches ||
+          response?.data?.matches ||
+          response?.messages ||
+          response?.data ||
+          [];
 
-        if (isDmView) {
-          setDirectSearchResults(normalizedSearchResults);
-          setChannelSearchResults([]);
-        } else {
-          setChannelSearchResults(normalizedSearchResults);
-          setDirectSearchResults([]);
-        }
-
+        setMessageSearchMatches(matches);
         setIsMessageSearchActive(true);
+        setActiveSearchIndex(0);
+        setActiveSearchMessageId(matches.length ? getSearchMatchMessageId(matches[0]) : null);
+
+        if (matches.length) {
+          await jumpToSearchMatch(0, matches);
+        }
       } catch (error) {
         if (requestId !== messageSearchRequestRef.current) {
           return;
         }
 
-        setChannelSearchResults([]);
-        setDirectSearchResults([]);
+        setMessageSearchMatches([]);
+        setActiveSearchIndex(0);
+        setActiveSearchMessageId(null);
         setIsMessageSearchActive(false);
         setMessageSearchError(error.message || "Failed to search messages.");
       } finally {
@@ -2196,7 +2408,14 @@ const MainPage = () => {
         }
       }
     },
-    [isDmView, activeConversationId, activeChannelId, navigate]
+    [
+      activeChannelId,
+      activeConversationId,
+      getSearchMatchMessageId,
+      isDmView,
+      jumpToSearchMatch,
+      navigate
+    ]
   );
 
   useEffect(() => {
@@ -2206,6 +2425,9 @@ const MainPage = () => {
       messageSearchRequestRef.current += 1;
       setChannelSearchResults([]);
       setDirectSearchResults([]);
+      setMessageSearchMatches([]);
+      setActiveSearchIndex(0);
+      setActiveSearchMessageId(null);
       setIsMessageSearchActive(false);
       setIsSearchingMessages(false);
       setMessageSearchError("");
@@ -2246,10 +2468,104 @@ const MainPage = () => {
     setMessageSearchTerm("");
     setChannelSearchResults([]);
     setDirectSearchResults([]);
+    setMessageSearchMatches([]);
+    setActiveSearchIndex(0);
+    setActiveSearchMessageId(null);
     setIsMessageSearchActive(false);
     setIsSearchingMessages(false);
     setMessageSearchError("");
     shouldAutoScrollRef.current = true;
+  };
+
+  const handlePreviousSearchMatch = () => {
+    if (!messageSearchMatches.length || activeSearchIndex <= 0) {
+      return;
+    }
+
+    jumpToSearchMatch(activeSearchIndex - 1, messageSearchMatches);
+  };
+
+  const handleNextSearchMatch = () => {
+    if (
+      !messageSearchMatches.length ||
+      activeSearchIndex >= messageSearchMatches.length - 1
+    ) {
+      return;
+    }
+
+    jumpToSearchMatch(activeSearchIndex + 1, messageSearchMatches);
+  };
+
+  const loadOlderMessages = async () => {
+    const token = getAuthToken();
+    const container = messagesContainerRef.current;
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!container || isLoadingOlderMessages) {
+      return;
+    }
+
+    if (isDmView) {
+      if (!activeConversationId || !hasOlderDirectMessages || !directMessages.length) {
+        return;
+      }
+
+      const oldestDirectMessageId = getDirectMessageId(directMessages[0]);
+
+      if (!oldestDirectMessageId) {
+        return;
+      }
+
+      scrollRestoreRef.current = {
+        previousScrollHeight: container.scrollHeight,
+        previousScrollTop: container.scrollTop
+      };
+
+      try {
+        setIsLoadingOlderMessages(true);
+        await loadDirectMessageList(token, activeConversationId, {
+          beforeDirectMessageId: oldestDirectMessageId
+        });
+      } catch (error) {
+        setMessageError(error.message || "Failed to load older direct messages.");
+        scrollRestoreRef.current = null;
+      } finally {
+        setIsLoadingOlderMessages(false);
+      }
+
+      return;
+    }
+
+    if (!activeChannelId || !hasOlderChannelMessages || !channelMessages.length) {
+      return;
+    }
+
+    const oldestMessageId = getMessageId(channelMessages[0]);
+
+    if (!oldestMessageId) {
+      return;
+    }
+
+    scrollRestoreRef.current = {
+      previousScrollHeight: container.scrollHeight,
+      previousScrollTop: container.scrollTop
+    };
+
+    try {
+      setIsLoadingOlderMessages(true);
+      await loadChannelMessageList(token, activeChannelId, {
+        beforeMessageId: oldestMessageId
+      });
+    } catch (error) {
+      setMessageError(error.message || "Failed to load older channel messages.");
+      scrollRestoreRef.current = null;
+    } finally {
+      setIsLoadingOlderMessages(false);
+    }
   };
 
   const handleMessagesScroll = () => {
@@ -2263,6 +2579,10 @@ const MainPage = () => {
       container.scrollHeight - container.scrollTop - container.clientHeight;
 
     shouldAutoScrollRef.current = distanceFromBottom < 120;
+
+    if (container.scrollTop < 120) {
+      loadOlderMessages();
+    }
   };
 
   const handleLogout = () => {
@@ -4037,12 +4357,38 @@ const MainPage = () => {
                   <p className="auth-error server-inline-error server-inline-error-tight">
                     {messageSearchError}
                   </p>
-                ) : (
+                ) : activeSearchCount === 0 ? (
                   <p className="discord-message-search-status-text">
-                    Showing {activeMessageSearchResults.length} {activeMessageSearchLabel}
-                    {activeMessageSearchResults.length === 1 ? "" : "s"} for “
-                    {messageSearchTerm.trim()}”
+                    {activeMessageSearchEmptyText}
                   </p>
+                ) : (
+                  <div className="discord-message-search-navigation">
+                    <span className="discord-message-search-status-text">
+                      {activeSearchIndex + 1} of {activeSearchCount} {activeMessageSearchLabel}
+                      {activeSearchCount === 1 ? "" : "s"} for “{messageSearchTerm.trim()}”
+                    </span>
+
+                    <button
+                      type="button"
+                      className="discord-message-search-button discord-message-search-nav-button"
+                      onClick={handlePreviousSearchMatch}
+                      disabled={isSearchingMessages || activeSearchIndex <= 0}
+                    >
+                      ↑
+                    </button>
+
+                    <button
+                      type="button"
+                      className="discord-message-search-button discord-message-search-nav-button"
+                      onClick={handleNextSearchMatch}
+                      disabled={
+                        isSearchingMessages ||
+                        activeSearchIndex >= activeSearchCount - 1
+                      }
+                    >
+                      ↓
+                    </button>
+                  </div>
                 )}
               </div>
             ) : null}
@@ -4334,6 +4680,12 @@ const MainPage = () => {
                 onScroll={handleMessagesScroll}
                 className="message-list discord-message-list"
               >
+                {isLoadingOlderMessages ? (
+                  <div className="discord-loading-older-messages">
+                    Loading older messages...
+                  </div>
+                ) : null}
+
                 {displayedMessages.map((message, index) => {
                   const createdTimestampValue = isDmView
                     ? getDirectMessageTimestamp(message)
@@ -4383,11 +4735,16 @@ const MainPage = () => {
                   const isThisMessageDeleting = deletingMessageKey === messageDeleteKey;
                   const isThisMessageEditing = editingMessageKey === messageDeleteKey;
                   const isThisMessageSaving = savingEditedMessageKey === messageDeleteKey;
+                  const isActiveSearchMessage =
+                    activeSearchMessageId &&
+                    messageIdForDelete &&
+                    String(activeSearchMessageId) === String(messageIdForDelete);
 
                   return (
                     <div
                       key={key}
-                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}`}
+                      data-message-key={String(messageIdForDelete || key)}
+                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}`}
                     >
                       {!isOwnMessage ? (
                         <div className="discord-message-avatar">

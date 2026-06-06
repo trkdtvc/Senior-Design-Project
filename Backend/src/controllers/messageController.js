@@ -182,6 +182,9 @@ const getChannelMessages = async (req, res, next) => {
   try {
     const { channelId } = req.params;
     const userId = req.user.user_id;
+    const limit = req.query.limit;
+    const beforeMessageId = req.query.beforeMessageId || req.query.before;
+    const aroundMessageId = req.query.aroundMessageId || req.query.around;
 
     const isMember = await messageModel.isUserMemberOfChannelServer(channelId, userId);
 
@@ -190,14 +193,25 @@ const getChannelMessages = async (req, res, next) => {
       throw new Error("You are not a member of this channel's server");
     }
 
-    const messages = await messageModel.getMessagesByChannelId(channelId);
+    const { messages, pagination } = await messageModel.getMessagesByChannelId(
+      channelId,
+      {
+        limit,
+        beforeMessageId,
+        aroundMessageId
+      }
+    );
 
     const messagesWithReplies = messages.map((message) => ({
       ...message,
       reply_to: buildReplyPreview(message)
     }));
 
-    res.status(200).json(messagesWithReplies);
+    res.status(200).json({
+      message: "Channel messages fetched successfully",
+      messages: messagesWithReplies,
+      pagination
+    });
   } catch (error) {
     next(error);
   }
@@ -226,19 +240,16 @@ const searchChannelMessages = async (req, res, next) => {
       throw new Error("You are not a member of this channel's server");
     }
 
-    const messages = await messageModel.searchMessagesByChannelId(
+    const matches = await messageModel.searchMessagesByChannelId(
       channelId,
       searchTerm
     );
 
-    const messagesWithReplies = messages.map((message) => ({
-      ...message,
-      reply_to: buildReplyPreview(message)
-    }));
-
     res.status(200).json({
-      message: "Channel messages searched successfully",
-      data: messagesWithReplies
+      message: "Channel message matches fetched successfully",
+      query: searchTerm,
+      total: matches.length,
+      matches
     });
   } catch (error) {
     next(error);
