@@ -506,37 +506,177 @@ const formatFileSize = (sizeInBytes) => {
   return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const renderHighlightedSearchText = (content, searchTerm) => {
+const getMentionedUserIds = (message) => {
+  const mentionedIds =
+    message?.mentioned_user_ids ||
+    message?.mentionedUserIds ||
+    message?.mentioned_users ||
+    message?.mentionedUsers ||
+    [];
+
+  if (!Array.isArray(mentionedIds)) {
+    return [];
+  }
+
+  return mentionedIds.map((mentionedId) => String(mentionedId));
+};
+
+const contentMentionsUsername = (content, username) => {
   const safeContent = String(content || "");
+  const safeUsername = String(username || "").trim().toLowerCase();
+
+  if (!safeContent || !safeUsername) {
+    return false;
+  }
+
+  const mentionRegex = /@([a-zA-Z0-9_.-]+)/g;
+  let match = mentionRegex.exec(safeContent);
+
+  while (match) {
+    if (String(match[1] || "").toLowerCase() === safeUsername) {
+      return true;
+    }
+
+    match = mentionRegex.exec(safeContent);
+  }
+
+  return false;
+};
+
+const messageMentionsCurrentUser = ({
+  message,
+  content,
+  currentUserId,
+  currentUsername,
+  isOwnMessage
+}) => {
+  if (isOwnMessage) {
+    return false;
+  }
+
+  const mentionedUserIds = getMentionedUserIds(message);
+
+  if (
+    currentUserId &&
+    mentionedUserIds.some(
+      (mentionedUserId) => String(mentionedUserId) === String(currentUserId)
+    )
+  ) {
+    return true;
+  }
+
+  return contentMentionsUsername(content, currentUsername);
+};
+
+const buildMessageTextHighlights = ({ content, searchTerm, mentionUsername }) => {
+  const safeContent = String(content || "");
+  const ranges = [];
+
   const safeSearchTerm = String(searchTerm || "").trim();
 
-  if (!safeSearchTerm) {
+  if (safeSearchTerm) {
+    const lowerContent = safeContent.toLowerCase();
+    const lowerSearchTerm = safeSearchTerm.toLowerCase();
+    let matchIndex = lowerContent.indexOf(lowerSearchTerm, 0);
+
+    while (matchIndex !== -1) {
+      ranges.push({
+        start: matchIndex,
+        end: matchIndex + safeSearchTerm.length,
+        type: "search"
+      });
+
+      matchIndex = lowerContent.indexOf(
+        lowerSearchTerm,
+        matchIndex + safeSearchTerm.length
+      );
+    }
+  }
+
+  const safeMentionUsername = String(mentionUsername || "").trim().toLowerCase();
+
+  if (safeMentionUsername) {
+    const mentionRegex = /@([a-zA-Z0-9_.-]+)/g;
+    let mentionMatch = mentionRegex.exec(safeContent);
+
+    while (mentionMatch) {
+      const fullMention = mentionMatch[0];
+      const mentionedUsername = String(mentionMatch[1] || "").toLowerCase();
+      const start = mentionMatch.index;
+      const end = start + fullMention.length;
+      const overlapsSearchHighlight = ranges.some(
+        (range) => start < range.end && end > range.start
+      );
+
+      if (mentionedUsername === safeMentionUsername && !overlapsSearchHighlight) {
+        ranges.push({
+          start,
+          end,
+          type: "mention"
+        });
+      }
+
+      mentionMatch = mentionRegex.exec(safeContent);
+    }
+  }
+
+  return ranges.sort((firstRange, secondRange) => {
+    if (firstRange.start !== secondRange.start) {
+      return firstRange.start - secondRange.start;
+    }
+
+    return secondRange.end - firstRange.end;
+  });
+};
+
+const renderHighlightedMessageText = ({
+  content,
+  searchTerm,
+  mentionUsername
+}) => {
+  const safeContent = String(content || "");
+  const highlightRanges = buildMessageTextHighlights({
+    content: safeContent,
+    searchTerm,
+    mentionUsername
+  });
+
+  if (highlightRanges.length === 0) {
     return safeContent;
   }
 
-  const lowerContent = safeContent.toLowerCase();
-  const lowerSearchTerm = safeSearchTerm.toLowerCase();
   const highlightedParts = [];
   let currentIndex = 0;
-  let matchIndex = lowerContent.indexOf(lowerSearchTerm, currentIndex);
 
-  while (matchIndex !== -1) {
-    if (matchIndex > currentIndex) {
-      highlightedParts.push(safeContent.slice(currentIndex, matchIndex));
+  highlightRanges.forEach((range, rangeIndex) => {
+    if (range.start > currentIndex) {
+      highlightedParts.push(safeContent.slice(currentIndex, range.start));
     }
 
-    highlightedParts.push(
-      <mark
-        key={`search-highlight-${matchIndex}-${highlightedParts.length}`}
-        className="discord-message-search-highlight"
-      >
-        {safeContent.slice(matchIndex, matchIndex + safeSearchTerm.length)}
-      </mark>
-    );
+    const highlightedText = safeContent.slice(range.start, range.end);
 
-    currentIndex = matchIndex + safeSearchTerm.length;
-    matchIndex = lowerContent.indexOf(lowerSearchTerm, currentIndex);
-  }
+    if (range.type === "search") {
+      highlightedParts.push(
+        <mark
+          key={`search-highlight-${range.start}-${rangeIndex}`}
+          className="discord-message-search-highlight"
+        >
+          {highlightedText}
+        </mark>
+      );
+    } else {
+      highlightedParts.push(
+        <span
+          key={`mention-highlight-${range.start}-${rangeIndex}`}
+          className="discord-message-mention-highlight"
+        >
+          {highlightedText}
+        </span>
+      );
+    }
+
+    currentIndex = range.end;
+  });
 
   if (currentIndex < safeContent.length) {
     highlightedParts.push(safeContent.slice(currentIndex));
@@ -676,6 +816,7 @@ const MainPage = () => {
   const [unreadServerCounts, setUnreadServerCounts] = useState({});
   const [mentionChannelCounts, setMentionChannelCounts] = useState({});
   const [mentionServerCounts, setMentionServerCounts] = useState({});
+  const [activeMentionHighlight, setActiveMentionHighlight] = useState(null);
   const [hoveredConversationId, setHoveredConversationId] = useState(null);
   const [openConversationMenuId, setOpenConversationMenuId] = useState(null);
   const [isDeletingConversation, setIsDeletingConversation] = useState(false);
@@ -896,6 +1037,49 @@ const MainPage = () => {
       ),
     [activeServer, currentUserId, members]
   );
+
+  const highlightedMentionMessageIds = useMemo(() => {
+    if (
+      isDmView ||
+      !activeMentionHighlight ||
+      !activeChannelId ||
+      String(activeMentionHighlight.channelId) !== String(activeChannelId)
+    ) {
+      return new Set();
+    }
+
+    const newestMentionedMessage = [...channelMessages]
+      .reverse()
+      .find((message) => {
+        const content = getMessageContent(message);
+        const messageAuthorId = getMessageAuthorId(message);
+        const isOwnMessage =
+          currentUserId && String(messageAuthorId) === String(currentUserId);
+
+        return messageMentionsCurrentUser({
+          message,
+          content,
+          currentUserId,
+          currentUsername: user?.username,
+          isOwnMessage
+        });
+      });
+
+    const newestMentionedMessageId = newestMentionedMessage
+      ? getMessageId(newestMentionedMessage)
+      : null;
+
+    return newestMentionedMessageId
+      ? new Set([String(newestMentionedMessageId)])
+      : new Set();
+  }, [
+    activeChannelId,
+    activeMentionHighlight,
+    channelMessages,
+    currentUserId,
+    isDmView,
+    user?.username
+  ]);
 
   const displayedMessages = isDmView ? directMessages : channelMessages;
 
@@ -1431,14 +1615,42 @@ const MainPage = () => {
       return;
     }
 
+    const currentMentionCount = getUnreadValue(
+      mentionChannelCounts,
+      activeChannelId
+    );
+
+    if (currentMentionCount > 0) {
+      setActiveMentionHighlight({
+        channelId: String(activeChannelId),
+        count: currentMentionCount,
+        openedAt: Date.now()
+      });
+    }
+
     clearChannelUnread(activeChannelId, activeServerId);
     persistChannelReadState(activeChannelId);
   }, [
     activeServerId,
     activeChannelId,
     clearChannelUnread,
+    mentionChannelCounts,
     persistChannelReadState
   ]);
+
+  useEffect(() => {
+    if (!activeMentionHighlight) {
+      return;
+    }
+
+    const highlightTimer = window.setTimeout(() => {
+      setActiveMentionHighlight(null);
+    }, 5200);
+
+    return () => {
+      window.clearTimeout(highlightTimer);
+    };
+  }, [activeMentionHighlight]);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -2595,6 +2807,7 @@ const MainPage = () => {
 
   const handleSelectHome = () => {
     shouldAutoScrollRef.current = true;
+    setActiveMentionHighlight(null);
     setActiveServerId(null);
     setActiveConversationId(null);
     setActiveDmSection("friends");
@@ -2618,6 +2831,7 @@ const MainPage = () => {
 
   const handleSelectDmSection = (section) => {
     shouldAutoScrollRef.current = true;
+    setActiveMentionHighlight(null);
     setActiveServerId(null);
     setActiveConversationId(null);
     setActiveDmSection(section);
@@ -2639,6 +2853,7 @@ const MainPage = () => {
 
   const handleSelectServer = (serverId) => {
     shouldAutoScrollRef.current = true;
+    setActiveMentionHighlight(null);
     setActiveConversationId(null);
     setSidebarSearch("");
     setMessageContent("");
@@ -2665,6 +2880,7 @@ const MainPage = () => {
     }
 
     shouldAutoScrollRef.current = true;
+    setActiveMentionHighlight(null);
     setActiveChannelId(channelId);
     setDeleteChannelError("");
     setMessageError("");
@@ -2681,6 +2897,7 @@ const MainPage = () => {
 
   const handleSelectConversation = (conversationId) => {
     shouldAutoScrollRef.current = true;
+    setActiveMentionHighlight(null);
     setActiveServerId(null);
     setActiveConversationId(conversationId);
     setActiveDmSection("friends");
@@ -4742,11 +4959,26 @@ const MainPage = () => {
                     messageIdForDelete &&
                     String(activeSearchMessageId) === String(messageIdForDelete);
 
+                  const currentUserWasMentioned =
+                    !isDmView &&
+                    messageMentionsCurrentUser({
+                      message,
+                      content,
+                      currentUserId,
+                      currentUsername: user?.username,
+                      isOwnMessage
+                    });
+
+                  const shouldShowMentionEmphasis =
+                    currentUserWasMentioned &&
+                    messageIdForDelete &&
+                    highlightedMentionMessageIds.has(String(messageIdForDelete));
+
                   return (
                     <div
                       key={key}
                       data-message-key={String(messageIdForDelete || key)}
-                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}`}
+                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}${shouldShowMentionEmphasis ? " discord-message-row-mentioned" : ""}`}
                     >
                       {!isOwnMessage ? (
                         <div className="discord-message-avatar">
@@ -4844,6 +5076,12 @@ const MainPage = () => {
                             {messageWasEdited ? (
                               <span className="discord-message-time">edited</span>
                             ) : null}
+
+                            {shouldShowMentionEmphasis ? (
+                              <span className="discord-message-mentioned-pill">
+                                new mention
+                              </span>
+                            ) : null}
                           </div>
                         ) : null}
 
@@ -4892,10 +5130,13 @@ const MainPage = () => {
                           </div>
                         ) : content ? (
                           <p className="discord-message-text">
-                            {renderHighlightedSearchText(
+                            {renderHighlightedMessageText({
                               content,
-                              isMessageSearchActive ? messageSearchTerm : ""
-                            )}
+                              searchTerm: isMessageSearchActive ? messageSearchTerm : "",
+                              mentionUsername: shouldShowMentionEmphasis
+                                ? user?.username
+                                : ""
+                            })}
 
                             {isOwnMessage && timestamp ? (
                               <span className="discord-own-message-time">

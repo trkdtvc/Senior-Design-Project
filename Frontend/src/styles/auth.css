@@ -2581,3 +2581,90 @@ textarea.auth-input {
   background: rgba(250, 204, 21, 0.08);
   box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.65);
 }
+
+/* MENTION MESSAGE HIGHLIGHTING */
+
+.discord-message-row-mentioned {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(250, 166, 26, 0.12) 0%,
+      rgba(250, 166, 26, 0.055) 52%,
+      rgba(250, 166, 26, 0.015) 100%
+    );
+  box-shadow: inset 3px 0 0 rgba(250, 166, 26, 0.7);
+  animation: discordMentionPulse 1.25s ease-in-out 0s 4;
+}
+
+.discord-message-row-mentioned:hover {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(250, 166, 26, 0.14) 0%,
+      rgba(250, 166, 26, 0.065) 52%,
+      rgba(250, 166, 26, 0.02) 100%
+    );
+}
+
+.discord-message-row-mentioned.discord-message-row-search-active {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(250, 204, 21, 0.13) 0%,
+      rgba(250, 204, 21, 0.06) 56%,
+      rgba(250, 204, 21, 0.02) 100%
+    );
+  box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.78);
+}
+
+.discord-message-mention-highlight {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(250, 166, 26, 0.2);
+  color: #ffd783;
+  font-weight: 600;
+}
+
+.discord-message-mentioned-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid rgba(250, 166, 26, 0.24);
+  border-radius: 999px;
+  background: rgba(250, 166, 26, 0.12);
+  color: #ffd783;
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@keyframes discordMentionPulse {
+  0%,
+  100% {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(250, 166, 26, 0.08) 0%,
+        rgba(250, 166, 26, 0.035) 54%,
+        rgba(250, 166, 26, 0.01) 100%
+      );
+    box-shadow: inset 3px 0 0 rgba(250, 166, 26, 0.48);
+  }
+
+  50% {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(250, 166, 26, 0.2) 0%,
+        rgba(250, 166, 26, 0.095) 54%,
+        rgba(250, 166, 26, 0.025) 100%
+      );
+    box-shadow:
+      inset 3px 0 0 rgba(250, 166, 26, 0.9),
+      0 0 0 1px rgba(250, 166, 26, 0.12);
+  }
+}
