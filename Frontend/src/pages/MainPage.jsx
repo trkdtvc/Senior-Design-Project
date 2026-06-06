@@ -685,6 +685,7 @@ const MainPage = () => {
   const [editingMessageContent, setEditingMessageContent] = useState("");
   const [savingEditedMessageKey, setSavingEditedMessageKey] = useState(null);
   const [selectedReplyMessage, setSelectedReplyMessage] = useState(null);
+  const [openMessageMenuKey, setOpenMessageMenuKey] = useState(null);
 
   const [activeServerId, setActiveServerId] = useState(null);
   const [activeChannelId, setActiveChannelId] = useState(null);
@@ -2186,6 +2187,7 @@ const MainPage = () => {
     const handleGlobalClick = (event) => {
       setOpenChannelMenuId(null);
       setOpenConversationMenuId(null);
+      setOpenMessageMenuKey(null);
 
       if (
         emojiPickerRef.current &&
@@ -4753,40 +4755,71 @@ const MainPage = () => {
                       ) : null}
 
                       <div className="discord-message-body">
-                        <div className="discord-message-actions">
-                          {!isThisMessageEditing ? (
+                        {!isThisMessageEditing ? (
+                          <div
+                            className={`discord-message-menu${openMessageMenuKey === messageDeleteKey ? " discord-message-menu-open" : ""}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
                               type="button"
-                              onClick={() => handleStartReplyingToMessage(message)}
+                              className="discord-message-menu-trigger"
+                              onClick={() =>
+                                setOpenMessageMenuKey((currentKey) =>
+                                  currentKey === messageDeleteKey ? null : messageDeleteKey
+                                )
+                              }
                               disabled={!messageIdForDelete}
-                              className="discord-message-action"
+                              aria-label="Message actions"
+                              title="Message actions"
                             >
-                              Reply
+                              ⋯
                             </button>
-                          ) : null}
 
-                          {isOwnMessage && !isThisMessageEditing ? (
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditingMessage(message)}
-                              disabled={!messageIdForDelete}
-                              className="discord-message-action discord-message-action-edit"
-                            >
-                              Edit
-                            </button>
-                          ) : null}
+                            {openMessageMenuKey === messageDeleteKey ? (
+                              <div className="discord-message-options-menu">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenMessageMenuKey(null);
+                                    handleStartReplyingToMessage(message);
+                                  }}
+                                  disabled={!messageIdForDelete}
+                                  className="discord-message-option"
+                                >
+                                  Reply
+                                </button>
 
-                          {isOwnMessage ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteChatMessage(message)}
-                              disabled={isThisMessageDeleting || !messageIdForDelete}
-                              className="discord-message-action discord-message-action-danger"
-                            >
-                              {isThisMessageDeleting ? "Deleting..." : "Delete"}
-                            </button>
-                          ) : null}
-                        </div>
+                                {isOwnMessage ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMessageMenuKey(null);
+                                      handleStartEditingMessage(message);
+                                    }}
+                                    disabled={!messageIdForDelete}
+                                    className="discord-message-option"
+                                  >
+                                    Edit
+                                  </button>
+                                ) : null}
+
+                                {isOwnMessage ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMessageMenuKey(null);
+                                      handleDeleteChatMessage(message);
+                                    }}
+                                    disabled={isThisMessageDeleting || !messageIdForDelete}
+                                    className="discord-message-option discord-message-option-danger"
+                                  >
+                                    {isThisMessageDeleting ? "Deleting..." : "Delete"}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
 
                         {replyPreview ? (
                           <div className="discord-reply-preview">
