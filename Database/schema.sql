@@ -76,6 +76,63 @@ CREATE TABLE messages (
   CONSTRAINT messages_reply_to_message_fk FOREIGN KEY (reply_to_message_id) REFERENCES messages (message_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE message_attachments (
+  attachment_id INT NOT NULL AUTO_INCREMENT,
+  message_id INT NOT NULL,
+  file_url VARCHAR(500) NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  file_type VARCHAR(150) NOT NULL,
+  file_size INT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (attachment_id),
+  KEY fk_message_attachments_message (message_id),
+  CONSTRAINT fk_message_attachments_message
+    FOREIGN KEY (message_id) REFERENCES messages (message_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE message_mentions (
+  mention_id INT NOT NULL AUTO_INCREMENT,
+  message_id INT NOT NULL,
+  mentioned_user_id INT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (mention_id),
+  UNIQUE KEY unique_message_mention (message_id, mentioned_user_id),
+  KEY mentioned_user_id (mentioned_user_id),
+  CONSTRAINT message_mentions_ibfk_1
+    FOREIGN KEY (message_id) REFERENCES messages (message_id) ON DELETE CASCADE,
+  CONSTRAINT message_mentions_ibfk_2
+    FOREIGN KEY (mentioned_user_id) REFERENCES users (user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE message_reactions (
+  reaction_id INT NOT NULL AUTO_INCREMENT,
+  message_id INT NOT NULL,
+  user_id INT NOT NULL,
+  emoji VARCHAR(32) NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (reaction_id),
+  UNIQUE KEY unique_message_reaction (message_id, user_id, emoji),
+  KEY user_id (user_id),
+  CONSTRAINT message_reactions_message_fk
+    FOREIGN KEY (message_id) REFERENCES messages (message_id) ON DELETE CASCADE,
+  CONSTRAINT message_reactions_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE message_pins (
+  pin_id INT NOT NULL AUTO_INCREMENT,
+  message_id INT NOT NULL,
+  pinned_by INT NOT NULL,
+  pinned_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (pin_id),
+  UNIQUE KEY unique_message_pin (message_id),
+  KEY pinned_by (pinned_by),
+  CONSTRAINT message_pins_message_fk
+    FOREIGN KEY (message_id) REFERENCES messages (message_id) ON DELETE CASCADE,
+  CONSTRAINT message_pins_user_fk
+    FOREIGN KEY (pinned_by) REFERENCES users (user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE channel_read_states (
   read_state_id INT NOT NULL AUTO_INCREMENT,
   user_id INT NOT NULL,
@@ -188,6 +245,49 @@ CREATE TABLE direct_messages (
   CONSTRAINT direct_messages_reply_to_message_fk FOREIGN KEY (reply_to_direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE direct_message_attachments (
+  attachment_id INT NOT NULL AUTO_INCREMENT,
+  direct_message_id INT NOT NULL,
+  file_url VARCHAR(500) NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  file_type VARCHAR(150) NOT NULL,
+  file_size INT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (attachment_id),
+  KEY fk_direct_message_attachments_message (direct_message_id),
+  CONSTRAINT fk_direct_message_attachments_message
+    FOREIGN KEY (direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE direct_message_reactions (
+  reaction_id INT NOT NULL AUTO_INCREMENT,
+  direct_message_id INT NOT NULL,
+  user_id INT NOT NULL,
+  emoji VARCHAR(32) NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (reaction_id),
+  UNIQUE KEY unique_direct_message_reaction (direct_message_id, user_id, emoji),
+  KEY user_id (user_id),
+  CONSTRAINT direct_message_reactions_message_fk
+    FOREIGN KEY (direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE CASCADE,
+  CONSTRAINT direct_message_reactions_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE direct_message_pins (
+  pin_id INT NOT NULL AUTO_INCREMENT,
+  direct_message_id INT NOT NULL,
+  pinned_by INT NOT NULL,
+  pinned_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (pin_id),
+  UNIQUE KEY unique_direct_message_pin (direct_message_id),
+  KEY pinned_by (pinned_by),
+  CONSTRAINT direct_message_pins_message_fk
+    FOREIGN KEY (direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE CASCADE,
+  CONSTRAINT direct_message_pins_user_fk
+    FOREIGN KEY (pinned_by) REFERENCES users (user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE direct_conversation_read_states (
   read_state_id INT NOT NULL AUTO_INCREMENT,
   user_id INT NOT NULL,
@@ -235,4 +335,4 @@ CREATE TABLE direct_conversation_deletions (
   CONSTRAINT direct_conversation_deletions_user_fk
     FOREIGN KEY (user_id) REFERENCES users (user_id)
     ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
