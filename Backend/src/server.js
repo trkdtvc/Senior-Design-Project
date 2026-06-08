@@ -8,6 +8,11 @@ const { setUserOnlineState } = require("./models/userModel");
 
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const SOCKET_CORS_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : [FRONTEND_URL, "http://127.0.0.1:5173"];
 
 connectDB();
 
@@ -15,7 +20,7 @@ const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: SOCKET_CORS_ORIGINS,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true
   }

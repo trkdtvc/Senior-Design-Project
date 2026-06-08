@@ -1,7 +1,9 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const multer = require("multer");
 
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const uploadDirectory = path.join(__dirname, "..", "..", "uploads", "messages");
 
 if (!fs.existsSync(uploadDirectory)) {
@@ -32,15 +34,22 @@ const allowedMimeTypes = [
   "application/x-zip-compressed"
 ];
 
+const sanitizeOriginalFilename = (originalName = "attachment") => {
+  const baseName = path.basename(originalName);
+  const sanitizedName = baseName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const compactName = sanitizedName.replace(/_+/g, "_").slice(0, 120);
+
+  return compactName || "attachment";
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDirectory);
   },
   filename: (req, file, cb) => {
-    const safeOriginalName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
-    const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9
-    )}-${safeOriginalName}`;
+    const uniqueName = `${Date.now()}-${crypto.randomUUID()}-${sanitizeOriginalFilename(
+      file.originalname
+    )}`;
 
     cb(null, uniqueName);
   }
@@ -59,10 +68,11 @@ const uploadMessageAttachment = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 25 * 1024 * 1024
+    fileSize: MAX_ATTACHMENT_SIZE
   }
 });
 
 module.exports = {
+  MAX_ATTACHMENT_SIZE,
   uploadMessageAttachment
 };

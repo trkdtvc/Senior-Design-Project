@@ -21,7 +21,7 @@ import {
   getUnreadChannelCounts,
   getUnreadMentionCounts
 } from "../services/messageService";
-import { getServerMembers } from "../services/serverMemberService";
+import { getServerMembers, leaveServer } from "../services/serverMemberService";
 import {
   getDirectConversations,
   getOrCreateDirectConversation,
@@ -39,11 +39,19 @@ import {
   joinServerByInvite
 } from "../services/serverInviteService";
 import { connectSocket, disconnectSocket } from "../services/socket";
+import { getFileBaseUrl } from "../services/apiClient";
+import {
+  getFriends,
+  getIncomingFriendRequests,
+  getOutgoingFriendRequests,
+  sendFriendRequest,
+  respondToFriendRequest,
+  removeFriend
+} from "../services/friendService";
 import "../styles/auth.css";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
+const FILE_BASE_URL = getFileBaseUrl();
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MESSAGE_PAGE_SIZE = 30;
 const getAuthToken = () => localStorage.getItem("token");
@@ -71,27 +79,6 @@ const ATTACHMENT_ACCEPT_TYPES = [
   "application/zip",
   "application/x-zip-compressed"
 ].join(",");
-
-const handleResponse = async (response) => {
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(data?.message || "Request failed.");
-  }
-
-  return data;
-};
-
-const getFriends = async (token) => {
-  const response = await fetch(`${API_BASE_URL}/friends`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  });
-
-  return handleResponse(response);
-};
 
 const normalizeServers = (data) => {
   if (Array.isArray(data)) return data;
@@ -805,9 +792,7 @@ const MainPage = () => {
   const [channels, setChannels] = useState([]);
   const [members, setMembers] = useState([]);
   const [channelMessages, setChannelMessages] = useState([]);
-  const [channelSearchResults, setChannelSearchResults] = useState([]);
   const [directMessages, setDirectMessages] = useState([]);
-  const [directSearchResults, setDirectSearchResults] = useState([]);
   const [hasOlderChannelMessages, setHasOlderChannelMessages] = useState(false);
   const [hasOlderDirectMessages, setHasOlderDirectMessages] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
@@ -1088,7 +1073,6 @@ const MainPage = () => {
     : "channel message";
 
   const activeSearchCount = messageSearchMatches.length;
-  const hasActiveSearchResults = isMessageSearchActive && activeSearchCount > 0;
 
   const activeMessageSearchEmptyText = isDmView
     ? `No direct messages found for "${messageSearchTerm.trim()}".`
@@ -1260,8 +1244,6 @@ const MainPage = () => {
 
   const resetMessageSearchState = () => {
     setMessageSearchTerm("");
-    setChannelSearchResults([]);
-    setDirectSearchResults([]);
     setIsMessageSearchActive(false);
     setIsSearchingMessages(false);
     setMessageSearchError("");
@@ -1325,33 +1307,10 @@ const MainPage = () => {
   }, []);
 
   const loadFriendRequests = useCallback(async (token) => {
-    const [incomingResponse, outgoingResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/friends/requests/incoming`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }),
-      fetch(`${API_BASE_URL}/friends/requests/outgoing`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
+    const [incomingData, outgoingData] = await Promise.all([
+      getIncomingFriendRequests(token),
+      getOutgoingFriendRequests(token)
     ]);
-
-    const incomingData = await incomingResponse.json().catch(() => null);
-    const outgoingData = await outgoingResponse.json().catch(() => null);
-
-    if (!incomingResponse.ok) {
-      throw new Error(
-        incomingData?.message || "Failed to load incoming friend requests."
-      );
-    }
-
-    if (!outgoingResponse.ok) {
-      throw new Error(
-        outgoingData?.message || "Failed to load outgoing friend requests."
-      );
-    }
 
     setIncomingFriendRequests(normalizeFriendRequests(incomingData));
     setOutgoingFriendRequests(normalizeFriendRequests(outgoingData));
@@ -2034,7 +1993,6 @@ const MainPage = () => {
         );
 
       setChannelMessages(removeDeletedMessage);
-      setChannelSearchResults(removeDeletedMessage);
     };
 
     const handleMessageUpdated = (updatedMessage) => {
@@ -2068,7 +2026,6 @@ const MainPage = () => {
         });
 
       setChannelMessages(updateMessageList);
-      setChannelSearchResults(updateMessageList);
     };
 
     const handleDirectMessage = (payload) => {
@@ -2137,7 +2094,6 @@ const MainPage = () => {
         );
 
       setDirectMessages(removeDeletedDirectMessage);
-      setDirectSearchResults(removeDeletedDirectMessage);
 
       const token = getAuthToken();
 
@@ -2178,7 +2134,6 @@ const MainPage = () => {
         });
 
       setDirectMessages(updateDirectMessageList);
-      setDirectSearchResults(updateDirectMessageList);
 
       const token = getAuthToken();
 
@@ -2637,9 +2592,7 @@ const MainPage = () => {
 
     if (!trimmedSearchTerm) {
       messageSearchRequestRef.current += 1;
-      setChannelSearchResults([]);
-      setDirectSearchResults([]);
-      setMessageSearchMatches([]);
+          setMessageSearchMatches([]);
       setActiveSearchIndex(0);
       setActiveSearchMessageId(null);
       setIsMessageSearchActive(false);
@@ -2680,8 +2633,6 @@ const MainPage = () => {
   const handleClearMessageSearch = () => {
     messageSearchRequestRef.current += 1;
     setMessageSearchTerm("");
-    setChannelSearchResults([]);
-    setDirectSearchResults([]);
     setMessageSearchMatches([]);
     setActiveSearchIndex(0);
     setActiveSearchMessageId(null);
@@ -3033,22 +2984,7 @@ const MainPage = () => {
       setAddFriendError("");
       setAddFriendSuccess("");
 
-      const response = await fetch(`${API_BASE_URL}/friends/requests`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          username: friendUsername.trim()
-        })
-      });
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Failed to send friend request.");
-      }
+      const data = await sendFriendRequest(token, friendUsername);
 
       setAddFriendSuccess(data?.message || "Friend request sent.");
       setFriendUsername("");
@@ -3073,24 +3009,7 @@ const MainPage = () => {
       setProcessingFriendRequestId(requestId);
       setFriendRequestsError("");
 
-      const response = await fetch(
-        `${API_BASE_URL}/friends/requests/${requestId}/${action}`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(
-          data?.message ||
-          `Failed to ${action === "accept" ? "accept" : "reject"} friend request.`
-        );
-      }
+      await respondToFriendRequest(token, requestId, action);
 
       await loadFriends(token);
       await fetchFriendRequests(token);
@@ -3127,18 +3046,7 @@ const MainPage = () => {
       setRemovingFriendId(friendId);
       setRemoveFriendError("");
 
-      const response = await fetch(`${API_BASE_URL}/friends/${friendId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Failed to remove friend.");
-      }
+      await removeFriend(token, friendId);
 
       setFriends((prevFriends) =>
         prevFriends.filter(
@@ -3413,8 +3321,7 @@ const MainPage = () => {
           });
 
         setDirectMessages(updateDirectMessageList);
-        setDirectSearchResults(updateDirectMessageList);
-      } else {
+        } else {
         const response = await updateMessage(token, messageId, trimmedContent);
         const updatedMessage = response?.data || response?.message || response;
 
@@ -3434,7 +3341,6 @@ const MainPage = () => {
           });
 
         setChannelMessages(updateChannelMessageList);
-        setChannelSearchResults(updateChannelMessageList);
       }
 
       resetMessageEditingState();
@@ -3485,8 +3391,7 @@ const MainPage = () => {
           );
 
         setDirectMessages(removeDeletedDirectMessage);
-        setDirectSearchResults(removeDeletedDirectMessage);
-      } else {
+        } else {
         await deleteMessage(token, messageId);
 
         const removeDeletedChannelMessage = (prevMessages) =>
@@ -3496,7 +3401,6 @@ const MainPage = () => {
           );
 
         setChannelMessages(removeDeletedChannelMessage);
-        setChannelSearchResults(removeDeletedChannelMessage);
       }
     } catch (error) {
       setMessageError(error.message || "Failed to delete message.");
@@ -3816,21 +3720,7 @@ const MainPage = () => {
       if (currentUserIsOwner) {
         await deleteServer(token, getServerId(activeServer));
       } else {
-        const response = await fetch(
-          `${API_BASE_URL}/server-members/${getServerId(activeServer)}/leave`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        );
-
-        const data = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          throw new Error(data?.message || "Failed to leave server.");
-        }
+        await leaveServer(getServerId(activeServer), token);
       }
 
       await loadServers(token);
@@ -3942,7 +3832,7 @@ const MainPage = () => {
       setTimeout(() => {
         setIsInviteCopied(false);
       }, 2500);
-    } catch (error) {
+    } catch {
       setInviteError("Failed to copy invite code.");
     }
   };
