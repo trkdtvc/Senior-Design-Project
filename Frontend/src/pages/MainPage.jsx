@@ -54,6 +54,18 @@ import {
 import { connectSocket, disconnectSocket } from "../services/socket";
 import { getFileBaseUrl } from "../services/apiClient";
 import {
+  getNotificationSettings,
+  setServerMute,
+  setChannelMute,
+  setDirectConversationMute
+} from "../services/notificationSettingsService";
+import {
+  getBlockedUsers,
+  blockUser,
+  unblockUser,
+  reportUser
+} from "../services/userSafetyService";
+import {
   getFriends,
   getIncomingFriendRequests,
   getOutgoingFriendRequests,
@@ -575,6 +587,40 @@ const formatFileSize = (sizeInBytes) => {
   return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const getAttachmentKind = (attachment) => {
+  const attachmentType = getAttachmentType(attachment).toLowerCase();
+
+  if (attachmentType.startsWith("image/")) return "Image";
+  if (attachmentType.startsWith("video/")) return "Video";
+  if (attachmentType.startsWith("audio/")) return "Audio";
+  if (attachmentType.includes("pdf")) return "PDF";
+  if (attachmentType.includes("word")) return "Document";
+  if (attachmentType.includes("spreadsheet") || attachmentType.includes("excel")) return "Spreadsheet";
+  if (attachmentType.includes("presentation") || attachmentType.includes("powerpoint")) return "Presentation";
+  if (attachmentType.includes("zip")) return "Archive";
+  if (attachmentType.startsWith("text/")) return "Text file";
+
+  return "File";
+};
+
+const normalizeIdList = (list) =>
+  Array.isArray(list) ? list.map((id) => String(id)) : [];
+
+const applyNotificationSettingsPayload = (payload) =>
+  payload?.settings || payload?.data?.settings || payload || {
+    muted_server_ids: [],
+    muted_channel_ids: [],
+    muted_direct_conversation_ids: []
+  };
+
+const normalizeBlockedUsers = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.blockedUsers)) return payload.blockedUsers;
+  if (Array.isArray(payload?.blocked_users)) return payload.blocked_users;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+};
+
 const getMentionedUserIds = (message) => {
   const mentionedIds =
     message?.mentioned_user_ids ||
@@ -763,10 +809,11 @@ const isVideoAttachment = (attachment) =>
 const isAudioAttachment = (attachment) =>
   getAttachmentType(attachment).startsWith("audio/");
 
-const renderAttachmentPreview = (attachment) => {
+const renderAttachmentPreview = (attachment, onPreviewAttachment) => {
   const attachmentUrl = getAttachmentUrl(attachment);
   const attachmentName = getAttachmentName(attachment);
   const attachmentSize = formatFileSize(getAttachmentSize(attachment));
+  const attachmentKind = getAttachmentKind(attachment);
 
   if (!attachmentUrl) {
     return null;
@@ -774,33 +821,77 @@ const renderAttachmentPreview = (attachment) => {
 
   if (isImageAttachment(attachment)) {
     return (
-      <a href={attachmentUrl} target="_blank" rel="noreferrer">
-        <img
-          src={attachmentUrl}
-          alt={attachmentName}
-          className="discord-attachment-media"
-        />
-      </a>
+      <div className="discord-attachment-card discord-attachment-card-media">
+        <button
+          type="button"
+          className="discord-attachment-preview-button"
+          onClick={() => onPreviewAttachment?.(attachment)}
+          title="Open image preview"
+        >
+          <img
+            src={attachmentUrl}
+            alt={attachmentName}
+            className="discord-attachment-media"
+          />
+        </button>
+
+        <div className="discord-attachment-footer">
+          <span className="discord-attachment-kind">{attachmentKind}</span>
+          <span className="discord-attachment-name">{attachmentName}</span>
+          {attachmentSize ? <span>{attachmentSize}</span> : null}
+          <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
+            Download
+          </a>
+        </div>
+      </div>
     );
   }
 
   if (isVideoAttachment(attachment)) {
     return (
-      <video
-        controls
-        src={attachmentUrl}
-        className="discord-attachment-media"
-      />
+      <div className="discord-attachment-card discord-attachment-card-media">
+        <video
+          controls
+          src={attachmentUrl}
+          className="discord-attachment-media"
+        />
+
+        <div className="discord-attachment-footer">
+          <span className="discord-attachment-kind">{attachmentKind}</span>
+          <span className="discord-attachment-name">{attachmentName}</span>
+          {attachmentSize ? <span>{attachmentSize}</span> : null}
+          <button type="button" onClick={() => onPreviewAttachment?.(attachment)}>
+            Preview
+          </button>
+          <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
+            Download
+          </a>
+        </div>
+      </div>
     );
   }
 
   if (isAudioAttachment(attachment)) {
     return (
-      <audio
-        controls
-        src={attachmentUrl}
-        className="discord-attachment-audio"
-      />
+      <div className="discord-attachment-file discord-attachment-audio-card">
+        <span className="discord-attachment-icon">🎧</span>
+
+        <span className="discord-attachment-meta">
+          <span className="discord-attachment-name">{attachmentName}</span>
+          <span className="discord-attachment-size">
+            {attachmentKind}{attachmentSize ? ` · ${attachmentSize}` : ""}
+          </span>
+          <audio
+            controls
+            src={attachmentUrl}
+            className="discord-attachment-audio"
+          />
+        </span>
+
+        <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
+          Download
+        </a>
+      </div>
     );
   }
 
@@ -810,16 +901,18 @@ const renderAttachmentPreview = (attachment) => {
       target="_blank"
       rel="noreferrer"
       className="discord-attachment-file"
+      download
     >
       <span className="discord-attachment-icon">📎</span>
 
       <span className="discord-attachment-meta">
         <span className="discord-attachment-name">{attachmentName}</span>
-
-        {attachmentSize ? (
-          <span className="discord-attachment-size">{attachmentSize}</span>
-        ) : null}
+        <span className="discord-attachment-size">
+          {attachmentKind}{attachmentSize ? ` · ${attachmentSize}` : ""}
+        </span>
       </span>
+
+      <span className="discord-attachment-download">Download</span>
     </a>
   );
 };
@@ -910,6 +1003,27 @@ const MainPage = () => {
   const [isPinnedMessagesOpen, setIsPinnedMessagesOpen] = useState(false);
   const [reactingMessageKey, setReactingMessageKey] = useState(null);
   const [pinningMessageKey, setPinningMessageKey] = useState(null);
+  const [notificationSettings, setNotificationSettings] = useState({
+    muted_server_ids: [],
+    muted_channel_ids: [],
+    muted_direct_conversation_ids: []
+  });
+  const [settingsActionError, setSettingsActionError] = useState("");
+  const [settingsActionKey, setSettingsActionKey] = useState(null);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [safetyActionError, setSafetyActionError] = useState("");
+  const [safetyActionKey, setSafetyActionKey] = useState(null);
+  const [reportModal, setReportModal] = useState({
+    isOpen: false,
+    userId: null,
+    username: "",
+    contextType: "profile",
+    contextId: null
+  });
+  const [reportReason, setReportReason] = useState("");
+  const [reportSuccess, setReportSuccess] = useState("");
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState(null);
 
   const [activeServerId, setActiveServerId] = useState(null);
   const [activeChannelId, setActiveChannelId] = useState(null);
@@ -1184,6 +1298,27 @@ const MainPage = () => {
     isDmView ? directTypingUsers : channelTypingUsers
   );
   const pinnedMessageCount = pinnedMessages.length;
+  const mutedServerIds = useMemo(
+    () => normalizeIdList(notificationSettings.muted_server_ids),
+    [notificationSettings.muted_server_ids]
+  );
+  const mutedChannelIds = useMemo(
+    () => normalizeIdList(notificationSettings.muted_channel_ids),
+    [notificationSettings.muted_channel_ids]
+  );
+  const mutedDirectConversationIds = useMemo(
+    () => normalizeIdList(notificationSettings.muted_direct_conversation_ids),
+    [notificationSettings.muted_direct_conversation_ids]
+  );
+  const activeServerMuted = activeServerId
+    ? mutedServerIds.includes(String(activeServerId))
+    : false;
+  const activeChannelMuted = activeChannelId
+    ? mutedChannelIds.includes(String(activeChannelId))
+    : false;
+  const activeConversationMuted = activeConversationId
+    ? mutedDirectConversationIds.includes(String(activeConversationId))
+    : false;
 
   const activeMessageSearchLabel = isDmView
     ? "direct message"
@@ -1532,6 +1667,28 @@ const MainPage = () => {
     setMentionServerCounts(
       mentionUnreadData?.servers || mentionUnreadData?.data?.servers || {}
     );
+  }, []);
+
+
+  const loadNotificationSettings = useCallback(async (token) => {
+    const settingsData = await getNotificationSettings(token);
+    const normalizedSettings = applyNotificationSettingsPayload(settingsData);
+
+    setNotificationSettings({
+      muted_server_ids: normalizedSettings.muted_server_ids || [],
+      muted_channel_ids: normalizedSettings.muted_channel_ids || [],
+      muted_direct_conversation_ids:
+        normalizedSettings.muted_direct_conversation_ids || []
+    });
+
+    return normalizedSettings;
+  }, []);
+
+  const loadBlockedUsers = useCallback(async (token) => {
+    const blockedUsersData = await getBlockedUsers(token);
+    const normalizedBlockedUsers = normalizeBlockedUsers(blockedUsersData);
+    setBlockedUsers(normalizedBlockedUsers);
+    return normalizedBlockedUsers;
   }, []);
 
   const loadFriendRequests = useCallback(async (token) => {
@@ -1926,7 +2083,9 @@ const MainPage = () => {
           loadServers(token),
           loadFriends(token),
           loadDirectConversationList(token),
-          loadFriendRequests(token)
+          loadFriendRequests(token),
+          loadNotificationSettings(token),
+          loadBlockedUsers(token)
         ]);
 
         try {
@@ -1957,6 +2116,8 @@ const MainPage = () => {
     loadFriends,
     loadDirectConversationList,
     loadFriendRequests,
+    loadNotificationSettings,
+    loadBlockedUsers,
     loadUnreadCounts
   ]);
 
@@ -4228,6 +4389,182 @@ const MainPage = () => {
     }
   };
 
+  const handleApplyNotificationSettings = (payload) => {
+    const nextSettings = applyNotificationSettingsPayload(payload);
+
+    setNotificationSettings({
+      muted_server_ids: nextSettings.muted_server_ids || [],
+      muted_channel_ids: nextSettings.muted_channel_ids || [],
+      muted_direct_conversation_ids:
+        nextSettings.muted_direct_conversation_ids || []
+    });
+  };
+
+  const handleToggleMute = async (type, targetId, currentlyMuted) => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!targetId) {
+      return;
+    }
+
+    const actionKey = `${type}-${targetId}`;
+
+    try {
+      setSettingsActionKey(actionKey);
+      setSettingsActionError("");
+
+      let response;
+
+      if (type === "server") {
+        response = await setServerMute(token, targetId, !currentlyMuted);
+      } else if (type === "channel") {
+        response = await setChannelMute(token, targetId, !currentlyMuted);
+      } else {
+        response = await setDirectConversationMute(token, targetId, !currentlyMuted);
+      }
+
+      handleApplyNotificationSettings(response);
+      await loadUnreadCounts(token);
+    } catch (error) {
+      setSettingsActionError(error.message || "Failed to update notification settings.");
+    } finally {
+      setSettingsActionKey(null);
+    }
+  };
+
+  const handleOpenReportModal = ({ userId, username, contextType = "profile", contextId = null }) => {
+    if (!userId) {
+      return;
+    }
+
+    setReportModal({
+      isOpen: true,
+      userId,
+      username: username || "this user",
+      contextType,
+      contextId
+    });
+    setReportReason("");
+    setReportSuccess("");
+    setSafetyActionError("");
+  };
+
+  const handleCloseReportModal = () => {
+    setReportModal({
+      isOpen: false,
+      userId: null,
+      username: "",
+      contextType: "profile",
+      contextId: null
+    });
+    setReportReason("");
+    setIsSubmittingReport(false);
+  };
+
+  const handleSubmitReport = async (event) => {
+    event.preventDefault();
+
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const reason = reportReason.trim();
+
+    if (!reason) {
+      setSafetyActionError("Please write a short reason before submitting the report.");
+      return;
+    }
+
+    try {
+      setIsSubmittingReport(true);
+      setSafetyActionError("");
+      await reportUser(token, reportModal.userId, {
+        reason,
+        context_type: reportModal.contextType,
+        context_id: reportModal.contextId
+      });
+      setReportSuccess("Report submitted successfully.");
+      handleCloseReportModal();
+    } catch (error) {
+      setSafetyActionError(error.message || "Failed to submit report.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
+  const handleBlockUser = async (targetUserId, targetUsername = "this user") => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!targetUserId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Block ${targetUsername}? This will remove them from your friends and stop direct messages between you.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSafetyActionKey(`block-${targetUserId}`);
+      setSafetyActionError("");
+      const response = await blockUser(token, targetUserId);
+      setBlockedUsers(normalizeBlockedUsers(response));
+      await Promise.all([
+        loadFriends(token),
+        loadDirectConversationList(token),
+        loadFriendRequests(token),
+        loadUnreadCounts(token)
+      ]);
+
+      if (
+        activeConversationUser &&
+        String(activeConversationUser.user_id) === String(targetUserId)
+      ) {
+        setActiveConversationId(null);
+      }
+    } catch (error) {
+      setSafetyActionError(error.message || "Failed to block user.");
+    } finally {
+      setSafetyActionKey(null);
+    }
+  };
+
+  const handleUnblockUser = async (targetUserId) => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setSafetyActionKey(`unblock-${targetUserId}`);
+      setSafetyActionError("");
+      const response = await unblockUser(token, targetUserId);
+      setBlockedUsers(normalizeBlockedUsers(response));
+    } catch (error) {
+      setSafetyActionError(error.message || "Failed to unblock user.");
+    } finally {
+      setSafetyActionKey(null);
+    }
+  };
+
   const handleJumpToPinnedMessage = async (message) => {
     const messageId = isDmView ? getDirectMessageId(message) : getMessageId(message);
 
@@ -5081,6 +5418,58 @@ const MainPage = () => {
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        handleToggleMute(
+                                          "direct",
+                                          conversationId,
+                                          mutedDirectConversationIds.includes(String(conversationId))
+                                        );
+                                        setOpenConversationMenuId(null);
+                                      }}
+                                      className="auth-button compact-button"
+                                      disabled={settingsActionKey === `direct-${conversationId}`}
+                                    >
+                                      {mutedDirectConversationIds.includes(String(conversationId))
+                                        ? "Unmute DM"
+                                        : "Mute DM"}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenReportModal({
+                                          userId: getConversationOtherUserId(conversation),
+                                          username: getConversationOtherUsername(conversation),
+                                          contextType: "direct_conversation",
+                                          contextId: conversationId
+                                        });
+                                        setOpenConversationMenuId(null);
+                                      }}
+                                      className="auth-button compact-button"
+                                    >
+                                      Report user
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleBlockUser(
+                                          getConversationOtherUserId(conversation),
+                                          getConversationOtherUsername(conversation)
+                                        );
+                                        setOpenConversationMenuId(null);
+                                      }}
+                                      className="auth-button auth-button-danger compact-button discord-menu-button-danger"
+                                      disabled={safetyActionKey === `block-${getConversationOtherUserId(conversation)}`}
+                                    >
+                                      Block user
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         handleDeleteDirectConversation(conversation);
                                       }}
                                       className="auth-button auth-button-danger compact-button discord-menu-button-danger"
@@ -5160,10 +5549,8 @@ const MainPage = () => {
                                 ) : null}
                               </button>
 
-                              {currentUserCanManageServer &&
-                                !isGeneralChannel &&
-                                (String(hoveredChannelId) === String(channelId) ||
-                                  String(openChannelMenuId) === String(channelId)) ? (
+                              {String(hoveredChannelId) === String(channelId) ||
+                                String(openChannelMenuId) === String(channelId) ? (
                                 <div className="discord-menu-anchor">
                                   <button
                                     type="button"
@@ -5184,14 +5571,35 @@ const MainPage = () => {
                                         type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          handleToggleMute(
+                                            "channel",
+                                            channelId,
+                                            mutedChannelIds.includes(String(channelId))
+                                          );
                                           setOpenChannelMenuId(null);
-                                          handleDeleteChannel(channel);
                                         }}
-                                        className="auth-button auth-button-danger compact-button discord-menu-button-danger"
-                                        disabled={isDeletingChannel}
+                                        className="auth-button compact-button"
+                                        disabled={settingsActionKey === `channel-${channelId}`}
                                       >
-                                        {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
+                                        {mutedChannelIds.includes(String(channelId))
+                                          ? `Unmute #${getChannelName(channel)}`
+                                          : `Mute #${getChannelName(channel)}`}
                                       </button>
+
+                                      {currentUserCanManageServer && !isGeneralChannel ? (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenChannelMenuId(null);
+                                            handleDeleteChannel(channel);
+                                          }}
+                                          className="auth-button auth-button-danger compact-button discord-menu-button-danger"
+                                          disabled={isDeletingChannel}
+                                        >
+                                          {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
+                                        </button>
+                                      ) : null}
                                     </div>
                                   ) : null}
                                 </div>
@@ -5416,6 +5824,80 @@ const MainPage = () => {
                 </button>
               </form>
             ) : null}
+
+            {settingsActionError ? (
+              <p className="auth-error server-inline-error discord-header-inline-error">
+                {settingsActionError}
+              </p>
+            ) : null}
+
+            {safetyActionError ? (
+              <p className="auth-error server-inline-error discord-header-inline-error">
+                {safetyActionError}
+              </p>
+            ) : null}
+
+            {reportSuccess ? (
+              <p className="auth-success server-inline-success discord-header-inline-error">
+                {reportSuccess}
+              </p>
+            ) : null}
+
+            {((!isDmView && activeServerId) || (isDmView && activeConversationId)) ? (
+              <div className="discord-chat-header-actions">
+                {!isDmView && activeServerId ? (
+                  <button
+                    type="button"
+                    className="discord-header-action-button"
+                    onClick={() => handleToggleMute("server", activeServerId, activeServerMuted)}
+                    disabled={settingsActionKey === `server-${activeServerId}`}
+                  >
+                    {activeServerMuted ? "Unmute server" : "Mute server"}
+                  </button>
+                ) : null}
+
+                {!isDmView && activeChannelId ? (
+                  <button
+                    type="button"
+                    className="discord-header-action-button"
+                    onClick={() => handleToggleMute("channel", activeChannelId, activeChannelMuted)}
+                    disabled={settingsActionKey === `channel-${activeChannelId}`}
+                  >
+                    {activeChannelMuted ? "Unmute channel" : "Mute channel"}
+                  </button>
+                ) : null}
+
+                {isDmView && activeConversationId ? (
+                  <>
+                    <button
+                      type="button"
+                      className="discord-header-action-button"
+                      onClick={() => handleToggleMute("direct", activeConversationId, activeConversationMuted)}
+                      disabled={settingsActionKey === `direct-${activeConversationId}`}
+                    >
+                      {activeConversationMuted ? "Unmute DM" : "Mute DM"}
+                    </button>
+
+                    {activeConversationUser ? (
+                      <button
+                        type="button"
+                        className="discord-header-action-button"
+                        onClick={() =>
+                          handleOpenReportModal({
+                            userId: activeConversationUser.user_id,
+                            username: activeConversationUser.username,
+                            contextType: "direct_conversation",
+                            contextId: activeConversationId
+                          })
+                        }
+                      >
+                        Report
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <section className="server-messages-panel discord-messages-panel">
@@ -5588,12 +6070,62 @@ const MainPage = () => {
                                     ? "Removing..."
                                     : "Remove"}
                                 </button>
+                                <button
+                                  type="button"
+                                  className="auth-button discord-friend-home-action"
+                                  onClick={() =>
+                                    handleOpenReportModal({
+                                      userId: getFriendId(friend),
+                                      username: getFriendName(friend),
+                                      contextType: "profile"
+                                    })
+                                  }
+                                >
+                                  Report
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="auth-button auth-button-danger discord-friend-home-action discord-friend-home-action-danger"
+                                  onClick={() => handleBlockUser(getFriendId(friend), getFriendName(friend))}
+                                  disabled={safetyActionKey === `block-${getFriendId(friend)}`}
+                                >
+                                  {safetyActionKey === `block-${getFriendId(friend)}`
+                                    ? "Blocking..."
+                                    : "Block"}
+                                </button>
                               </div>
                             </div>
                           );
                         })}
                       </div>
                     )}
+
+                    {blockedUsers.length > 0 ? (
+                      <div className="discord-blocked-users-panel">
+                        <div className="discord-section-heading">Blocked Users</div>
+                        <div className="discord-blocked-users-list">
+                          {blockedUsers.map((blockedUser) => (
+                            <div
+                              key={blockedUser.user_id || blockedUser.block_id}
+                              className="discord-blocked-user-row"
+                            >
+                              <span>{blockedUser.username}</span>
+                              <button
+                                type="button"
+                                className="auth-button compact-button"
+                                onClick={() => handleUnblockUser(blockedUser.user_id)}
+                                disabled={safetyActionKey === `unblock-${blockedUser.user_id}`}
+                              >
+                                {safetyActionKey === `unblock-${blockedUser.user_id}`
+                                  ? "Unblocking..."
+                                  : "Unblock"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </>
                 ) : activeDmSection === "add-friend" ? (
                   <>
@@ -6114,7 +6646,7 @@ const MainPage = () => {
                                   attachment.file_url
                                 }
                               >
-                                {renderAttachmentPreview(attachment)}
+                                {renderAttachmentPreview(attachment, setPreviewAttachment)}
                               </div>
                             ))}
                           </div>
@@ -6597,6 +7129,130 @@ const MainPage = () => {
                   disabled={isUpdatingProfile}
                 >
                   {isUpdatingProfile ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {previewAttachment ? (
+        <div
+          className="discord-create-server-backdrop discord-attachment-preview-backdrop"
+          onClick={() => setPreviewAttachment(null)}
+        >
+          <div
+            className="discord-attachment-preview-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header discord-attachment-preview-header">
+              <div>
+                <h2 className="discord-modal-title">{getAttachmentName(previewAttachment)}</h2>
+                <p className="discord-modal-subtitle">
+                  {getAttachmentKind(previewAttachment)}
+                  {getAttachmentSize(previewAttachment)
+                    ? ` · ${formatFileSize(getAttachmentSize(previewAttachment))}`
+                    : ""}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="discord-remove-preview-button"
+                onClick={() => setPreviewAttachment(null)}
+                aria-label="Close preview"
+                title="Close preview"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="discord-attachment-preview-body">
+              {isImageAttachment(previewAttachment) ? (
+                <img
+                  src={getAttachmentUrl(previewAttachment)}
+                  alt={getAttachmentName(previewAttachment)}
+                  className="discord-attachment-preview-image"
+                />
+              ) : isVideoAttachment(previewAttachment) ? (
+                <video
+                  controls
+                  src={getAttachmentUrl(previewAttachment)}
+                  className="discord-attachment-preview-video"
+                />
+              ) : isAudioAttachment(previewAttachment) ? (
+                <audio
+                  controls
+                  src={getAttachmentUrl(previewAttachment)}
+                  className="discord-attachment-audio"
+                />
+              ) : null}
+            </div>
+
+            <div className="discord-modal-actions">
+              <a
+                href={getAttachmentUrl(previewAttachment)}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="auth-button compact-button discord-modal-link-button"
+              >
+                Download
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {reportModal.isOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={handleCloseReportModal}
+        >
+          <div
+            className="discord-create-server-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 className="discord-modal-title">Report {reportModal.username}</h2>
+              <p className="discord-modal-subtitle">
+                Send a short moderation note so the report can be reviewed later.
+              </p>
+            </div>
+
+            {safetyActionError ? (
+              <p className="auth-error server-inline-error">{safetyActionError}</p>
+            ) : null}
+
+            <form onSubmit={handleSubmitReport} className="discord-form-stack">
+              <textarea
+                className="auth-input compact-input compact-textarea"
+                value={reportReason}
+                onChange={(e) => {
+                  setReportReason(e.target.value);
+                  setSafetyActionError("");
+                }}
+                placeholder="Reason for reporting this user"
+                rows="4"
+                maxLength="1000"
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={handleCloseReportModal}
+                  disabled={isSubmittingReport}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isSubmittingReport}
+                >
+                  {isSubmittingReport ? "Submitting..." : "Submit report"}
                 </button>
               </div>
             </form>

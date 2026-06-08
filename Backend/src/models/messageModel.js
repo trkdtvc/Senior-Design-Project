@@ -593,6 +593,12 @@ const getUnreadChannelCountsByUserId = async (userId) => {
      LEFT JOIN channel_read_states crs
        ON crs.user_id = sm.user_id
       AND crs.channel_id = c.channel_id
+     LEFT JOIN user_muted_servers ums
+       ON ums.user_id = sm.user_id
+      AND ums.server_id = c.server_id
+     LEFT JOIN user_muted_channels umc
+       ON umc.user_id = sm.user_id
+      AND umc.channel_id = c.channel_id
      JOIN messages m
        ON m.channel_id = c.channel_id
       AND m.user_id <> sm.user_id
@@ -610,6 +616,8 @@ const getUnreadChannelCountsByUserId = async (userId) => {
         )
       )
      WHERE sm.user_id = ?
+       AND ums.mute_id IS NULL
+       AND umc.mute_id IS NULL
      GROUP BY c.server_id, c.channel_id
      HAVING unread_count > 0`,
     [userId]
@@ -639,7 +647,15 @@ const getUnreadMentionCountsByUserId = async (userId) => {
      LEFT JOIN channel_read_states crs
        ON crs.user_id = mm.mentioned_user_id
       AND crs.channel_id = m.channel_id
+     LEFT JOIN user_muted_servers ums
+       ON ums.user_id = mm.mentioned_user_id
+      AND ums.server_id = c.server_id
+     LEFT JOIN user_muted_channels umc
+       ON umc.user_id = mm.mentioned_user_id
+      AND umc.channel_id = m.channel_id
      WHERE mm.mentioned_user_id = ?
+       AND ums.mute_id IS NULL
+       AND umc.mute_id IS NULL
        AND m.user_id <> ?
        AND m.created_at >= sm.joined_at
        AND (

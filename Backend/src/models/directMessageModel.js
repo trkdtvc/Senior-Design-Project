@@ -830,6 +830,9 @@ const getUnreadDirectConversationCountsByUserId = async (userId) => {
       LEFT JOIN direct_conversation_read_states dcrs
         ON dcrs.conversation_id = dc.conversation_id
        AND dcrs.user_id = ?
+      LEFT JOIN user_muted_direct_conversations umdc
+        ON umdc.conversation_id = dc.conversation_id
+       AND umdc.user_id = ?
       JOIN direct_messages dm
         ON dm.conversation_id = dc.conversation_id
        AND dm.sender_id <> ?
@@ -849,11 +852,12 @@ const getUnreadDirectConversationCountsByUserId = async (userId) => {
             AND dm.created_at > dcrs.last_read_at
           )
        )
-      WHERE dc.user_one_id = ? OR dc.user_two_id = ?
+      WHERE (dc.user_one_id = ? OR dc.user_two_id = ?)
+        AND umdc.mute_id IS NULL
       GROUP BY dc.conversation_id
       HAVING unread_count > 0
     `,
-    [userId, userId, userId, userId, userId]
+    [userId, userId, userId, userId, userId, userId]
   );
 
   return rows.map((row) => ({

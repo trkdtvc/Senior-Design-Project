@@ -151,6 +151,35 @@ CREATE TABLE channel_read_states (
     FOREIGN KEY (last_read_message_id) REFERENCES messages (message_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+
+CREATE TABLE user_muted_servers (
+  mute_id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  server_id INT NOT NULL,
+  muted_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (mute_id),
+  UNIQUE KEY unique_user_muted_server (user_id, server_id),
+  KEY server_id (server_id),
+  CONSTRAINT user_muted_servers_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_muted_servers_server_fk
+    FOREIGN KEY (server_id) REFERENCES servers (server_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE user_muted_channels (
+  mute_id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  channel_id INT NOT NULL,
+  muted_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (mute_id),
+  UNIQUE KEY unique_user_muted_channel (user_id, channel_id),
+  KEY channel_id (channel_id),
+  CONSTRAINT user_muted_channels_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_muted_channels_channel_fk
+    FOREIGN KEY (channel_id) REFERENCES channels (channel_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE roles (
   role_id INT NOT NULL AUTO_INCREMENT,
   server_id INT NOT NULL,
@@ -286,6 +315,56 @@ CREATE TABLE direct_message_pins (
     FOREIGN KEY (direct_message_id) REFERENCES direct_messages (direct_message_id) ON DELETE CASCADE,
   CONSTRAINT direct_message_pins_user_fk
     FOREIGN KEY (pinned_by) REFERENCES users (user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE user_muted_direct_conversations (
+  mute_id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  conversation_id INT NOT NULL,
+  muted_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (mute_id),
+  UNIQUE KEY unique_user_muted_direct_conversation (user_id, conversation_id),
+  KEY conversation_id (conversation_id),
+  CONSTRAINT user_muted_direct_conversations_user_fk
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_muted_direct_conversations_conversation_fk
+    FOREIGN KEY (conversation_id) REFERENCES direct_conversations (conversation_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE user_blocks (
+  block_id INT NOT NULL AUTO_INCREMENT,
+  blocker_id INT NOT NULL,
+  blocked_id INT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (block_id),
+  UNIQUE KEY unique_user_block (blocker_id, blocked_id),
+  KEY blocked_id (blocked_id),
+  CONSTRAINT user_blocks_blocker_fk
+    FOREIGN KEY (blocker_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_blocks_blocked_fk
+    FOREIGN KEY (blocked_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_blocks_no_self_check CHECK (blocker_id <> blocked_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE user_reports (
+  report_id INT NOT NULL AUTO_INCREMENT,
+  reporter_id INT NOT NULL,
+  reported_user_id INT NOT NULL,
+  reason TEXT NOT NULL,
+  context_type VARCHAR(50) NOT NULL DEFAULT 'profile',
+  context_id INT DEFAULT NULL,
+  status ENUM('open','reviewed','dismissed') NOT NULL DEFAULT 'open',
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at DATETIME DEFAULT NULL,
+  PRIMARY KEY (report_id),
+  KEY reporter_id (reporter_id),
+  KEY reported_user_id (reported_user_id),
+  CONSTRAINT user_reports_reporter_fk
+    FOREIGN KEY (reporter_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_reports_reported_user_fk
+    FOREIGN KEY (reported_user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_reports_no_self_check CHECK (reporter_id <> reported_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE direct_conversation_read_states (

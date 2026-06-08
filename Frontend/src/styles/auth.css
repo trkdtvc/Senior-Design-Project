@@ -2912,3 +2912,157 @@ textarea.auth-input {
   font-weight: 700;
   font-style: italic;
 }
+
+.discord-chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.discord-header-action-button {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f7ff;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.discord-header-action-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.discord-header-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.discord-header-inline-error {
+  margin: 0;
+  max-width: 280px;
+  font-size: 12px;
+}
+
+.discord-attachment-card {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(10, 16, 32, 0.48);
+  max-width: min(440px, 100%);
+}
+
+.discord-attachment-preview-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  text-align: left;
+}
+
+.discord-attachment-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 11px;
+  color: #cbd3e8;
+  font-size: 12px;
+}
+
+.discord-attachment-footer a,
+.discord-attachment-footer button,
+.discord-attachment-download {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #8ea2ff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.discord-attachment-kind {
+  border-radius: 999px;
+  background: rgba(142, 162, 255, 0.14);
+  color: #d7ddff;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.discord-attachment-audio-card {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.discord-attachment-preview-backdrop {
+  z-index: 60;
+}
+
+.discord-attachment-preview-modal {
+  width: min(900px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: 18px;
+  background: #11182b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  padding: 20px;
+}
+
+.discord-attachment-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.discord-attachment-preview-body {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.discord-attachment-preview-image,
+.discord-attachment-preview-video {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 12px;
+}
+
+.discord-modal-link-button {
+  text-decoration: none;
+  text-align: center;
+}
+
+.discord-blocked-users-panel {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.discord-blocked-users-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.discord-blocked-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #f5f7ff;
+  font-size: 14px;
+}

@@ -20,6 +20,7 @@ const {
   markDirectConversationAsRead,
   getUnreadDirectConversationCountsByUserId
 } = require("../models/directMessageModel");
+const userSafetyModel = require("../models/userSafetyModel");
 
 const createAttachmentPayload = (file) => {
   if (!file) {
@@ -122,6 +123,16 @@ const getOrCreateDirectConversation = async (req, res, next) => {
     if (!friendUserExists) {
       res.status(404);
       throw new Error("Friend user not found");
+    }
+
+    const existingBlock = await userSafetyModel.getBlockBetweenUsers(
+      currentUserId,
+      friendId
+    );
+
+    if (existingBlock) {
+      res.status(403);
+      throw new Error("Direct conversations are not available between blocked users");
     }
 
     const friends = await areUsersFriends(currentUserId, friendId);
@@ -258,6 +269,21 @@ const sendDirectMessageToConversation = async (req, res, next) => {
     if (!hasAccess) {
       res.status(403);
       throw new Error("You are not a participant in this direct conversation");
+    }
+
+    const otherUserIdForBlockCheck =
+      Number(conversation.user_one_id) === Number(currentUserId)
+        ? Number(conversation.user_two_id)
+        : Number(conversation.user_one_id);
+
+    const existingBlock = await userSafetyModel.getBlockBetweenUsers(
+      currentUserId,
+      otherUserIdForBlockCheck
+    );
+
+    if (existingBlock) {
+      res.status(403);
+      throw new Error("Direct messages are not available between blocked users");
     }
 
     let replyToMessage = null;
