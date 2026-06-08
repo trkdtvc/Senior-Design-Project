@@ -4736,7 +4736,13 @@ const MainPage = () => {
             </div>
 
             <div className="discord-account-panel">
-              <div className="discord-account-panel-user">
+              <button
+                type="button"
+                className="discord-account-panel-user"
+                onClick={handleOpenEditProfile}
+                title="Edit profile"
+                aria-label="Edit profile"
+              >
                 <div className="discord-account-avatar">
                   {getInitial(user?.username)}
                   <span
@@ -4752,18 +4758,9 @@ const MainPage = () => {
                     {currentUserPresence === "online" ? "Online" : "Offline"}
                   </div>
                 </div>
-              </div>
+              </button>
 
               <div className="discord-account-actions">
-                <button
-                  type="button"
-                  className="discord-account-action"
-                  onClick={handleOpenEditProfile}
-                  title="Edit profile"
-                >
-                  Edit profile
-                </button>
-
                 <button
                   type="button"
                   className="discord-account-action"

@@ -991,6 +991,24 @@ textarea.auth-input {
   display: flex;
   align-items: center;
   gap: 10px;
+  border: none;
+  border-radius: 12px;
+  padding: 6px 8px;
+  margin-left: -8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.discord-account-panel-user:hover,
+.discord-account-panel-user:focus-visible {
+  background: rgba(112, 128, 255, 0.14);
+  color: #ffffff;
+  outline: none;
 }
 
 .discord-account-meta {
