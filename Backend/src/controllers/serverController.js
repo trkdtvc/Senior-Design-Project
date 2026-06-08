@@ -10,20 +10,15 @@ const createServer = async (req, res, next) => {
       throw new Error("Server name is required");
     }
 
-    const serverResult = await serverModel.createServer(
+    const createdServer = await serverModel.createServerWithDefaults(
       ownerId,
       server_name,
       description || null
     );
 
-    const serverId = serverResult.insertId;
-
-    await serverModel.addServerMember(serverId, ownerId);
-    await serverModel.createDefaultChannel(serverId);
-
     res.status(201).json({
       message: "Server created successfully",
-      server_id: serverId
+      server_id: createdServer.server_id
     });
   } catch (error) {
     next(error);
@@ -53,7 +48,7 @@ const deleteServer = async (req, res, next) => {
       throw new Error("Server not found");
     }
 
-    if (server.owner_id !== userId) {
+    if (Number(server.owner_id) !== Number(userId)) {
       res.status(403);
       throw new Error("Only the server owner can delete this server");
     }

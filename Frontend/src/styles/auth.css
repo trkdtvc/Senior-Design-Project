@@ -2668,3 +2668,45 @@ textarea.auth-input {
       0 0 0 1px rgba(250, 166, 26, 0.12);
   }
 }
+
+.discord-member-role-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(137, 157, 255, 0.2);
+  background: rgba(137, 157, 255, 0.12);
+  color: var(--app-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.discord-member-role-owner {
+  border-color: rgba(245, 197, 66, 0.28);
+  background: rgba(245, 197, 66, 0.12);
+  color: #f5c542;
+}
+
+.discord-member-role-admin {
+  border-color: rgba(98, 148, 255, 0.28);
+  background: rgba(98, 148, 255, 0.12);
+  color: #9db8ff;
+}
+
+.discord-member-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 42px;
+}
+
+.discord-member-action-button {
+  width: auto;
+  min-height: 28px;
+  padding: 6px 8px;
+  font-size: 0.74rem;
+}

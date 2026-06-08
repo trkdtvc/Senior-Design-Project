@@ -1,4 +1,5 @@
 const messageModel = require("../models/messageModel");
+const { canManageServerContent } = require("../models/permissionModel");
 
 const createAttachmentPayload = (file) => {
   if (!file) {
@@ -355,9 +356,13 @@ const deleteMessage = async (req, res, next) => {
       throw new Error("You are not a member of this channel's server");
     }
 
-    if (Number(message.user_id) !== Number(userId)) {
+    const permission = await canManageServerContent(message.server_id, userId);
+    const canDeleteMessage =
+      Number(message.user_id) === Number(userId) || permission.allowed;
+
+    if (!canDeleteMessage) {
       res.status(403);
-      throw new Error("You can only delete your own messages");
+      throw new Error("You can only delete your own messages unless you are a server owner or admin");
     }
 
     await messageModel.deleteMessageAttachmentsByMessageId(messageId);

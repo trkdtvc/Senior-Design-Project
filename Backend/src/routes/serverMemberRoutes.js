@@ -2,7 +2,9 @@ const express = require("express");
 const router = express.Router();
 const {
   getServerMembers,
-  leaveServer
+  leaveServer,
+  removeMember,
+  updateMemberRole
 } = require("../controllers/serverMemberController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -66,5 +68,88 @@ router.get("/:serverId", protect, getServerMembers);
  *         description: Server or membership not found
  */
 router.delete("/:serverId/leave", protect, leaveServer);
+
+/**
+ * @swagger
+ * /api/server-members/{serverId}/members/{memberId}:
+ *   delete:
+ *     summary: Remove a member from a server
+ *     tags: [Server Members]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: serverId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Server ID
+ *       - in: path
+ *         name: memberId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Server member ID
+ *     responses:
+ *       200:
+ *         description: Member removed successfully
+ *       400:
+ *         description: Invalid member removal
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only owners/admins can remove members
+ *       404:
+ *         description: Server or member not found
+ */
+router.delete("/:serverId/members/:memberId", protect, removeMember);
+
+/**
+ * @swagger
+ * /api/server-members/{serverId}/members/{memberId}/role:
+ *   patch:
+ *     summary: Promote or demote a server member
+ *     tags: [Server Members]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: serverId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Server ID
+ *       - in: path
+ *         name: memberId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Server member ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - role
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [admin, member]
+ *                 example: admin
+ *     responses:
+ *       200:
+ *         description: Member role updated successfully
+ *       400:
+ *         description: Invalid role change
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only the owner can change roles
+ *       404:
+ *         description: Server or member not found
+ */
+router.patch("/:serverId/members/:memberId/role", protect, updateMemberRole);
 
 module.exports = router;

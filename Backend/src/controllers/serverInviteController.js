@@ -13,6 +13,7 @@ const {
   isUserMemberOfServer,
   addServerMember
 } = require("../models/serverMemberModel");
+const { canManageServerContent } = require("../models/permissionModel");
 
 const INVITE_DURATION_MINUTES = 10;
 
@@ -33,11 +34,16 @@ const createInvite = async (req, res, next) => {
     const { serverId } = req.params;
     const userId = req.user.user_id;
 
-    const isMember = await isUserMemberOfServer(serverId, userId);
+    const permission = await canManageServerContent(serverId, userId);
 
-    if (!isMember) {
+    if (!permission.serverExists) {
+      res.status(404);
+      throw new Error("Server not found.");
+    }
+
+    if (!permission.allowed) {
       res.status(403);
-      throw new Error("Access denied. You are not a member of this server.");
+      throw new Error("Only server owners and admins can create invites.");
     }
 
     const expiresAt = new Date(
@@ -66,11 +72,16 @@ const getServerInvites = async (req, res, next) => {
     const { serverId } = req.params;
     const userId = req.user.user_id;
 
-    const isMember = await isUserMemberOfServer(serverId, userId);
+    const permission = await canManageServerContent(serverId, userId);
 
-    if (!isMember) {
+    if (!permission.serverExists) {
+      res.status(404);
+      throw new Error("Server not found.");
+    }
+
+    if (!permission.allowed) {
       res.status(403);
-      throw new Error("Access denied. You are not a member of this server.");
+      throw new Error("Only server owners and admins can view invites.");
     }
 
     await deactivateExpiredInvitesByServerId(serverId);

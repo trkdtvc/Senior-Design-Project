@@ -30,6 +30,42 @@ const getRolesByMemberId = async (memberId) => {
   return rows;
 };
 
+const getRoleServerByRoleId = async (roleId) => {
+  const [rows] = await pool.execute(
+    `SELECT role_id, server_id, role_name
+     FROM roles
+     WHERE role_id = ?
+     LIMIT 1`,
+    [roleId]
+  );
+
+  return rows[0] || null;
+};
+
+const getMemberServerByMemberId = async (memberId) => {
+  const [rows] = await pool.execute(
+    `SELECT member_id, server_id, user_id
+     FROM server_members
+     WHERE member_id = ?
+     LIMIT 1`,
+    [memberId]
+  );
+
+  return rows[0] || null;
+};
+
+const isUserMemberOfServer = async (serverId, userId) => {
+  const [rows] = await pool.execute(
+    `SELECT member_id
+     FROM server_members
+     WHERE server_id = ? AND user_id = ?
+     LIMIT 1`,
+    [serverId, userId]
+  );
+
+  return rows.length > 0;
+};
+
 const isUserMemberOfRoleServer = async (roleId, userId) => {
   const [rows] = await pool.execute(
     `SELECT sm.member_id
@@ -57,6 +93,9 @@ const doesMemberBelongToRoleServer = async (memberId, roleId) => {
 module.exports = {
   assignRoleToMember,
   getRolesByMemberId,
+  getRoleServerByRoleId,
+  getMemberServerByMemberId,
+  isUserMemberOfServer,
   isUserMemberOfRoleServer,
   doesMemberBelongToRoleServer
 };

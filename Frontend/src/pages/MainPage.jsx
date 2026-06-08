@@ -21,7 +21,12 @@ import {
   getUnreadChannelCounts,
   getUnreadMentionCounts
 } from "../services/messageService";
-import { getServerMembers, leaveServer } from "../services/serverMemberService";
+import {
+  getServerMembers,
+  leaveServer,
+  removeServerMember,
+  updateServerMemberRole
+} from "../services/serverMemberService";
 import {
   getDirectConversations,
   getOrCreateDirectConversation,
@@ -194,6 +199,30 @@ const getMemberPresenceStatus = (member) =>
 
 const isOwner = (member) =>
   member?.is_owner === 1 || member?.is_owner === true || false;
+
+const getMemberServerRole = (member) => {
+  if (isOwner(member)) {
+    return "owner";
+  }
+
+  return String(member?.server_role || member?.serverRole || "member")
+    .trim()
+    .toLowerCase();
+};
+
+const formatMemberRole = (member) => {
+  const role = getMemberServerRole(member);
+
+  if (role === "owner") {
+    return "Owner";
+  }
+
+  if (role === "admin") {
+    return "Admin";
+  }
+
+  return "Member";
+};
 
 const getFriendId = (friend) =>
   friend?.user_id || friend?.id || friend?.friendId || null;
@@ -834,6 +863,9 @@ const MainPage = () => {
   const [serverError, setServerError] = useState("");
   const [channelError, setChannelError] = useState("");
   const [membersError, setMembersError] = useState("");
+  const [serverMemberActionError, setServerMemberActionError] = useState("");
+  const [removingServerMemberId, setRemovingServerMemberId] = useState(null);
+  const [updatingMemberRoleId, setUpdatingMemberRoleId] = useState(null);
   const [createServerError, setCreateServerError] = useState("");
   const [createChannelError, setCreateChannelError] = useState("");
   const [deleteChannelError, setDeleteChannelError] = useState("");
@@ -1010,18 +1042,30 @@ const MainPage = () => {
     [activeServerId, mentionChannelCounts, unreadChannelCounts]
   );
 
-  const currentUserIsOwner = useMemo(
+  const currentUserMember = useMemo(
     () =>
-      (activeServer && currentUserId
-        ? String(getServerOwnerId(activeServer)) === String(currentUserId)
-        : false) ||
-      members.some(
-        (member) =>
-          String(getMemberUserId(member)) === String(currentUserId) &&
-          isOwner(member)
-      ),
-    [activeServer, currentUserId, members]
+      members.find(
+        (member) => String(getMemberUserId(member)) === String(currentUserId)
+      ) || null,
+    [currentUserId, members]
   );
+
+  const currentUserServerRole = useMemo(() => {
+    if (
+      activeServer &&
+      currentUserId &&
+      String(getServerOwnerId(activeServer)) === String(currentUserId)
+    ) {
+      return "owner";
+    }
+
+    return currentUserMember ? getMemberServerRole(currentUserMember) : "member";
+  }, [activeServer, currentUserId, currentUserMember]);
+
+  const currentUserIsOwner = currentUserServerRole === "owner";
+  const currentUserCanManageServer =
+    currentUserServerRole === "owner" || currentUserServerRole === "admin";
+  const currentUserCanManageRoles = currentUserServerRole === "owner";
 
   const highlightedMentionMessageIds = useMemo(() => {
     if (
@@ -3060,6 +3104,88 @@ const MainPage = () => {
     }
   };
 
+  const handleRemoveServerMember = async (member) => {
+    const token = getAuthToken();
+    const memberId = getMemberId(member);
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!activeServerId || !memberId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove ${getMemberName(member)} from this server?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setRemovingServerMemberId(memberId);
+      setServerMemberActionError("");
+
+      await removeServerMember(activeServerId, memberId, token);
+
+      setMembers((prevMembers) =>
+        prevMembers.filter(
+          (existingMember) => String(getMemberId(existingMember)) !== String(memberId)
+        )
+      );
+    } catch (error) {
+      setServerMemberActionError(error.message || "Failed to remove member.");
+    } finally {
+      setRemovingServerMemberId(null);
+    }
+  };
+
+  const handleUpdateServerMemberRole = async (member, role) => {
+    const token = getAuthToken();
+    const memberId = getMemberId(member);
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!activeServerId || !memberId || !role) {
+      return;
+    }
+
+    try {
+      setUpdatingMemberRoleId(memberId);
+      setServerMemberActionError("");
+
+      const response = await updateServerMemberRole(
+        activeServerId,
+        memberId,
+        role,
+        token
+      );
+      const updatedMember = response?.member;
+
+      if (updatedMember) {
+        setMembers((prevMembers) =>
+          prevMembers.map((existingMember) =>
+            String(getMemberId(existingMember)) === String(memberId)
+              ? { ...existingMember, ...updatedMember }
+              : existingMember
+          )
+        );
+      } else {
+        await loadServerMembers(token, activeServerId);
+      }
+    } catch (error) {
+      setServerMemberActionError(error.message || "Failed to update member role.");
+    } finally {
+      setUpdatingMemberRoleId(null);
+    }
+  };
+
   const handleCreateServer = async (e) => {
     e.preventDefault();
 
@@ -3837,6 +3963,78 @@ const MainPage = () => {
     }
   };
 
+  const renderServerMember = (member) => {
+    const memberId = getMemberId(member);
+    const memberRole = getMemberServerRole(member);
+    const memberIsCurrentUser =
+      currentUserId && String(getMemberUserId(member)) === String(currentUserId);
+    const canRemoveMember =
+      currentUserCanManageServer &&
+      !memberIsCurrentUser &&
+      memberRole !== "owner" &&
+      !(currentUserServerRole === "admin" && memberRole !== "member");
+    const canChangeMemberRole =
+      currentUserCanManageRoles && !memberIsCurrentUser && memberRole !== "owner";
+    const nextRole = memberRole === "admin" ? "member" : "admin";
+    const isRemovingMember = String(removingServerMemberId) === String(memberId);
+    const isUpdatingRole = String(updatingMemberRoleId) === String(memberId);
+
+    return (
+      <div key={memberId} className="server-member-item discord-member-item">
+        <div className="discord-member-row-top">
+          <div className="discord-profile-avatar member-avatar">
+            {getInitial(getMemberName(member))}
+            <span
+              className={`discord-status-dot discord-profile-status ${getPresenceColorClass(
+                getMemberPresenceStatus(member)
+              )}`}
+            />
+          </div>
+
+          <div className="discord-member-text">
+            <div className="server-member-name">
+              {getMemberName(member)}
+              <span className={`discord-member-role-badge discord-member-role-${memberRole}`}>
+                {formatMemberRole(member)}
+              </span>
+            </div>
+            <div className="server-member-email">{getMemberEmail(member)}</div>
+          </div>
+        </div>
+
+        {(canChangeMemberRole || canRemoveMember) ? (
+          <div className="discord-member-actions">
+            {canChangeMemberRole ? (
+              <button
+                type="button"
+                className="auth-button compact-button discord-member-action-button"
+                onClick={() => handleUpdateServerMemberRole(member, nextRole)}
+                disabled={isUpdatingRole}
+              >
+                {isUpdatingRole
+                  ? "Updating..."
+                  : memberRole === "admin"
+                    ? "Make member"
+                    : "Make admin"}
+              </button>
+            ) : null}
+
+            {canRemoveMember ? (
+              <button
+                type="button"
+                className="auth-button auth-button-danger compact-button discord-member-action-button"
+                onClick={() => handleRemoveServerMember(member)}
+                disabled={isRemovingMember}
+              >
+                {isRemovingMember ? "Removing..." : "Remove"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="auth-page">
@@ -4209,7 +4407,7 @@ const MainPage = () => {
                                 ) : null}
                               </button>
 
-                              {currentUserIsOwner &&
+                              {currentUserCanManageServer &&
                                 !isGeneralChannel &&
                                 (String(hoveredChannelId) === String(channelId) ||
                                   String(openChannelMenuId) === String(channelId)) ? (
@@ -4252,7 +4450,7 @@ const MainPage = () => {
                     )}
                   </section>
 
-                  {currentUserIsOwner ? (
+                  {currentUserCanManageServer ? (
                     <section className="discord-section-block discord-utility-section">
                       <div className="discord-section-heading">Create Channel</div>
 
@@ -4286,8 +4484,9 @@ const MainPage = () => {
                     </section>
                   ) : null}
 
-                  <section className="discord-section-block discord-utility-section">
-                    <div className="discord-section-heading">Create Invite</div>
+                  {currentUserCanManageServer ? (
+                    <section className="discord-section-block discord-utility-section">
+                      <div className="discord-section-heading">Create Invite</div>
 
                     {inviteError && (
                       <p className="auth-error server-inline-error">{inviteError}</p>
@@ -4325,7 +4524,8 @@ const MainPage = () => {
 
 
 
-                  </section>
+                    </section>
+                  ) : null}
                 </>
               )}
             </div>
@@ -4925,7 +5125,7 @@ const MainPage = () => {
                                   </button>
                                 ) : null}
 
-                                {isOwnMessage ? (
+                                {isOwnMessage || (!isDmView && currentUserCanManageServer) ? (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -5360,6 +5560,12 @@ const MainPage = () => {
                 <p className="auth-error server-inline-error">{membersError}</p>
               )}
 
+              {serverMemberActionError && (
+                <p className="auth-error server-inline-error">
+                  {serverMemberActionError}
+                </p>
+              )}
+
               <div className="server-members-list discord-member-groups">
                 <div className="discord-members-group">
                   <div className="discord-members-group-title">
@@ -5370,33 +5576,7 @@ const MainPage = () => {
                     <p className="server-members-empty">No members online.</p>
                   ) : (
                     <div className="server-members-list discord-member-list">
-                      {onlineMembers.map((member) => (
-                        <div
-                          key={getMemberId(member)}
-                          className="server-member-item discord-member-item"
-                        >
-                          <div className="discord-member-row-top">
-                            <div className="discord-profile-avatar member-avatar">
-                              {getInitial(getMemberName(member))}
-                              <span
-                                className={`discord-status-dot discord-profile-status ${getPresenceColorClass(
-                                  getMemberPresenceStatus(member)
-                                )}`}
-                              />
-                            </div>
-
-                            <div className="discord-member-text">
-                              <div className="server-member-name">
-                                {getMemberName(member)}
-                                {isOwner(member) ? " (Owner)" : ""}
-                              </div>
-                              <div className="server-member-email">
-                                {getMemberEmail(member)}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                      {onlineMembers.map(renderServerMember)}
                     </div>
                   )}
                 </div>
@@ -5410,33 +5590,7 @@ const MainPage = () => {
                     <p className="server-members-empty">No members offline.</p>
                   ) : (
                     <div className="server-members-list discord-member-list">
-                      {offlineMembers.map((member) => (
-                        <div
-                          key={getMemberId(member)}
-                          className="server-member-item discord-member-item"
-                        >
-                          <div className="discord-member-row-top">
-                            <div className="discord-profile-avatar member-avatar">
-                              {getInitial(getMemberName(member))}
-                              <span
-                                className={`discord-status-dot discord-profile-status ${getPresenceColorClass(
-                                  getMemberPresenceStatus(member)
-                                )}`}
-                              />
-                            </div>
-
-                            <div className="discord-member-text">
-                              <div className="server-member-name">
-                                {getMemberName(member)}
-                                {isOwner(member) ? " (Owner)" : ""}
-                              </div>
-                              <div className="server-member-email">
-                                {getMemberEmail(member)}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                      {offlineMembers.map(renderServerMember)}
                     </div>
                   )}
                 </div>

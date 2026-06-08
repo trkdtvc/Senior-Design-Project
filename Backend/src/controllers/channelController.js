@@ -1,4 +1,5 @@
 const channelModel = require("../models/channelModel");
+const { canManageServerContent } = require("../models/permissionModel");
 
 const createChannel = async (req, res, next) => {
   try {
@@ -11,11 +12,16 @@ const createChannel = async (req, res, next) => {
       throw new Error("Server ID and channel name are required");
     }
 
-    const isMember = await channelModel.isUserMemberOfServer(serverId, userId);
+    const permission = await canManageServerContent(serverId, userId);
 
-    if (!isMember) {
+    if (!permission.serverExists) {
+      res.status(404);
+      throw new Error("Server not found");
+    }
+
+    if (!permission.allowed) {
       res.status(403);
-      throw new Error("You are not a member of this server");
+      throw new Error("Only server owners and admins can create channels");
     }
 
     const result = await channelModel.createChannel(serverId, channelName);
@@ -70,14 +76,11 @@ const deleteChannel = async (req, res, next) => {
       throw new Error("Channel not found");
     }
 
-    const isMember = await channelModel.isUserMemberOfServer(
-      channel.server_id,
-      userId
-    );
+    const permission = await canManageServerContent(channel.server_id, userId);
 
-    if (!isMember) {
+    if (!permission.allowed) {
       res.status(403);
-      throw new Error("You are not a member of this server");
+      throw new Error("Only server owners and admins can delete channels");
     }
 
     const serverChannels = await channelModel.getChannelsByServerId(

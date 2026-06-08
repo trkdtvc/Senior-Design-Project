@@ -1,4 +1,5 @@
 const roleModel = require("../models/roleModel");
+const { canManageServerRoles } = require("../models/permissionModel");
 
 const createRole = async (req, res, next) => {
   try {
@@ -10,11 +11,16 @@ const createRole = async (req, res, next) => {
       throw new Error("Server ID and role name are required");
     }
 
-    const isMember = await roleModel.isUserMemberOfServer(serverId, req.user.user_id);
+    const permission = await canManageServerRoles(serverId, req.user.user_id);
 
-    if (!isMember) {
+    if (!permission.serverExists) {
+      res.status(404);
+      throw new Error("Server not found");
+    }
+
+    if (!permission.allowed) {
       res.status(403);
-      throw new Error("You are not a member of this server");
+      throw new Error("Only the server owner can create roles");
     }
 
     const role = await roleModel.createRole(serverId, roleName);
