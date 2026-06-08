@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getMe } from "../services/authService";
+import { getMe, updateProfile } from "../services/authService";
 import {
   getUserServers,
   createServer,
@@ -794,6 +794,14 @@ const MainPage = () => {
   const directMessagesRef = useRef([]);
 
   const [user, setUser] = useState(null);
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [profileFormData, setProfileFormData] = useState({
+    username: "",
+    email: ""
+  });
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileSuccess, setProfileSuccess] = useState("");
   const [removeFriendError, setRemoveFriendError] = useState("");
   const [removingFriendId, setRemovingFriendId] = useState(null);
   const [hoveredChannelId, setHoveredChannelId] = useState(null);
@@ -1260,6 +1268,117 @@ const MainPage = () => {
   const showDmHomeView = isDmView && !activeConversationId;
   const showComposer = !isDmView || !!activeConversationId;
 
+  const applyUserProfileUpdate = useCallback((updatedUser) => {
+    if (!updatedUser?.user_id) {
+      return;
+    }
+
+    const updatedUserId = String(updatedUser.user_id);
+
+    setUser((prevUser) => {
+      if (!prevUser || String(prevUser.user_id || prevUser.id) !== updatedUserId) {
+        return prevUser;
+      }
+
+      return {
+        ...prevUser,
+        ...updatedUser
+      };
+    });
+
+    setMembers((prevMembers) =>
+      prevMembers.map((member) => {
+        if (String(getMemberUserId(member)) !== updatedUserId) {
+          return member;
+        }
+
+        return {
+          ...member,
+          username: updatedUser.username,
+          email: updatedUser.email
+        };
+      })
+    );
+
+    setFriends((prevFriends) =>
+      prevFriends.map((friend) => {
+        if (String(getFriendId(friend)) !== updatedUserId) {
+          return friend;
+        }
+
+        return {
+          ...friend,
+          username: updatedUser.username,
+          email: updatedUser.email
+        };
+      })
+    );
+
+    setDirectConversations((prevConversations) =>
+      prevConversations.map((conversation) => {
+        if (String(getConversationOtherUserId(conversation)) !== updatedUserId) {
+          return conversation;
+        }
+
+        return {
+          ...conversation,
+          other_username: updatedUser.username,
+          other_email: updatedUser.email,
+          other_user: conversation?.other_user
+            ? {
+              ...conversation.other_user,
+              username: updatedUser.username,
+              email: updatedUser.email
+            }
+            : conversation?.other_user
+        };
+      })
+    );
+
+    setChannelMessages((prevMessages) =>
+      prevMessages.map((message) => {
+        if (String(getMessageAuthorId(message)) !== updatedUserId) {
+          return message;
+        }
+
+        return {
+          ...message,
+          username: updatedUser.username,
+          email: updatedUser.email,
+          user: message?.user
+            ? {
+              ...message.user,
+              username: updatedUser.username,
+              email: updatedUser.email
+            }
+            : message?.user
+        };
+      })
+    );
+
+    setDirectMessages((prevMessages) =>
+      prevMessages.map((message) => {
+        if (String(getDirectMessageSenderId(message)) !== updatedUserId) {
+          return message;
+        }
+
+        return {
+          ...message,
+          sender_username: updatedUser.username,
+          sender_email: updatedUser.email,
+          username: updatedUser.username,
+          sender: message?.sender
+            ? {
+              ...message.sender,
+              username: updatedUser.username,
+              email: updatedUser.email
+            }
+            : message?.sender
+        };
+      })
+    );
+  }, []);
+
   const resetMessageInputHeight = () => {
     if (!messageInputRef.current) {
       return;
@@ -1610,7 +1729,8 @@ const MainPage = () => {
   }, [
     activeConversationId,
     clearDirectUnread,
-    persistDirectConversationReadState
+    persistDirectConversationReadState,
+    applyUserProfileUpdate
   ]);
 
   useEffect(() => {
@@ -1988,6 +2108,10 @@ const MainPage = () => {
       );
     };
 
+    const handleProfileUpdated = (updatedUser) => {
+      applyUserProfileUpdate(updatedUser);
+    };
+
     const handleNewMessage = (incomingMessage) => {
       if (
         !incomingMessage ||
@@ -2311,6 +2435,7 @@ const MainPage = () => {
     };
 
     socket.on("presence_update", handlePresenceUpdate);
+    socket.on("user_profile_updated", handleProfileUpdated);
     socket.on("new_message", handleNewMessage);
     socket.on("message_updated", handleMessageUpdated);
     socket.on("message_deleted", handleMessageDeleted);
@@ -2323,6 +2448,7 @@ const MainPage = () => {
 
     return () => {
       socket.off("presence_update", handlePresenceUpdate);
+      socket.off("user_profile_updated", handleProfileUpdated);
       socket.off("new_message", handleNewMessage);
       socket.off("message_updated", handleMessageUpdated);
       socket.off("message_deleted", handleMessageDeleted);
@@ -2342,7 +2468,8 @@ const MainPage = () => {
     fetchFriendRequests,
     currentUserId,
     persistChannelReadState,
-    persistDirectConversationReadState
+    persistDirectConversationReadState,
+    applyUserProfileUpdate
   ]);
 
   useEffect(() => {
@@ -2791,6 +2918,84 @@ const MainPage = () => {
 
     if (container.scrollTop < 120) {
       loadOlderMessages();
+    }
+  };
+
+  const handleOpenEditProfile = () => {
+    setProfileFormData({
+      username: user?.username || "",
+      email: user?.email || ""
+    });
+    setProfileError("");
+    setProfileSuccess("");
+    setIsEditProfileModalOpen(true);
+  };
+
+  const handleCloseEditProfile = () => {
+    if (isUpdatingProfile) {
+      return;
+    }
+
+    setIsEditProfileModalOpen(false);
+    setProfileError("");
+  };
+
+  const handleProfileFormChange = (e) => {
+    const { name, value } = e.target;
+
+    setProfileFormData((prevData) => ({
+      ...prevData,
+      [name]: value
+    }));
+
+    setProfileError("");
+    setProfileSuccess("");
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+
+    const token = getAuthToken();
+    const username = profileFormData.username.trim();
+    const email = profileFormData.email.trim();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!username || !email) {
+      setProfileError("Username and email are required");
+      return;
+    }
+
+    try {
+      setIsUpdatingProfile(true);
+      setProfileError("");
+      setProfileSuccess("");
+
+      const data = await updateProfile(token, { username, email });
+      const updatedUser = data?.user || data;
+
+      if (data?.token) {
+        localStorage.setItem("token", data.token);
+
+        if (socketRef.current) {
+          socketRef.current.auth = { token: data.token };
+
+          if (socketRef.current.connected) {
+            socketRef.current.disconnect().connect();
+          }
+        }
+      }
+
+      applyUserProfileUpdate(updatedUser);
+      setProfileSuccess(data?.message || "Profile updated successfully");
+      setIsEditProfileModalOpen(false);
+    } catch (error) {
+      setProfileError(error.message || "Failed to update profile.");
+    } finally {
+      setIsUpdatingProfile(false);
     }
   };
 
@@ -4553,6 +4758,15 @@ const MainPage = () => {
                 <button
                   type="button"
                   className="discord-account-action"
+                  onClick={handleOpenEditProfile}
+                  title="Edit profile"
+                >
+                  Edit profile
+                </button>
+
+                <button
+                  type="button"
+                  className="discord-account-action"
                   onClick={handleLogout}
                   title="Log out"
                 >
@@ -5547,6 +5761,20 @@ const MainPage = () => {
                   <div className="discord-profile-meta">
                     Direct conversations: {directConversations.length}
                   </div>
+
+                  {profileSuccess ? (
+                    <p className="auth-success discord-profile-action-success">
+                      {profileSuccess}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="auth-button discord-profile-action-button"
+                    onClick={handleOpenEditProfile}
+                  >
+                    Edit profile
+                  </button>
                 </div>
               )}
             </>
@@ -5622,6 +5850,78 @@ const MainPage = () => {
           )}
         </aside>
       </div>
+
+      {isEditProfileModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={handleCloseEditProfile}
+        >
+          <div
+            className="discord-create-server-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 className="discord-modal-title">Edit Profile</h2>
+              <p className="discord-modal-subtitle">
+                Update the username and email shown across your account.
+              </p>
+            </div>
+
+            {profileError ? (
+              <p className="auth-error server-inline-error">{profileError}</p>
+            ) : null}
+
+            <form onSubmit={handleUpdateProfile} className="discord-form-stack">
+              <label className="auth-label" htmlFor="profile_username">
+                Username
+              </label>
+              <input
+                id="profile_username"
+                name="username"
+                type="text"
+                className="auth-input compact-input"
+                value={profileFormData.username}
+                onChange={handleProfileFormChange}
+                placeholder="Username"
+                maxLength="50"
+              />
+
+              <label className="auth-label" htmlFor="profile_email">
+                Email
+              </label>
+              <input
+                id="profile_email"
+                name="email"
+                type="email"
+                className="auth-input compact-input"
+                value={profileFormData.email}
+                onChange={handleProfileFormChange}
+                placeholder="Email address"
+                maxLength="100"
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={handleCloseEditProfile}
+                  disabled={isUpdatingProfile}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isUpdatingProfile}
+                >
+                  {isUpdatingProfile ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {isJoinServerModalOpen ? (
         <div

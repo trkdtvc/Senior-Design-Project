@@ -11,6 +11,7 @@ const {
   setPasswordResetToken,
   findUserByPasswordResetToken,
   updateUserPassword,
+  updateUserProfile,
   createEmailVerificationToken,
   findEmailVerificationTokenRecord,
   markEmailVerificationTokenAsUsed
@@ -34,6 +35,20 @@ const generateToken = (user) => {
 const getFrontendBaseUrl = () => {
   return process.env.FRONTEND_URL || "http://localhost:5173";
 };
+
+const isValidEmail = (email) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+const getSafeUserResponse = (user) => ({
+  user_id: user.user_id,
+  username: user.username,
+  email: user.email,
+  is_verified: user.is_verified,
+  status: user.status || "online",
+  is_online: Boolean(user.is_online),
+  last_seen_at: user.last_seen_at
+});
 
 const getPasswordChecks = (password) => ({
   minLength: password.length >= 8,
@@ -503,6 +518,83 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+const updateProfile = async (req, res, next) => {
+  try {
+    const { username, email } = req.body || {};
+    const normalizedUsername = username ? username.trim() : "";
+    const normalizedEmail = email ? email.trim().toLowerCase() : "";
+
+    if (!normalizedUsername || !normalizedEmail) {
+      res.status(400);
+      throw new Error("Username and email are required");
+    }
+
+    if (normalizedUsername.length < 3 || normalizedUsername.length > 50) {
+      res.status(400);
+      throw new Error("Username must be between 3 and 50 characters");
+    }
+
+    if (!/^[a-zA-Z0-9_.-]+$/.test(normalizedUsername)) {
+      res.status(400);
+      throw new Error("Username can only contain letters, numbers, underscores, dots, and dashes");
+    }
+
+    if (normalizedEmail.length > 100 || !isValidEmail(normalizedEmail)) {
+      res.status(400);
+      throw new Error("Enter a valid email address");
+    }
+
+    const existingUsername = await findUserByUsername(normalizedUsername);
+
+    if (
+      existingUsername &&
+      String(existingUsername.user_id) !== String(req.user.user_id)
+    ) {
+      res.status(400);
+      throw new Error("Username already exists");
+    }
+
+    const existingEmail = await findUserByEmail(normalizedEmail);
+
+    if (
+      existingEmail &&
+      String(existingEmail.user_id) !== String(req.user.user_id)
+    ) {
+      res.status(400);
+      throw new Error("Email already exists");
+    }
+
+    await updateUserProfile(
+      req.user.user_id,
+      normalizedUsername,
+      normalizedEmail
+    );
+
+    const updatedUser = await findUserById(req.user.user_id);
+
+    if (!updatedUser) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const token = generateToken(updatedUser);
+    const safeUser = getSafeUserResponse(updatedUser);
+    const io = req.app.get("io");
+
+    if (io) {
+      io.emit("user_profile_updated", safeUser);
+    }
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      token,
+      user: safeUser
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getMe = async (req, res, next) => {
   try {
     const user = await findUserById(req.user.user_id);
@@ -512,15 +604,7 @@ const getMe = async (req, res, next) => {
       throw new Error("User not found");
     }
 
-    return res.status(200).json({
-      user_id: user.user_id,
-      username: user.username,
-      email: user.email,
-      is_verified: user.is_verified,
-      status: user.status || "online",
-      is_online: Boolean(user.is_online),
-      last_seen_at: user.last_seen_at
-    });
+    return res.status(200).json(getSafeUserResponse(user));
   } catch (error) {
     next(error);
   }
@@ -530,6 +614,7 @@ module.exports = {
   registerUser,
   loginUser,
   getMe,
+  updateProfile,
   verifyEmail,
   resendVerificationEmail,
   forgotPassword: requestPasswordReset,

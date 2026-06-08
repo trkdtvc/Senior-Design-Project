@@ -102,6 +102,19 @@ const updateUserPassword = async (userId, passwordHash) => {
   return result;
 };
 
+
+const updateUserProfile = async (userId, username, email) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET username = ?,
+         email = ?
+     WHERE user_id = ?`,
+    [username, email, userId]
+  );
+
+  return result;
+};
+
 const updateUserPresenceStatus = async (userId, status) => {
   const [result] = await pool.execute(
     `UPDATE users
@@ -176,6 +189,7 @@ module.exports = {
   setPasswordResetToken,
   findUserByPasswordResetToken,
   updateUserPassword,
+  updateUserProfile,
   updateUserPresenceStatus,
   setUserOnlineState,
   createEmailVerificationToken,

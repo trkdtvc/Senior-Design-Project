@@ -62,3 +62,13 @@ export const getMe = async (token) =>
   apiRequest("/auth/me", {
     token
   });
+export const updateProfile = async (token, profileData) =>
+  apiRequest("/auth/profile", {
+    method: "PATCH",
+    token,
+    body: {
+      username: profileData.username || "",
+      email: normalizeEmail(profileData.email || "")
+    }
+  });
+

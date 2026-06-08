@@ -3,6 +3,7 @@ const {
   registerUser,
   loginUser,
   getMe,
+  updateProfile,
   verifyEmail,
   resendVerificationEmail,
   forgotPassword,
@@ -112,6 +113,41 @@ router.post("/login", loginUser);
  *         description: Not authorized, token failed or missing
  */
 router.get("/me", protect, getMe);
+
+/**
+ * @swagger
+ * /api/auth/profile:
+ *   patch:
+ *     summary: Update the current user's profile
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: tarik.updated
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: tarik.updated@example.com
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *       400:
+ *         description: Invalid profile data or duplicate username/email
+ *       401:
+ *         description: Not authorized, token failed or missing
+ */
+router.patch("/profile", protect, updateProfile);
 
 /**
  * @swagger
