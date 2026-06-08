@@ -176,17 +176,90 @@ const getDirectAttachmentsByMessageIds = async (messageIds) => {
   return rows;
 };
 
-const attachFilesToDirectMessages = async (messages) => {
-  const messageIds = messages.map((message) => message.direct_message_id);
-  const attachments = await getDirectAttachmentsByMessageIds(messageIds);
+const getDirectReactionsByMessageIds = async (
+  directMessageIds,
+  currentUserId = null
+) => {
+  if (!directMessageIds.length) {
+    return [];
+  }
 
-  return messages.map((message) => ({
-    ...message,
-    attachments: attachments.filter(
-      (attachment) =>
-        String(attachment.direct_message_id) === String(message.direct_message_id)
-    )
+  const placeholders = directMessageIds.map(() => "?").join(",");
+
+  const [rows] = await pool.execute(
+    `SELECT
+        direct_message_id,
+        emoji,
+        COUNT(*) AS reaction_count,
+        MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me,
+        MIN(created_at) AS first_reacted_at
+     FROM direct_message_reactions
+     WHERE direct_message_id IN (${placeholders})
+     GROUP BY direct_message_id, emoji
+     ORDER BY first_reacted_at ASC`,
+    [currentUserId || 0, ...directMessageIds]
+  );
+
+  return rows.map((row) => ({
+    direct_message_id: Number(row.direct_message_id),
+    emoji: row.emoji,
+    count: Number(row.reaction_count || 0),
+    reacted_by_me: Number(row.reacted_by_me || 0) === 1
   }));
+};
+
+const getDirectPinsByMessageIds = async (directMessageIds) => {
+  if (!directMessageIds.length) {
+    return [];
+  }
+
+  const placeholders = directMessageIds.map(() => "?").join(",");
+
+  const [rows] = await pool.execute(
+    `SELECT
+        dmp.direct_message_id,
+        dmp.pinned_by,
+        u.username AS pinned_by_username,
+        dmp.pinned_at
+     FROM direct_message_pins dmp
+     JOIN users u ON dmp.pinned_by = u.user_id
+     WHERE dmp.direct_message_id IN (${placeholders})`,
+    directMessageIds
+  );
+
+  return rows;
+};
+
+const attachDirectMessageMetadata = async (messages, currentUserId = null) => {
+  const messageIds = messages.map((message) => message.direct_message_id);
+  const [attachments, reactions, pins] = await Promise.all([
+    getDirectAttachmentsByMessageIds(messageIds),
+    getDirectReactionsByMessageIds(messageIds, currentUserId),
+    getDirectPinsByMessageIds(messageIds)
+  ]);
+
+  return messages.map((message) => {
+    const messageId = String(message.direct_message_id);
+    const pin = pins.find(
+      (pinRow) => String(pinRow.direct_message_id) === messageId
+    );
+
+    return {
+      ...message,
+      pinned: Boolean(message.pinned_at || pin?.pinned_at),
+      pinned_by: message.pinned_by || pin?.pinned_by || null,
+      pinned_by_username:
+        message.pinned_by_username || pin?.pinned_by_username || null,
+      pinned_at: message.pinned_at || pin?.pinned_at || null,
+      attachments: attachments.filter(
+        (attachment) =>
+          String(attachment.direct_message_id) === messageId
+      ),
+      reactions: reactions.filter(
+        (reaction) => String(reaction.direct_message_id) === messageId
+      )
+    };
+  });
 };
 
 const directMessageSelect = `
@@ -201,11 +274,16 @@ const directMessageSelect = `
     rdm.sender_id AS reply_to_sender_id,
     ru.username AS reply_to_sender_username,
     dm.created_at,
-    dm.updated_at
+    dm.updated_at,
+    dmp.pinned_by,
+    pu.username AS pinned_by_username,
+    dmp.pinned_at
   FROM direct_messages dm
   JOIN users u ON dm.sender_id = u.user_id
   LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
   LEFT JOIN users ru ON rdm.sender_id = ru.user_id
+  LEFT JOIN direct_message_pins dmp ON dm.direct_message_id = dmp.direct_message_id
+  LEFT JOIN users pu ON dmp.pinned_by = pu.user_id
   LEFT JOIN direct_conversation_deletions dcd
     ON dcd.conversation_id = dm.conversation_id
    AND dcd.user_id = ?
@@ -370,7 +448,7 @@ const getMessagesByConversationId = async (conversationId, userId, options = {})
     rows = await getLatestDirectMessages(conversationId, userId, limit);
   }
 
-  const messages = await attachFilesToDirectMessages(rows);
+  const messages = await attachDirectMessageMetadata(rows, userId);
   const pagination = await getDirectPaginationMeta(conversationId, userId, messages);
 
   return {
@@ -398,12 +476,17 @@ const getDirectMessageById = async (directMessageId) => {
         dm.updated_at,
         dc.user_one_id,
         dc.user_two_id,
-        u.username AS sender_username
+        u.username AS sender_username,
+        dmp.pinned_by,
+        pu.username AS pinned_by_username,
+        dmp.pinned_at
       FROM direct_messages dm
       JOIN direct_conversations dc ON dm.conversation_id = dc.conversation_id
       JOIN users u ON dm.sender_id = u.user_id
       LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
       LEFT JOIN users ru ON rdm.sender_id = ru.user_id
+      LEFT JOIN direct_message_pins dmp ON dm.direct_message_id = dmp.direct_message_id
+      LEFT JOIN users pu ON dmp.pinned_by = pu.user_id
       WHERE dm.direct_message_id = ?
       LIMIT 1
     `,
@@ -525,6 +608,95 @@ const deleteDirectMessageById = async (directMessageId) => {
   );
 
   return result;
+};
+
+const getDirectMessageReactionsByMessageId = async (
+  directMessageId,
+  currentUserId = null
+) => {
+  const reactions = await getDirectReactionsByMessageIds(
+    [directMessageId],
+    currentUserId
+  );
+
+  return reactions.filter(
+    (reaction) => String(reaction.direct_message_id) === String(directMessageId)
+  );
+};
+
+const toggleDirectMessageReaction = async (directMessageId, userId, emoji) => {
+  const [existingRows] = await pool.execute(
+    `SELECT reaction_id
+     FROM direct_message_reactions
+     WHERE direct_message_id = ? AND user_id = ? AND emoji = ?
+     LIMIT 1`,
+    [directMessageId, userId, emoji]
+  );
+
+  if (existingRows.length) {
+    await pool.execute(
+      `DELETE FROM direct_message_reactions
+       WHERE reaction_id = ?`,
+      [existingRows[0].reaction_id]
+    );
+
+    return {
+      action: "removed",
+      reactions: await getDirectMessageReactionsByMessageId(
+        directMessageId,
+        userId
+      )
+    };
+  }
+
+  await pool.execute(
+    `INSERT INTO direct_message_reactions (direct_message_id, user_id, emoji)
+     VALUES (?, ?, ?)`,
+    [directMessageId, userId, emoji]
+  );
+
+  return {
+    action: "added",
+    reactions: await getDirectMessageReactionsByMessageId(directMessageId, userId)
+  };
+};
+
+const pinDirectMessageById = async (directMessageId, userId) => {
+  await pool.execute(
+    `INSERT INTO direct_message_pins (direct_message_id, pinned_by)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE
+       pinned_by = VALUES(pinned_by),
+       pinned_at = CURRENT_TIMESTAMP`,
+    [directMessageId, userId]
+  );
+
+  return getDirectMessageById(directMessageId);
+};
+
+const unpinDirectMessageById = async (directMessageId) => {
+  const [result] = await pool.execute(
+    `DELETE FROM direct_message_pins
+     WHERE direct_message_id = ?`,
+    [directMessageId]
+  );
+
+  return result;
+};
+
+const getPinnedDirectMessagesByConversationId = async (
+  conversationId,
+  userId
+) => {
+  const [rows] = await pool.execute(
+    `${directMessageSelect}
+     WHERE ${visibleDirectMessageWhere}
+       AND dmp.pinned_at IS NOT NULL
+     ORDER BY dmp.pinned_at DESC`,
+    [userId, conversationId]
+  );
+
+  return attachDirectMessageMetadata(rows, userId);
 };
 
 const hideDirectConversationForUser = async (conversationId, userId) => {
@@ -703,6 +875,10 @@ module.exports = {
   updateDirectMessageById,
   deleteDirectMessageAttachmentsByMessageId,
   deleteDirectMessageById,
+  toggleDirectMessageReaction,
+  pinDirectMessageById,
+  unpinDirectMessageById,
+  getPinnedDirectMessagesByConversationId,
   hideDirectConversationForUser,
   markDirectConversationAsRead,
   searchDirectMessagesByConversationId,

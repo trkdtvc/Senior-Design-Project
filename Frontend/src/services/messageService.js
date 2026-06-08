@@ -89,3 +89,28 @@ export const getUnreadMentionCounts = async (token) =>
   apiRequest("/messages/mention-counts", {
     token
   });
+
+
+export const toggleMessageReaction = async (token, messageId, emoji) =>
+  apiRequest(`/messages/${messageId}/reactions`, {
+    method: "POST",
+    token,
+    body: { emoji }
+  });
+
+export const pinMessage = async (token, messageId) =>
+  apiRequest(`/messages/${messageId}/pin`, {
+    method: "PATCH",
+    token
+  });
+
+export const unpinMessage = async (token, messageId) =>
+  apiRequest(`/messages/${messageId}/pin`, {
+    method: "DELETE",
+    token
+  });
+
+export const getPinnedChannelMessages = async (token, channelId) =>
+  apiRequest(`/messages/${channelId}/pins`, {
+    token
+  });

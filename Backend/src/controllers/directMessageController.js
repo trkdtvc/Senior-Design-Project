@@ -12,6 +12,10 @@ const {
   updateDirectMessageById,
   deleteDirectMessageAttachmentsByMessageId,
   deleteDirectMessageById,
+  toggleDirectMessageReaction,
+  pinDirectMessageById,
+  unpinDirectMessageById,
+  getPinnedDirectMessagesByConversationId,
   hideDirectConversationForUser,
   markDirectConversationAsRead,
   getUnreadDirectConversationCountsByUserId
@@ -44,6 +48,30 @@ const buildDirectReplyPreview = (message) => {
     content: message.reply_to_content || ""
   };
 };
+
+const normalizeEmoji = (emoji) => {
+  const safeEmoji = String(emoji || "").trim();
+
+  if (!safeEmoji || safeEmoji.length > 16) {
+    return "";
+  }
+
+  return safeEmoji;
+};
+
+const buildDirectMessageResponse = (message) => ({
+  ...message,
+  direct_message_id: Number(message.direct_message_id),
+  conversation_id: Number(message.conversation_id),
+  sender_id: Number(message.sender_id),
+  content: message.content,
+  reply_to: buildDirectReplyPreview(message),
+  reactions: Array.isArray(message.reactions) ? message.reactions : [],
+  pinned: Boolean(message.pinned || message.pinned_at),
+  pinned_by: message.pinned_by ? Number(message.pinned_by) : null,
+  pinned_by_username: message.pinned_by_username || null,
+  pinned_at: message.pinned_at || null
+});
 
 const areUsersFriends = async (userAId, userBId) => {
   const [rows] = await pool.execute(
@@ -184,10 +212,7 @@ const getDirectMessages = async (req, res, next) => {
       }
     );
 
-    const messagesWithReplies = messages.map((message) => ({
-      ...message,
-      reply_to: buildDirectReplyPreview(message)
-    }));
+    const messagesWithReplies = messages.map(buildDirectMessageResponse);
 
     res.status(200).json({
       message: "Direct messages fetched successfully",
@@ -274,6 +299,11 @@ const sendDirectMessageToConversation = async (req, res, next) => {
     }
 
     newMessage.reply_to = buildDirectReplyPreview(newMessage);
+    newMessage.reactions = [];
+    newMessage.pinned = false;
+    newMessage.pinned_by = null;
+    newMessage.pinned_by_username = null;
+    newMessage.pinned_at = null;
 
     const io = req.app.get("io");
     const otherUserId =
@@ -351,17 +381,7 @@ const updateDirectMessage = async (req, res, next) => {
         : Number(updatedDirectMessage.user_one_id);
 
     const editedDirectMessage = {
-      direct_message_id: Number(updatedDirectMessage.direct_message_id),
-      conversation_id: Number(updatedDirectMessage.conversation_id),
-      sender_id: Number(updatedDirectMessage.sender_id),
-      sender_username: updatedDirectMessage.sender_username,
-      content: updatedDirectMessage.content,
-      reply_to_direct_message_id: updatedDirectMessage.reply_to_direct_message_id
-        ? Number(updatedDirectMessage.reply_to_direct_message_id)
-        : null,
-      reply_to: buildDirectReplyPreview(updatedDirectMessage),
-      created_at: updatedDirectMessage.created_at,
-      updated_at: updatedDirectMessage.updated_at,
+      ...buildDirectMessageResponse(updatedDirectMessage),
       attachments: [],
       edited: true
     };
@@ -446,6 +466,200 @@ const deleteDirectMessage = async (req, res, next) => {
     res.status(200).json({
       message: "Direct message deleted successfully",
       data: deletedMessage
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const toggleDirectReaction = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { directMessageId } = req.params;
+    const emoji = normalizeEmoji(req.body.emoji);
+
+    if (!emoji) {
+      res.status(400);
+      throw new Error("A valid emoji is required");
+    }
+
+    const directMessage = await getDirectMessageById(directMessageId);
+
+    if (!directMessage) {
+      res.status(404);
+      throw new Error("Direct message not found");
+    }
+
+    const hasAccess = await isUserInConversation(
+      directMessage.conversation_id,
+      currentUserId
+    );
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    const result = await toggleDirectMessageReaction(
+      directMessageId,
+      currentUserId,
+      emoji
+    );
+
+    const otherUserId =
+      Number(directMessage.user_one_id) === Number(currentUserId)
+        ? Number(directMessage.user_two_id)
+        : Number(directMessage.user_one_id);
+
+    const payload = {
+      direct_message_id: Number(directMessage.direct_message_id),
+      conversation_id: Number(directMessage.conversation_id),
+      user_id: Number(currentUserId),
+      emoji,
+      action: result.action,
+      reactions: result.reactions
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`user_${currentUserId}`).emit("direct_message_reaction_updated", payload);
+      io.to(`user_${otherUserId}`).emit("direct_message_reaction_updated", payload);
+    }
+
+    res.status(200).json({
+      message: "Direct message reaction updated successfully",
+      data: payload
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const pinDirectMessage = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { directMessageId } = req.params;
+
+    const directMessage = await getDirectMessageById(directMessageId);
+
+    if (!directMessage) {
+      res.status(404);
+      throw new Error("Direct message not found");
+    }
+
+    const hasAccess = await isUserInConversation(
+      directMessage.conversation_id,
+      currentUserId
+    );
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    const pinnedMessage = await pinDirectMessageById(directMessageId, currentUserId);
+    const payload = buildDirectMessageResponse(pinnedMessage);
+    const otherUserId =
+      Number(directMessage.user_one_id) === Number(currentUserId)
+        ? Number(directMessage.user_two_id)
+        : Number(directMessage.user_one_id);
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`user_${currentUserId}`).emit("direct_message_pin_updated", payload);
+      io.to(`user_${otherUserId}`).emit("direct_message_pin_updated", payload);
+    }
+
+    res.status(200).json({
+      message: "Direct message pinned successfully",
+      data: payload
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const unpinDirectMessage = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { directMessageId } = req.params;
+
+    const directMessage = await getDirectMessageById(directMessageId);
+
+    if (!directMessage) {
+      res.status(404);
+      throw new Error("Direct message not found");
+    }
+
+    const hasAccess = await isUserInConversation(
+      directMessage.conversation_id,
+      currentUserId
+    );
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    await unpinDirectMessageById(directMessageId);
+
+    const payload = {
+      ...buildDirectMessageResponse(directMessage),
+      pinned: false,
+      pinned_by: null,
+      pinned_by_username: null,
+      pinned_at: null
+    };
+    const otherUserId =
+      Number(directMessage.user_one_id) === Number(currentUserId)
+        ? Number(directMessage.user_two_id)
+        : Number(directMessage.user_one_id);
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`user_${currentUserId}`).emit("direct_message_pin_updated", payload);
+      io.to(`user_${otherUserId}`).emit("direct_message_pin_updated", payload);
+    }
+
+    res.status(200).json({
+      message: "Direct message unpinned successfully",
+      data: payload
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getPinnedDirectMessages = async (req, res, next) => {
+  try {
+    const currentUserId = req.user.user_id;
+    const { conversationId } = req.params;
+
+    const conversation = await getConversationById(conversationId);
+
+    if (!conversation) {
+      res.status(404);
+      throw new Error("Direct conversation not found");
+    }
+
+    const hasAccess = await isUserInConversation(conversationId, currentUserId);
+
+    if (!hasAccess) {
+      res.status(403);
+      throw new Error("You are not a participant in this direct conversation");
+    }
+
+    const pinnedMessages = await getPinnedDirectMessagesByConversationId(
+      conversationId,
+      currentUserId
+    );
+
+    res.status(200).json({
+      message: "Pinned direct messages fetched successfully",
+      messages: pinnedMessages.map(buildDirectMessageResponse)
     });
   } catch (error) {
     next(error);
@@ -546,6 +760,10 @@ module.exports = {
   sendDirectMessageToConversation,
   updateDirectMessage,
   deleteDirectMessage,
+  toggleDirectReaction,
+  pinDirectMessage,
+  unpinDirectMessage,
+  getPinnedDirectMessages,
   deleteDirectConversationForMe,
   markDirectConversationRead,
   getUnreadDirectConversationCounts

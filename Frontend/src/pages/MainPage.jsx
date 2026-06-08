@@ -17,6 +17,10 @@ import {
   createMessage,
   updateMessage,
   deleteMessage,
+  toggleMessageReaction,
+  pinMessage,
+  unpinMessage,
+  getPinnedChannelMessages,
   markChannelAsRead,
   getUnreadChannelCounts,
   getUnreadMentionCounts
@@ -35,6 +39,10 @@ import {
   sendDirectMessage,
   updateDirectMessage,
   deleteDirectMessage,
+  toggleDirectMessageReaction,
+  pinDirectMessage,
+  unpinDirectMessage,
+  getPinnedDirectMessages,
   deleteDirectConversation,
   markDirectConversationAsRead,
   getUnreadDirectConversationCounts
@@ -59,6 +67,7 @@ import EmojiPicker, { Theme } from "emoji-picker-react";
 const FILE_BASE_URL = getFileBaseUrl();
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MESSAGE_PAGE_SIZE = 30;
+const QUICK_REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏"];
 const getAuthToken = () => localStorage.getItem("token");
 
 const ATTACHMENT_ACCEPT_TYPES = [
@@ -483,6 +492,50 @@ const getMessageAttachments = (message) => {
   return [];
 };
 
+const getMessageReactions = (message) => {
+  if (Array.isArray(message?.reactions)) {
+    return message.reactions;
+  }
+
+  return [];
+};
+
+const getReactionEmoji = (reaction) => reaction?.emoji || "";
+
+const getReactionCount = (reaction) => Number(reaction?.count || reaction?.reaction_count || 0);
+
+const userReactedToReaction = (reaction) =>
+  reaction?.reacted_by_me === true ||
+  reaction?.reactedByMe === true ||
+  Number(reaction?.reacted_by_me || 0) === 1;
+
+const messageIsPinned = (message) =>
+  Boolean(message?.pinned || message?.is_pinned || message?.pinned_at || message?.pinnedAt);
+
+const getMessagePinnedBy = (message) =>
+  message?.pinned_by_username || message?.pinnedByUsername || "someone";
+
+const getMessagePinnedAt = (message) =>
+  message?.pinned_at || message?.pinnedAt || null;
+
+const formatTypingUsers = (typingUsers) => {
+  const names = typingUsers.map((typingUser) => typingUser.username).filter(Boolean);
+
+  if (names.length === 0) {
+    return "";
+  }
+
+  if (names.length === 1) {
+    return `${names[0]} is typing...`;
+  }
+
+  if (names.length === 2) {
+    return `${names[0]} and ${names[1]} are typing...`;
+  }
+
+  return `${names[0]}, ${names[1]}, and ${names.length - 2} more are typing...`;
+};
+
 const getAttachmentUrl = (attachment) => {
   const fileUrl =
     attachment?.file_url ||
@@ -792,6 +845,8 @@ const MainPage = () => {
   const searchJumpPendingRef = useRef(null);
   const channelMessagesRef = useRef([]);
   const directMessagesRef = useRef([]);
+  const typingStopTimeoutRef = useRef(null);
+  const remoteTypingTimeoutsRef = useRef({});
 
   const [user, setUser] = useState(null);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
@@ -849,6 +904,12 @@ const MainPage = () => {
   const [savingEditedMessageKey, setSavingEditedMessageKey] = useState(null);
   const [selectedReplyMessage, setSelectedReplyMessage] = useState(null);
   const [openMessageMenuKey, setOpenMessageMenuKey] = useState(null);
+  const [channelTypingUsers, setChannelTypingUsers] = useState([]);
+  const [directTypingUsers, setDirectTypingUsers] = useState([]);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [isPinnedMessagesOpen, setIsPinnedMessagesOpen] = useState(false);
+  const [reactingMessageKey, setReactingMessageKey] = useState(null);
+  const [pinningMessageKey, setPinningMessageKey] = useState(null);
 
   const [activeServerId, setActiveServerId] = useState(null);
   const [activeChannelId, setActiveChannelId] = useState(null);
@@ -1119,6 +1180,10 @@ const MainPage = () => {
   ]);
 
   const displayedMessages = isDmView ? directMessages : channelMessages;
+  const activeTypingText = formatTypingUsers(
+    isDmView ? directTypingUsers : channelTypingUsers
+  );
+  const pinnedMessageCount = pinnedMessages.length;
 
   const activeMessageSearchLabel = isDmView
     ? "direct message"
@@ -1629,6 +1694,182 @@ const MainPage = () => {
     []
   );
 
+
+  const loadPinnedMessageList = useCallback(
+    async (token, options = {}) => {
+      const directView = options.isDirect ?? isDmView;
+      const channelId = options.channelId ?? activeChannelId;
+      const conversationId = options.conversationId ?? activeConversationId;
+
+      if (directView) {
+        if (!conversationId) {
+          setPinnedMessages([]);
+          return [];
+        }
+
+        const response = await getPinnedDirectMessages(token, conversationId);
+        const normalizedPinnedMessages = normalizeMessages(response);
+        setPinnedMessages(normalizedPinnedMessages);
+        return normalizedPinnedMessages;
+      }
+
+      if (!channelId) {
+        setPinnedMessages([]);
+        return [];
+      }
+
+      const response = await getPinnedChannelMessages(token, channelId);
+      const normalizedPinnedMessages = normalizeMessages(response);
+      setPinnedMessages(normalizedPinnedMessages);
+      return normalizedPinnedMessages;
+    },
+    [activeChannelId, activeConversationId, isDmView]
+  );
+
+  const updateMessageReactionsInState = useCallback((payload, directView) => {
+    const messageId = directView
+      ? payload?.direct_message_id || payload?.directMessageId || payload?.id
+      : payload?.message_id || payload?.messageId || payload?.id;
+
+    if (!messageId) {
+      return;
+    }
+
+    const reactions = Array.isArray(payload?.reactions) ? payload.reactions : [];
+
+    const updateMessages = (messages) =>
+      messages.map((message) => {
+        const currentMessageId = directView
+          ? getDirectMessageId(message)
+          : getMessageId(message);
+
+        if (String(currentMessageId) !== String(messageId)) {
+          return message;
+        }
+
+        return {
+          ...message,
+          reactions
+        };
+      });
+
+    if (directView) {
+      setDirectMessages(updateMessages);
+    } else {
+      setChannelMessages(updateMessages);
+    }
+
+    setPinnedMessages(updateMessages);
+  }, []);
+
+  const updatePinnedMessageInState = useCallback((message, directView) => {
+    const messageId = directView ? getDirectMessageId(message) : getMessageId(message);
+
+    if (!messageId) {
+      return;
+    }
+
+    const pinned = messageIsPinned(message);
+
+    const updateMessages = (messages) =>
+      messages.map((existingMessage) => {
+        const existingMessageId = directView
+          ? getDirectMessageId(existingMessage)
+          : getMessageId(existingMessage);
+
+        if (String(existingMessageId) !== String(messageId)) {
+          return existingMessage;
+        }
+
+        return {
+          ...existingMessage,
+          pinned,
+          pinned_by: message.pinned_by || null,
+          pinned_by_username: message.pinned_by_username || null,
+          pinned_at: message.pinned_at || null
+        };
+      });
+
+    if (directView) {
+      setDirectMessages(updateMessages);
+    } else {
+      setChannelMessages(updateMessages);
+    }
+
+    setPinnedMessages((prevPinnedMessages) => {
+      const withoutCurrentMessage = prevPinnedMessages.filter((pinnedMessage) => {
+        const pinnedMessageId = directView
+          ? getDirectMessageId(pinnedMessage)
+          : getMessageId(pinnedMessage);
+
+        return String(pinnedMessageId) !== String(messageId);
+      });
+
+      if (!pinned) {
+        return withoutCurrentMessage;
+      }
+
+      return [message, ...withoutCurrentMessage].sort((firstMessage, secondMessage) => {
+        const firstTime = new Date(getMessagePinnedAt(firstMessage) || 0).getTime();
+        const secondTime = new Date(getMessagePinnedAt(secondMessage) || 0).getTime();
+
+        return secondTime - firstTime;
+      });
+    });
+  }, []);
+
+  const emitTypingStatus = useCallback(
+    (isTyping) => {
+      const socket = socketRef.current;
+
+      if (!socket?.connected) {
+        return;
+      }
+
+      if (isDmView) {
+        if (!activeConversationId) {
+          return;
+        }
+
+        socket.emit(isTyping ? "direct_typing_start" : "direct_typing_stop", {
+          conversation_id: activeConversationId
+        });
+        return;
+      }
+
+      if (!activeChannelId) {
+        return;
+      }
+
+      socket.emit(isTyping ? "channel_typing_start" : "channel_typing_stop", {
+        channel_id: activeChannelId
+      });
+    },
+    [activeChannelId, activeConversationId, isDmView]
+  );
+
+  const stopTyping = useCallback(() => {
+    if (typingStopTimeoutRef.current) {
+      window.clearTimeout(typingStopTimeoutRef.current);
+      typingStopTimeoutRef.current = null;
+    }
+
+    emitTypingStatus(false);
+  }, [emitTypingStatus]);
+
+  const startTyping = useCallback(() => {
+    emitTypingStatus(true);
+
+    if (typingStopTimeoutRef.current) {
+      window.clearTimeout(typingStopTimeoutRef.current);
+    }
+
+    typingStopTimeoutRef.current = window.setTimeout(() => {
+      emitTypingStatus(false);
+      typingStopTimeoutRef.current = null;
+    }, 1800);
+  }, [emitTypingStatus]);
+
   const persistChannelReadState = useCallback(async (channelId) => {
     const token = getAuthToken();
 
@@ -1730,7 +1971,9 @@ const MainPage = () => {
     activeConversationId,
     clearDirectUnread,
     persistDirectConversationReadState,
-    applyUserProfileUpdate
+    applyUserProfileUpdate,
+    updateMessageReactionsInState,
+    updatePinnedMessageInState
   ]);
 
   useEffect(() => {
@@ -1923,6 +2166,56 @@ const MainPage = () => {
 
     loadSelectedDirectMessages();
   }, [isDmView, activeConversationId, loadDirectMessageList, navigate]);
+
+
+  useEffect(() => {
+    const token = getAuthToken();
+
+    if (!token) {
+      return;
+    }
+
+    if (isDmView) {
+      setChannelTypingUsers([]);
+
+      if (!activeConversationId) {
+        setPinnedMessages([]);
+        setDirectTypingUsers([]);
+        return;
+      }
+
+      loadPinnedMessageList(token, {
+        isDirect: true,
+        conversationId: activeConversationId
+      }).catch((error) => {
+        console.error("Failed to load pinned direct messages:", error);
+        setPinnedMessages([]);
+      });
+      return;
+    }
+
+    setDirectTypingUsers([]);
+
+    if (!activeChannelId) {
+      setPinnedMessages([]);
+      setChannelTypingUsers([]);
+      return;
+    }
+
+    loadPinnedMessageList(token, {
+      isDirect: false,
+      channelId: activeChannelId
+    }).catch((error) => {
+      console.error("Failed to load pinned channel messages:", error);
+      setPinnedMessages([]);
+    });
+  }, [activeChannelId, activeConversationId, isDmView, loadPinnedMessageList]);
+
+  useEffect(() => {
+    return () => {
+      stopTyping();
+    };
+  }, [activeChannelId, activeConversationId, isDmView, stopTyping]);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -2434,14 +2727,131 @@ const MainPage = () => {
       );
     };
 
+
+    const removeTypingUser = (payload, directView) => {
+      const typingUserId = payload?.user_id || payload?.userId;
+
+      if (!typingUserId) {
+        return;
+      }
+
+      const timeoutKey = `${directView ? "dm" : "channel"}-${typingUserId}`;
+
+      if (remoteTypingTimeoutsRef.current[timeoutKey]) {
+        window.clearTimeout(remoteTypingTimeoutsRef.current[timeoutKey]);
+        delete remoteTypingTimeoutsRef.current[timeoutKey];
+      }
+
+      const updateTypingUsers = (prevTypingUsers) =>
+        prevTypingUsers.filter(
+          (typingUser) => String(typingUser.user_id) !== String(typingUserId)
+        );
+
+      if (directView) {
+        setDirectTypingUsers(updateTypingUsers);
+      } else {
+        setChannelTypingUsers(updateTypingUsers);
+      }
+    };
+
+    const addTypingUser = (payload, directView) => {
+      const typingUserId = payload?.user_id || payload?.userId;
+      const typingUsername = payload?.username || "Someone";
+
+      if (!typingUserId || String(typingUserId) === String(currentUserId)) {
+        return;
+      }
+
+      if (directView) {
+        const conversationId = payload?.conversation_id || payload?.conversationId;
+
+        if (String(conversationId) !== String(activeConversationId)) {
+          return;
+        }
+      } else {
+        const channelId = payload?.channel_id || payload?.channelId;
+
+        if (String(channelId) !== String(activeChannelId)) {
+          return;
+        }
+      }
+
+      const timeoutKey = `${directView ? "dm" : "channel"}-${typingUserId}`;
+
+      if (remoteTypingTimeoutsRef.current[timeoutKey]) {
+        window.clearTimeout(remoteTypingTimeoutsRef.current[timeoutKey]);
+      }
+
+      const updateTypingUsers = (prevTypingUsers) => {
+        const alreadyTyping = prevTypingUsers.some(
+          (typingUser) => String(typingUser.user_id) === String(typingUserId)
+        );
+
+        if (alreadyTyping) {
+          return prevTypingUsers.map((typingUser) =>
+            String(typingUser.user_id) === String(typingUserId)
+              ? { ...typingUser, username: typingUsername }
+              : typingUser
+          );
+        }
+
+        return [
+          ...prevTypingUsers,
+          {
+            user_id: typingUserId,
+            username: typingUsername
+          }
+        ];
+      };
+
+      if (directView) {
+        setDirectTypingUsers(updateTypingUsers);
+      } else {
+        setChannelTypingUsers(updateTypingUsers);
+      }
+
+      remoteTypingTimeoutsRef.current[timeoutKey] = window.setTimeout(() => {
+        removeTypingUser(payload, directView);
+      }, 3500);
+    };
+
+    const handleChannelTypingStart = (payload) => addTypingUser(payload, false);
+    const handleChannelTypingStop = (payload) => removeTypingUser(payload, false);
+    const handleDirectTypingStart = (payload) => addTypingUser(payload, true);
+    const handleDirectTypingStop = (payload) => removeTypingUser(payload, true);
+
+    const handleMessageReactionUpdated = (payload) => {
+      updateMessageReactionsInState(payload, false);
+    };
+
+    const handleDirectMessageReactionUpdated = (payload) => {
+      updateMessageReactionsInState(payload, true);
+    };
+
+    const handleMessagePinUpdated = (message) => {
+      updatePinnedMessageInState(message, false);
+    };
+
+    const handleDirectMessagePinUpdated = (message) => {
+      updatePinnedMessageInState(message, true);
+    };
+
     socket.on("presence_update", handlePresenceUpdate);
     socket.on("user_profile_updated", handleProfileUpdated);
     socket.on("new_message", handleNewMessage);
     socket.on("message_updated", handleMessageUpdated);
     socket.on("message_deleted", handleMessageDeleted);
+    socket.on("message_reaction_updated", handleMessageReactionUpdated);
+    socket.on("message_pin_updated", handleMessagePinUpdated);
+    socket.on("channel_typing_start", handleChannelTypingStart);
+    socket.on("channel_typing_stop", handleChannelTypingStop);
     socket.on("direct_message", handleDirectMessage);
     socket.on("direct_message_updated", handleDirectMessageUpdated);
     socket.on("direct_message_deleted", handleDirectMessageDeleted);
+    socket.on("direct_message_reaction_updated", handleDirectMessageReactionUpdated);
+    socket.on("direct_message_pin_updated", handleDirectMessagePinUpdated);
+    socket.on("direct_typing_start", handleDirectTypingStart);
+    socket.on("direct_typing_stop", handleDirectTypingStop);
     socket.on("friend_removed", handleFriendRemoved);
     socket.on("channel_message_notification", handleChannelMessageNotification);
     socket.on("friend_request_received", handleFriendRequestReceived);
@@ -2452,9 +2862,17 @@ const MainPage = () => {
       socket.off("new_message", handleNewMessage);
       socket.off("message_updated", handleMessageUpdated);
       socket.off("message_deleted", handleMessageDeleted);
+      socket.off("message_reaction_updated", handleMessageReactionUpdated);
+      socket.off("message_pin_updated", handleMessagePinUpdated);
+      socket.off("channel_typing_start", handleChannelTypingStart);
+      socket.off("channel_typing_stop", handleChannelTypingStop);
       socket.off("direct_message", handleDirectMessage);
       socket.off("direct_message_updated", handleDirectMessageUpdated);
       socket.off("direct_message_deleted", handleDirectMessageDeleted);
+      socket.off("direct_message_reaction_updated", handleDirectMessageReactionUpdated);
+      socket.off("direct_message_pin_updated", handleDirectMessagePinUpdated);
+      socket.off("direct_typing_start", handleDirectTypingStart);
+      socket.off("direct_typing_stop", handleDirectTypingStop);
       socket.off("friend_removed", handleFriendRemoved);
       socket.off("channel_message_notification", handleChannelMessageNotification);
       socket.off("friend_request_received", handleFriendRequestReceived);
@@ -2469,7 +2887,9 @@ const MainPage = () => {
     currentUserId,
     persistChannelReadState,
     persistDirectConversationReadState,
-    applyUserProfileUpdate
+    applyUserProfileUpdate,
+    updateMessageReactionsInState,
+    updatePinnedMessageInState
   ]);
 
   useEffect(() => {
@@ -3740,6 +4160,127 @@ const MainPage = () => {
     }
   };
 
+  const handleToggleMessageReaction = async (message, emoji) => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const messageId = isDmView ? getDirectMessageId(message) : getMessageId(message);
+
+    if (!messageId || !emoji) {
+      return;
+    }
+
+    const messageKey = `${isDmView ? "dm" : "channel"}-${messageId}-${emoji}`;
+
+    try {
+      setReactingMessageKey(messageKey);
+      setMessageError("");
+
+      const response = isDmView
+        ? await toggleDirectMessageReaction(token, messageId, emoji)
+        : await toggleMessageReaction(token, messageId, emoji);
+
+      updateMessageReactionsInState(response?.data || response, isDmView);
+    } catch (error) {
+      setMessageError(error.message || "Failed to update reaction.");
+    } finally {
+      setReactingMessageKey(null);
+    }
+  };
+
+  const handleTogglePinMessage = async (message) => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const messageId = isDmView ? getDirectMessageId(message) : getMessageId(message);
+
+    if (!messageId) {
+      return;
+    }
+
+    const messageKey = `${isDmView ? "dm" : "channel"}-${messageId}`;
+
+    try {
+      setPinningMessageKey(messageKey);
+      setMessageError("");
+
+      const response = messageIsPinned(message)
+        ? isDmView
+          ? await unpinDirectMessage(token, messageId)
+          : await unpinMessage(token, messageId)
+        : isDmView
+          ? await pinDirectMessage(token, messageId)
+          : await pinMessage(token, messageId);
+
+      updatePinnedMessageInState(response?.data || response, isDmView);
+    } catch (error) {
+      setMessageError(error.message || "Failed to update pinned message.");
+    } finally {
+      setPinningMessageKey(null);
+    }
+  };
+
+  const handleJumpToPinnedMessage = async (message) => {
+    const messageId = isDmView ? getDirectMessageId(message) : getMessageId(message);
+
+    if (!messageId) {
+      return;
+    }
+
+    shouldAutoScrollRef.current = false;
+
+    if (scrollToLoadedMessage(messageId)) {
+      setIsPinnedMessagesOpen(false);
+      return;
+    }
+
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      searchJumpPendingRef.current = String(messageId);
+
+      if (isDmView) {
+        const response = await getDirectMessages(token, activeConversationId, {
+          limit: MESSAGE_PAGE_SIZE,
+          aroundDirectMessageId: messageId
+        });
+        const normalizedMessages = normalizeMessages(response);
+        const pagination = response?.pagination || response?.data?.pagination || {};
+
+        setDirectMessages(normalizedMessages);
+        setHasOlderDirectMessages(Boolean(pagination.hasOlder));
+      } else {
+        const response = await getChannelMessages(token, activeChannelId, {
+          limit: MESSAGE_PAGE_SIZE,
+          aroundMessageId: messageId
+        });
+        const normalizedMessages = normalizeMessages(response);
+        const pagination = response?.pagination || response?.data?.pagination || {};
+
+        setChannelMessages(normalizedMessages);
+        setHasOlderChannelMessages(Boolean(pagination.hasOlder));
+      }
+
+      setIsPinnedMessagesOpen(false);
+    } catch (error) {
+      setMessageError(error.message || "Failed to jump to pinned message.");
+      searchJumpPendingRef.current = null;
+    }
+  };
+
   const handleSendMessage = async (e) => {
     if (e) {
       e.preventDefault();
@@ -3796,6 +4337,7 @@ const MainPage = () => {
         });
       }
 
+      stopTyping();
       setMessageContent("");
       setIsEmojiPickerOpen(false);
       resetMessageReplyState();
@@ -3897,6 +4439,12 @@ const MainPage = () => {
 
     setMessageContent(nextValue);
     setMessageError("");
+
+    if (nextValue.trim()) {
+      startTyping();
+    } else {
+      stopTyping();
+    }
     e.target.style.height = "44px";
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
     updateMentionMenuFromInput(nextValue, e.target.selectionStart);
@@ -4871,6 +5419,57 @@ const MainPage = () => {
           </div>
 
           <section className="server-messages-panel discord-messages-panel">
+            {showComposer && pinnedMessageCount > 0 ? (
+              <div className="discord-pinned-messages-panel">
+                <button
+                  type="button"
+                  className="discord-pinned-messages-toggle"
+                  onClick={() => setIsPinnedMessagesOpen((isOpen) => !isOpen)}
+                >
+                  <span>📌 {pinnedMessageCount} pinned message{pinnedMessageCount === 1 ? "" : "s"}</span>
+                  <span>{isPinnedMessagesOpen ? "Hide" : "Show"}</span>
+                </button>
+
+                {isPinnedMessagesOpen ? (
+                  <div className="discord-pinned-messages-list">
+                    {pinnedMessages.map((pinnedMessage) => {
+                      const pinnedMessageId = isDmView
+                        ? getDirectMessageId(pinnedMessage)
+                        : getMessageId(pinnedMessage);
+                      const pinnedAuthor = isDmView
+                        ? getDirectMessageAuthor(pinnedMessage)
+                        : getMessageAuthor(pinnedMessage);
+                      const pinnedContent = isDmView
+                        ? getDirectMessageContent(pinnedMessage)
+                        : getMessageContent(pinnedMessage);
+
+                      return (
+                        <button
+                          key={pinnedMessageId}
+                          type="button"
+                          className="discord-pinned-message-item"
+                          onClick={() => handleJumpToPinnedMessage(pinnedMessage)}
+                        >
+                          <span className="discord-pinned-message-author">
+                            {pinnedAuthor}
+                          </span>
+                          <span className="discord-pinned-message-content">
+                            {formatReplyPreviewContent(pinnedContent)}
+                          </span>
+                          <span className="discord-pinned-message-meta">
+                            Pinned by {getMessagePinnedBy(pinnedMessage)}
+                            {getMessagePinnedAt(pinnedMessage)
+                              ? ` · ${formatTimestamp(getMessagePinnedAt(pinnedMessage))}`
+                              : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {showComposer && (messageSearchError || isMessageSearchActive) ? (
               <div className="discord-message-search-status">
                 {messageSearchError ? (
@@ -5234,6 +5833,8 @@ const MainPage = () => {
                   const replyPreview = getReplyPreview(message);
 
                   const attachments = getMessageAttachments(message);
+                  const reactions = getMessageReactions(message);
+                  const isThisMessagePinned = messageIsPinned(message);
 
                   const key = isDmView
                     ? getDirectMessageId(message) || index
@@ -5255,6 +5856,8 @@ const MainPage = () => {
                   const isThisMessageDeleting = deletingMessageKey === messageDeleteKey;
                   const isThisMessageEditing = editingMessageKey === messageDeleteKey;
                   const isThisMessageSaving = savingEditedMessageKey === messageDeleteKey;
+                  const isThisMessagePinning = pinningMessageKey === messageDeleteKey;
+                  const canPinThisMessage = isDmView || currentUserCanManageServer;
                   const isActiveSearchMessage =
                     activeSearchMessageId &&
                     messageIdForDelete &&
@@ -5322,6 +5925,46 @@ const MainPage = () => {
                                   Reply
                                 </button>
 
+                                {canPinThisMessage ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMessageMenuKey(null);
+                                      handleTogglePinMessage(message);
+                                    }}
+                                    disabled={!messageIdForDelete || isThisMessagePinning}
+                                    className="discord-message-option"
+                                  >
+                                    {isThisMessagePinning
+                                      ? "Updating..."
+                                      : isThisMessagePinned
+                                        ? "Unpin"
+                                        : "Pin"}
+                                  </button>
+                                ) : null}
+
+                                <div className="discord-message-reaction-picker">
+                                  {QUICK_REACTION_EMOJIS.map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMessageMenuKey(null);
+                                        handleToggleMessageReaction(message, emoji);
+                                      }}
+                                      disabled={
+                                        !messageIdForDelete ||
+                                        reactingMessageKey === `${messageDeleteKey}-${emoji}`
+                                      }
+                                      className="discord-message-reaction-option"
+                                      aria-label={`React with ${emoji}`}
+                                      title={`React with ${emoji}`}
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+
                                 {isOwnMessage ? (
                                   <button
                                     type="button"
@@ -5376,6 +6019,10 @@ const MainPage = () => {
 
                             {messageWasEdited ? (
                               <span className="discord-message-time">edited</span>
+                            ) : null}
+
+                            {isThisMessagePinned ? (
+                              <span className="discord-message-pinned-pill">Pinned</span>
                             ) : null}
 
                             {shouldShowMentionEmphasis ? (
@@ -5443,6 +6090,8 @@ const MainPage = () => {
                               <span className="discord-own-message-time">
                                 {timestamp}
                                 {messageWasEdited ? " · edited" : ""}
+                                {isThisMessagePinned ? " · pinned" : ""}
+                                {isThisMessagePinned ? " · pinned" : ""}
                               </span>
                             ) : null}
                           </p>
@@ -5470,6 +6119,36 @@ const MainPage = () => {
                             ))}
                           </div>
                         ) : null}
+
+                        {reactions.length > 0 ? (
+                          <div className="discord-message-reactions">
+                            {reactions.map((reaction) => {
+                              const emoji = getReactionEmoji(reaction);
+                              const reactionCount = getReactionCount(reaction);
+
+                              return (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  className={`discord-message-reaction-chip${
+                                    userReactedToReaction(reaction)
+                                      ? " discord-message-reaction-chip-active"
+                                      : ""
+                                  }`}
+                                  onClick={() => handleToggleMessageReaction(message, emoji)}
+                                  disabled={
+                                    !messageIdForDelete ||
+                                    reactingMessageKey === `${messageDeleteKey}-${emoji}`
+                                  }
+                                  title={`React with ${emoji}`}
+                                >
+                                  <span>{emoji}</span>
+                                  <span>{reactionCount}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -5477,6 +6156,10 @@ const MainPage = () => {
               </div>
             )}
           </section>
+
+          {showComposer && activeTypingText ? (
+            <div className="discord-typing-indicator">{activeTypingText}</div>
+          ) : null}
 
           {showComposer ? (
             <form onSubmit={handleSendMessage} className="server-message-form discord-composer">
@@ -5669,6 +6352,7 @@ const MainPage = () => {
                   onKeyUp={handleMessageInputKeyUp}
                   onKeyDown={handleMessageKeyDown}
                   onBlur={() => {
+                    stopTyping();
                     window.setTimeout(() => closeMentionMenu(), 120);
                   }}
                   disabled={

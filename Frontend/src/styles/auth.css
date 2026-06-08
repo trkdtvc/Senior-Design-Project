@@ -2732,3 +2732,183 @@ textarea.auth-input {
   padding: 6px 8px;
   font-size: 0.74rem;
 }
+
+/* CHAT INTERACTION FEATURES */
+
+.discord-message-reaction-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 6px 4px;
+  border-top: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border);
+  margin: 3px 0;
+}
+
+.discord-message-reaction-option {
+  min-width: 30px;
+  height: 28px;
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color var(--app-transition), transform var(--app-transition), opacity var(--app-transition);
+}
+
+.discord-message-reaction-option:hover {
+  background: var(--app-bg-elevated-3);
+  transform: translateY(-1px);
+}
+
+.discord-message-reaction-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.discord-message-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.discord-message-row-own .discord-message-reactions {
+  justify-content: flex-end;
+}
+
+.discord-message-reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-bg-elevated-2);
+  color: var(--app-text-soft);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: background-color var(--app-transition), border-color var(--app-transition), color var(--app-transition), transform var(--app-transition), opacity var(--app-transition);
+}
+
+.discord-message-reaction-chip:hover {
+  background: var(--app-bg-elevated-3);
+  border-color: var(--app-border-strong);
+  color: var(--app-text);
+  transform: translateY(-1px);
+}
+
+.discord-message-reaction-chip-active {
+  border-color: rgba(88, 101, 242, 0.55);
+  background: rgba(88, 101, 242, 0.2);
+  color: #dbe2ff;
+}
+
+.discord-message-reaction-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+}
+
+.discord-message-pinned-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid rgba(245, 197, 66, 0.28);
+  border-radius: 999px;
+  background: rgba(245, 197, 66, 0.12);
+  color: #f5c542;
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.discord-pinned-messages-panel {
+  margin: 0 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: rgba(255, 255, 255, 0.035);
+  overflow: hidden;
+}
+
+.discord-pinned-messages-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-align: left;
+  transition: background-color var(--app-transition), color var(--app-transition);
+}
+
+.discord-pinned-messages-toggle:hover {
+  background: var(--app-bg-elevated-2);
+  color: var(--app-text);
+}
+
+.discord-pinned-messages-list {
+  display: grid;
+  gap: 1px;
+  padding: 0 6px 6px;
+}
+
+.discord-pinned-message-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--app-transition), color var(--app-transition);
+}
+
+.discord-pinned-message-item:hover {
+  background: var(--app-bg-elevated-2);
+  color: var(--app-text);
+}
+
+.discord-pinned-message-author {
+  color: var(--app-text);
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.discord-pinned-message-content,
+.discord-pinned-message-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+}
+
+.discord-pinned-message-meta {
+  color: var(--app-text-faint);
+}
+
+.discord-typing-indicator {
+  min-height: 20px;
+  padding: 0 18px 8px;
+  color: var(--app-text-faint);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-style: italic;
+}

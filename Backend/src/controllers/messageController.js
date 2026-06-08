@@ -27,6 +27,31 @@ const buildReplyPreview = (message) => {
   };
 };
 
+const normalizeEmoji = (emoji) => {
+  const safeEmoji = String(emoji || "").trim();
+
+  if (!safeEmoji || safeEmoji.length > 16) {
+    return "";
+  }
+
+  return safeEmoji;
+};
+
+const buildMessageResponse = (message) => ({
+  ...message,
+  message_id: Number(message.message_id),
+  channel_id: Number(message.channel_id),
+  server_id: message.server_id ? Number(message.server_id) : null,
+  user_id: Number(message.user_id),
+  content: message.content,
+  reply_to: buildReplyPreview(message),
+  reactions: Array.isArray(message.reactions) ? message.reactions : [],
+  pinned: Boolean(message.pinned || message.pinned_at),
+  pinned_by: message.pinned_by ? Number(message.pinned_by) : null,
+  pinned_by_username: message.pinned_by_username || null,
+  pinned_at: message.pinned_at || null
+});
+
 const extractMentionedUserIds = async (channelId, content, senderUserId) => {
   const mentionMatches = String(content || "").matchAll(/@([a-zA-Z0-9_.-]+)/g);
   const mentionedUsernames = new Set(
@@ -146,6 +171,11 @@ const createMessage = async (req, res, next) => {
       reply_to: buildReplyPreview(fullCreatedMessage),
       mentioned_user_ids: mentionedUserIds,
       attachments: attachment ? [attachment] : [],
+      reactions: [],
+      pinned: false,
+      pinned_by: null,
+      pinned_by_username: null,
+      pinned_at: null,
       created_at: new Date().toISOString(),
       updated_at: null
     };
@@ -199,14 +229,12 @@ const getChannelMessages = async (req, res, next) => {
       {
         limit,
         beforeMessageId,
-        aroundMessageId
+        aroundMessageId,
+        currentUserId: userId
       }
     );
 
-    const messagesWithReplies = messages.map((message) => ({
-      ...message,
-      reply_to: buildReplyPreview(message)
-    }));
+    const messagesWithReplies = messages.map(buildMessageResponse);
 
     res.status(200).json({
       message: "Channel messages fetched successfully",
@@ -301,13 +329,7 @@ const updateMessage = async (req, res, next) => {
     const updatedMessage = await messageModel.getMessageById(messageId);
 
     const editedMessage = {
-      ...updatedMessage,
-      message_id: Number(updatedMessage.message_id),
-      channel_id: Number(updatedMessage.channel_id),
-      server_id: updatedMessage.server_id ? Number(updatedMessage.server_id) : null,
-      user_id: Number(updatedMessage.user_id),
-      content: updatedMessage.content,
-      reply_to: buildReplyPreview(updatedMessage),
+      ...buildMessageResponse(updatedMessage),
       edited: true
     };
 
@@ -384,6 +406,200 @@ const deleteMessage = async (req, res, next) => {
     res.status(200).json({
       message: "Message deleted successfully",
       data: deletedMessage
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const toggleMessageReaction = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.user_id;
+    const emoji = normalizeEmoji(req.body.emoji);
+
+    if (!messageId) {
+      res.status(400);
+      throw new Error("Message ID is required");
+    }
+
+    if (!emoji) {
+      res.status(400);
+      throw new Error("A valid emoji is required");
+    }
+
+    const message = await messageModel.getMessageById(messageId);
+
+    if (!message) {
+      res.status(404);
+      throw new Error("Message not found");
+    }
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(
+      message.channel_id,
+      userId
+    );
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    const result = await messageModel.toggleMessageReaction(
+      messageId,
+      userId,
+      emoji
+    );
+
+    const payload = {
+      message_id: Number(message.message_id),
+      channel_id: Number(message.channel_id),
+      server_id: message.server_id ? Number(message.server_id) : null,
+      user_id: Number(userId),
+      emoji,
+      action: result.action,
+      reactions: result.reactions
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`channel_${message.channel_id}`).emit(
+        "message_reaction_updated",
+        payload
+      );
+    }
+
+    res.status(200).json({
+      message: "Message reaction updated successfully",
+      data: payload
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const pinMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.user_id;
+
+    const message = await messageModel.getMessageById(messageId);
+
+    if (!message) {
+      res.status(404);
+      throw new Error("Message not found");
+    }
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(
+      message.channel_id,
+      userId
+    );
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    const permission = await canManageServerContent(message.server_id, userId);
+
+    if (!permission.allowed) {
+      res.status(403);
+      throw new Error("Only server owners and admins can pin channel messages");
+    }
+
+    const pinnedMessage = await messageModel.pinMessageById(messageId, userId);
+    const payload = buildMessageResponse(pinnedMessage);
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`channel_${message.channel_id}`).emit("message_pin_updated", payload);
+    }
+
+    res.status(200).json({
+      message: "Message pinned successfully",
+      data: payload
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const unpinMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.user_id;
+
+    const message = await messageModel.getMessageById(messageId);
+
+    if (!message) {
+      res.status(404);
+      throw new Error("Message not found");
+    }
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(
+      message.channel_id,
+      userId
+    );
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    const permission = await canManageServerContent(message.server_id, userId);
+
+    if (!permission.allowed) {
+      res.status(403);
+      throw new Error("Only server owners and admins can unpin channel messages");
+    }
+
+    await messageModel.unpinMessageById(messageId);
+
+    const payload = {
+      ...buildMessageResponse(message),
+      pinned: false,
+      pinned_by: null,
+      pinned_by_username: null,
+      pinned_at: null
+    };
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`channel_${message.channel_id}`).emit("message_pin_updated", payload);
+    }
+
+    res.status(200).json({
+      message: "Message unpinned successfully",
+      data: payload
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getPinnedChannelMessages = async (req, res, next) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.user_id;
+
+    const isMember = await messageModel.isUserMemberOfChannelServer(channelId, userId);
+
+    if (!isMember) {
+      res.status(403);
+      throw new Error("You are not a member of this channel's server");
+    }
+
+    const pinnedMessages = await messageModel.getPinnedMessagesByChannelId(
+      channelId,
+      userId
+    );
+
+    res.status(200).json({
+      message: "Pinned channel messages fetched successfully",
+      messages: pinnedMessages.map(buildMessageResponse)
     });
   } catch (error) {
     next(error);
@@ -478,6 +694,10 @@ module.exports = {
   searchChannelMessages,
   updateMessage,
   deleteMessage,
+  toggleMessageReaction,
+  pinMessage,
+  unpinMessage,
+  getPinnedChannelMessages,
   markChannelAsRead,
   getUnreadChannelCounts,
   getUnreadMentionCounts

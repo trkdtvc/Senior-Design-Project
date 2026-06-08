@@ -105,3 +105,28 @@ export const getUnreadDirectConversationCounts = async (token) =>
   apiRequest("/direct-messages/unread-counts", {
     token
   });
+
+
+export const toggleDirectMessageReaction = async (token, directMessageId, emoji) =>
+  apiRequest(`/direct-messages/messages/${directMessageId}/reactions`, {
+    method: "POST",
+    token,
+    body: { emoji }
+  });
+
+export const pinDirectMessage = async (token, directMessageId) =>
+  apiRequest(`/direct-messages/messages/${directMessageId}/pin`, {
+    method: "PATCH",
+    token
+  });
+
+export const unpinDirectMessage = async (token, directMessageId) =>
+  apiRequest(`/direct-messages/messages/${directMessageId}/pin`, {
+    method: "DELETE",
+    token
+  });
+
+export const getPinnedDirectMessages = async (token, conversationId) =>
+  apiRequest(`/direct-messages/conversations/${conversationId}/pins`, {
+    token
+  });

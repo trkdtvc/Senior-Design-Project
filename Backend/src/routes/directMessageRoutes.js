@@ -7,6 +7,10 @@ const {
   sendDirectMessageToConversation,
   updateDirectMessage,
   deleteDirectMessage,
+  toggleDirectReaction,
+  pinDirectMessage,
+  unpinDirectMessage,
+  getPinnedDirectMessages,
   deleteDirectConversationForMe,
   markDirectConversationRead,
   getUnreadDirectConversationCounts
@@ -157,6 +161,21 @@ router.get(
 
 /**
  * @swagger
+ * /api/direct-messages/conversations/{conversationId}/pins:
+ *   get:
+ *     summary: Get pinned messages for a direct conversation
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get(
+  "/conversations/:conversationId/pins",
+  protect,
+  getPinnedDirectMessages
+);
+
+/**
+ * @swagger
  * /api/direct-messages/conversations/{conversationId}/read:
  *   patch:
  *     summary: Mark a direct conversation as read for the authenticated user
@@ -293,6 +312,51 @@ router.delete(
   "/messages/:directMessageId",
   protect,
   deleteDirectMessage
+);
+
+/**
+ * @swagger
+ * /api/direct-messages/messages/{directMessageId}/reactions:
+ *   post:
+ *     summary: Toggle a reaction on a direct message
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  "/messages/:directMessageId/reactions",
+  protect,
+  toggleDirectReaction
+);
+
+/**
+ * @swagger
+ * /api/direct-messages/messages/{directMessageId}/pin:
+ *   patch:
+ *     summary: Pin a direct message
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.patch(
+  "/messages/:directMessageId/pin",
+  protect,
+  pinDirectMessage
+);
+
+/**
+ * @swagger
+ * /api/direct-messages/messages/{directMessageId}/pin:
+ *   delete:
+ *     summary: Unpin a direct message
+ *     tags: [Direct Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete(
+  "/messages/:directMessageId/pin",
+  protect,
+  unpinDirectMessage
 );
 
 /**

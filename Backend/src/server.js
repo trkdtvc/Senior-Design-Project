@@ -5,6 +5,11 @@ const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
 const { setUserOnlineState } = require("./models/userModel");
+const { isUserMemberOfChannelServer } = require("./models/messageModel");
+const {
+  getConversationById,
+  isUserInConversation
+} = require("./models/directMessageModel");
 
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -146,6 +151,98 @@ io.on("connection", async (socket) => {
   socket.on("leave_channel", (channelId) => {
     if (!channelId) return;
     socket.leave(`channel_${channelId}`);
+  });
+
+  socket.on("channel_typing_start", async (payload = {}) => {
+    try {
+      const channelId = payload.channel_id || payload.channelId;
+
+      if (!channelId) return;
+
+      const isMember = await isUserMemberOfChannelServer(channelId, userId);
+
+      if (!isMember) return;
+
+      socket.to(`channel_${channelId}`).emit("channel_typing_start", {
+        channel_id: Number(channelId),
+        user_id: Number(userId),
+        username
+      });
+    } catch (error) {
+      console.error("Failed to emit channel typing start:", error.message);
+    }
+  });
+
+  socket.on("channel_typing_stop", async (payload = {}) => {
+    try {
+      const channelId = payload.channel_id || payload.channelId;
+
+      if (!channelId) return;
+
+      socket.to(`channel_${channelId}`).emit("channel_typing_stop", {
+        channel_id: Number(channelId),
+        user_id: Number(userId),
+        username
+      });
+    } catch (error) {
+      console.error("Failed to emit channel typing stop:", error.message);
+    }
+  });
+
+  socket.on("direct_typing_start", async (payload = {}) => {
+    try {
+      const conversationId = payload.conversation_id || payload.conversationId;
+
+      if (!conversationId) return;
+
+      const [conversation, hasAccess] = await Promise.all([
+        getConversationById(conversationId),
+        isUserInConversation(conversationId, userId)
+      ]);
+
+      if (!conversation || !hasAccess) return;
+
+      const recipientUserId =
+        Number(conversation.user_one_id) === Number(userId)
+          ? Number(conversation.user_two_id)
+          : Number(conversation.user_one_id);
+
+      io.to(`user_${recipientUserId}`).emit("direct_typing_start", {
+        conversation_id: Number(conversationId),
+        user_id: Number(userId),
+        username
+      });
+    } catch (error) {
+      console.error("Failed to emit direct typing start:", error.message);
+    }
+  });
+
+  socket.on("direct_typing_stop", async (payload = {}) => {
+    try {
+      const conversationId = payload.conversation_id || payload.conversationId;
+
+      if (!conversationId) return;
+
+      const [conversation, hasAccess] = await Promise.all([
+        getConversationById(conversationId),
+        isUserInConversation(conversationId, userId)
+      ]);
+
+      if (!conversation || !hasAccess) return;
+
+      const recipientUserId =
+        Number(conversation.user_one_id) === Number(userId)
+          ? Number(conversation.user_two_id)
+          : Number(conversation.user_one_id);
+
+      io.to(`user_${recipientUserId}`).emit("direct_typing_stop", {
+        conversation_id: Number(conversationId),
+        user_id: Number(userId),
+        username
+      });
+    } catch (error) {
+      console.error("Failed to emit direct typing stop:", error.message);
+    }
   });
 
   socket.on("disconnect", async () => {

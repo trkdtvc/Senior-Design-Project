@@ -88,16 +88,84 @@ const getAttachmentsByMessageIds = async (messageIds) => {
   return rows;
 };
 
-const attachFilesToMessages = async (messages) => {
-  const messageIds = messages.map((message) => message.message_id);
-  const attachments = await getAttachmentsByMessageIds(messageIds);
+const getReactionsByMessageIds = async (messageIds, currentUserId = null) => {
+  if (!messageIds.length) {
+    return [];
+  }
 
-  return messages.map((message) => ({
-    ...message,
-    attachments: attachments.filter(
-      (attachment) => String(attachment.message_id) === String(message.message_id)
-    )
+  const placeholders = messageIds.map(() => "?").join(",");
+
+  const [rows] = await pool.query(
+    `SELECT
+        message_id,
+        emoji,
+        COUNT(*) AS reaction_count,
+        MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS reacted_by_me,
+        MIN(created_at) AS first_reacted_at
+     FROM message_reactions
+     WHERE message_id IN (${placeholders})
+     GROUP BY message_id, emoji
+     ORDER BY first_reacted_at ASC`,
+    [currentUserId || 0, ...messageIds]
+  );
+
+  return rows.map((row) => ({
+    message_id: Number(row.message_id),
+    emoji: row.emoji,
+    count: Number(row.reaction_count || 0),
+    reacted_by_me: Number(row.reacted_by_me || 0) === 1
   }));
+};
+
+const getPinsByMessageIds = async (messageIds) => {
+  if (!messageIds.length) {
+    return [];
+  }
+
+  const placeholders = messageIds.map(() => "?").join(",");
+
+  const [rows] = await pool.query(
+    `SELECT
+        mp.message_id,
+        mp.pinned_by,
+        u.username AS pinned_by_username,
+        mp.pinned_at
+     FROM message_pins mp
+     JOIN users u ON mp.pinned_by = u.user_id
+     WHERE mp.message_id IN (${placeholders})`,
+    messageIds
+  );
+
+  return rows;
+};
+
+const attachMessageMetadata = async (messages, currentUserId = null) => {
+  const messageIds = messages.map((message) => message.message_id);
+  const [attachments, reactions, pins] = await Promise.all([
+    getAttachmentsByMessageIds(messageIds),
+    getReactionsByMessageIds(messageIds, currentUserId),
+    getPinsByMessageIds(messageIds)
+  ]);
+
+  return messages.map((message) => {
+    const messageId = String(message.message_id);
+    const pin = pins.find((pinRow) => String(pinRow.message_id) === messageId);
+
+    return {
+      ...message,
+      pinned: Boolean(message.pinned_at || pin?.pinned_at),
+      pinned_by: message.pinned_by || pin?.pinned_by || null,
+      pinned_by_username:
+        message.pinned_by_username || pin?.pinned_by_username || null,
+      pinned_at: message.pinned_at || pin?.pinned_at || null,
+      attachments: attachments.filter(
+        (attachment) => String(attachment.message_id) === messageId
+      ),
+      reactions: reactions.filter(
+        (reaction) => String(reaction.message_id) === messageId
+      )
+    };
+  });
 };
 
 const baseMessageSelect = `
@@ -112,11 +180,16 @@ const baseMessageSelect = `
     ru.username AS reply_to_username,
     m.created_at,
     m.updated_at,
-    u.username
+    u.username,
+    mp.pinned_by,
+    pu.username AS pinned_by_username,
+    mp.pinned_at
   FROM messages m
   JOIN users u ON m.user_id = u.user_id
   LEFT JOIN messages rm ON m.reply_to_message_id = rm.message_id
   LEFT JOIN users ru ON rm.user_id = ru.user_id
+  LEFT JOIN message_pins mp ON m.message_id = mp.message_id
+  LEFT JOIN users pu ON mp.pinned_by = pu.user_id
 `;
 
 const hasOlderMessages = async (channelId, oldestMessageId) => {
@@ -244,7 +317,7 @@ const getMessagesByChannelId = async (channelId, options = {}) => {
     rows = await getLatestChannelMessages(channelId, limit);
   }
 
-  const messages = await attachFilesToMessages(rows);
+  const messages = await attachMessageMetadata(rows, options.currentUserId);
   const pagination = await getMessagePaginationMeta(channelId, messages);
 
   return {
@@ -297,12 +370,17 @@ const getMessageById = async (messageId) => {
         ru.username AS reply_to_username,
         m.created_at,
         m.updated_at,
-        u.username
+        u.username,
+        mp.pinned_by,
+        pu.username AS pinned_by_username,
+        mp.pinned_at
      FROM messages m
      JOIN channels c ON m.channel_id = c.channel_id
      JOIN users u ON m.user_id = u.user_id
      LEFT JOIN messages rm ON m.reply_to_message_id = rm.message_id
      LEFT JOIN users ru ON rm.user_id = ru.user_id
+     LEFT JOIN message_pins mp ON m.message_id = mp.message_id
+     LEFT JOIN users pu ON mp.pinned_by = pu.user_id
      WHERE m.message_id = ?
      LIMIT 1`,
     [messageId]
@@ -340,6 +418,83 @@ const deleteMessageById = async (messageId) => {
   );
 
   return result;
+};
+
+const getMessageReactionsByMessageId = async (messageId, currentUserId = null) => {
+  const reactions = await getReactionsByMessageIds([messageId], currentUserId);
+
+  return reactions.filter(
+    (reaction) => String(reaction.message_id) === String(messageId)
+  );
+};
+
+const toggleMessageReaction = async (messageId, userId, emoji) => {
+  const [existingRows] = await pool.query(
+    `SELECT reaction_id
+     FROM message_reactions
+     WHERE message_id = ? AND user_id = ? AND emoji = ?
+     LIMIT 1`,
+    [messageId, userId, emoji]
+  );
+
+  if (existingRows.length) {
+    await pool.query(
+      `DELETE FROM message_reactions
+       WHERE reaction_id = ?`,
+      [existingRows[0].reaction_id]
+    );
+
+    return {
+      action: "removed",
+      reactions: await getMessageReactionsByMessageId(messageId, userId)
+    };
+  }
+
+  await pool.query(
+    `INSERT INTO message_reactions (message_id, user_id, emoji)
+     VALUES (?, ?, ?)`,
+    [messageId, userId, emoji]
+  );
+
+  return {
+    action: "added",
+    reactions: await getMessageReactionsByMessageId(messageId, userId)
+  };
+};
+
+const pinMessageById = async (messageId, userId) => {
+  await pool.query(
+    `INSERT INTO message_pins (message_id, pinned_by)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE
+       pinned_by = VALUES(pinned_by),
+       pinned_at = CURRENT_TIMESTAMP`,
+    [messageId, userId]
+  );
+
+  return getMessageById(messageId);
+};
+
+const unpinMessageById = async (messageId) => {
+  const [result] = await pool.query(
+    `DELETE FROM message_pins
+     WHERE message_id = ?`,
+    [messageId]
+  );
+
+  return result;
+};
+
+const getPinnedMessagesByChannelId = async (channelId, currentUserId = null) => {
+  const [rows] = await pool.query(
+    `${baseMessageSelect}
+     WHERE m.channel_id = ?
+       AND mp.pinned_at IS NOT NULL
+     ORDER BY mp.pinned_at DESC`,
+    [channelId]
+  );
+
+  return attachMessageMetadata(rows, currentUserId);
 };
 
 const getChannelServerId = async (channelId) => {
@@ -521,6 +676,10 @@ module.exports = {
   updateMessageById,
   deleteMessageAttachmentsByMessageId,
   deleteMessageById,
+  toggleMessageReaction,
+  pinMessageById,
+  unpinMessageById,
+  getPinnedMessagesByChannelId,
   getChannelServerId,
   getChannelServerMemberIds,
   getMentionableServerMembersByChannelId,

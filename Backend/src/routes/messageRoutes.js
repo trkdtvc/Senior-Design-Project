@@ -156,6 +156,58 @@ router.get(
 
 /**
  * @swagger
+ * /api/messages/{channelId}/pins:
+ *   get:
+ *     summary: Get pinned messages for a channel
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get(
+  "/:channelId/pins",
+  protect,
+  messageController.getPinnedChannelMessages
+);
+
+/**
+ * @swagger
+ * /api/messages/{messageId}/reactions:
+ *   post:
+ *     summary: Toggle a reaction on a channel message
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post(
+  "/:messageId/reactions",
+  protect,
+  messageController.toggleMessageReaction
+);
+
+/**
+ * @swagger
+ * /api/messages/{messageId}/pin:
+ *   patch:
+ *     summary: Pin a channel message
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.patch("/:messageId/pin", protect, messageController.pinMessage);
+
+/**
+ * @swagger
+ * /api/messages/{messageId}/pin:
+ *   delete:
+ *     summary: Unpin a channel message
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete("/:messageId/pin", protect, messageController.unpinMessage);
+
+/**
+ * @swagger
  * /api/messages/{channelId}:
  *   get:
  *     summary: Get all messages for a channel
