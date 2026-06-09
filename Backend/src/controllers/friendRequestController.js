@@ -1,5 +1,4 @@
 const friendRequestModel = require("../models/friendRequestModel");
-const userSafetyModel = require("../models/userSafetyModel");
 
 const emitFriendRequestReceived = (req, receiverId, request) => {
   const io = req.app.get("io");
@@ -48,15 +47,6 @@ const sendFriendRequest = async (req, res, next) => {
       throw new Error("You cannot send a friend request to yourself");
     }
 
-    const existingBlock = await userSafetyModel.getBlockBetweenUsers(
-      senderId,
-      receiver.user_id
-    );
-
-    if (existingBlock) {
-      res.status(403);
-      throw new Error("Friend requests are not available between blocked users");
-    }
 
     const existingFriendship =
       await friendRequestModel.getFriendshipBetweenUsers(
@@ -172,15 +162,6 @@ const acceptFriendRequest = async (req, res, next) => {
       throw new Error("Only the receiver can accept this friend request");
     }
 
-    const existingBlock = await userSafetyModel.getBlockBetweenUsers(
-      request.sender_id,
-      request.receiver_id
-    );
-
-    if (existingBlock) {
-      res.status(403);
-      throw new Error("Blocked users cannot become friends");
-    }
 
     const existingFriendship =
       await friendRequestModel.getFriendshipBetweenUsers(

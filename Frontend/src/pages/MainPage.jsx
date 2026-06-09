@@ -60,12 +60,6 @@ import {
   setDirectConversationMute
 } from "../services/notificationSettingsService";
 import {
-  getBlockedUsers,
-  blockUser,
-  unblockUser,
-  reportUser
-} from "../services/userSafetyService";
-import {
   getFriends,
   getIncomingFriendRequests,
   getOutgoingFriendRequests,
@@ -477,8 +471,6 @@ const getUnreadValue = (unreadMap, id) => {
   return Number(unreadMap?.[String(id)] || 0);
 };
 
-const getTotalUnreadCount = (unreadMap) =>
-  Object.values(unreadMap).reduce((total, value) => total + Number(value || 0), 0);
 
 const formatBadgeCount = (count) => {
   const safeCount = Number(count || 0);
@@ -613,13 +605,6 @@ const applyNotificationSettingsPayload = (payload) =>
     muted_direct_conversation_ids: []
   };
 
-const normalizeBlockedUsers = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.blockedUsers)) return payload.blockedUsers;
-  if (Array.isArray(payload?.blocked_users)) return payload.blocked_users;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
-};
 
 const getMentionedUserIds = (message) => {
   const mentionedIds =
@@ -1010,19 +995,6 @@ const MainPage = () => {
   });
   const [settingsActionError, setSettingsActionError] = useState("");
   const [settingsActionKey, setSettingsActionKey] = useState(null);
-  const [blockedUsers, setBlockedUsers] = useState([]);
-  const [safetyActionError, setSafetyActionError] = useState("");
-  const [safetyActionKey, setSafetyActionKey] = useState(null);
-  const [reportModal, setReportModal] = useState({
-    isOpen: false,
-    userId: null,
-    username: "",
-    contextType: "profile",
-    contextId: null
-  });
-  const [reportReason, setReportReason] = useState("");
-  const [reportSuccess, setReportSuccess] = useState("");
-  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState(null);
 
   const [activeServerId, setActiveServerId] = useState(null);
@@ -1331,8 +1303,15 @@ const MainPage = () => {
     : `No channel messages found for "${messageSearchTerm.trim()}".`;
 
   const totalUnreadDirectCount = useMemo(
-    () => getTotalUnreadCount(unreadDirectCounts),
-    [unreadDirectCounts]
+    () =>
+      Object.entries(unreadDirectCounts || {}).reduce((total, [conversationId, count]) => {
+        if (mutedDirectConversationIds.includes(String(conversationId))) {
+          return total;
+        }
+
+        return total + Number(count || 0);
+      }, 0),
+    [mutedDirectConversationIds, unreadDirectCounts]
   );
 
   const pendingFriendRequestCount = incomingFriendRequests.length;
@@ -1682,13 +1661,6 @@ const MainPage = () => {
     });
 
     return normalizedSettings;
-  }, []);
-
-  const loadBlockedUsers = useCallback(async (token) => {
-    const blockedUsersData = await getBlockedUsers(token);
-    const normalizedBlockedUsers = normalizeBlockedUsers(blockedUsersData);
-    setBlockedUsers(normalizedBlockedUsers);
-    return normalizedBlockedUsers;
   }, []);
 
   const loadFriendRequests = useCallback(async (token) => {
@@ -2084,8 +2056,7 @@ const MainPage = () => {
           loadFriends(token),
           loadDirectConversationList(token),
           loadFriendRequests(token),
-          loadNotificationSettings(token),
-          loadBlockedUsers(token)
+          loadNotificationSettings(token)
         ]);
 
         try {
@@ -2117,7 +2088,6 @@ const MainPage = () => {
     loadDirectConversationList,
     loadFriendRequests,
     loadNotificationSettings,
-    loadBlockedUsers,
     loadUnreadCounts
   ]);
 
@@ -2131,10 +2101,7 @@ const MainPage = () => {
   }, [
     activeConversationId,
     clearDirectUnread,
-    persistDirectConversationReadState,
-    applyUserProfileUpdate,
-    updateMessageReactionsInState,
-    updatePinnedMessageInState
+    persistDirectConversationReadState
   ]);
 
   useEffect(() => {
@@ -2681,7 +2648,10 @@ const MainPage = () => {
           return [...prevMessages, payload.directMessage];
         });
         persistDirectConversationReadState(conversationId);
-      } else if (!isOwnMessage) {
+      } else if (
+        !isOwnMessage &&
+        !mutedDirectConversationIds.includes(String(conversationId))
+      ) {
         setUnreadDirectCounts((prevCounts) => {
           const key = String(conversationId);
 
@@ -2793,7 +2763,12 @@ const MainPage = () => {
         String(channelId) === String(activeChannelId) &&
         String(serverId) === String(activeServerId);
 
-      if (isOwnMessage || isCurrentChannel) {
+      if (
+        isOwnMessage ||
+        isCurrentChannel ||
+        mutedServerIds.includes(String(serverId)) ||
+        mutedChannelIds.includes(String(channelId))
+      ) {
         return;
       }
 
@@ -3050,7 +3025,10 @@ const MainPage = () => {
     persistDirectConversationReadState,
     applyUserProfileUpdate,
     updateMessageReactionsInState,
-    updatePinnedMessageInState
+    updatePinnedMessageInState,
+    mutedServerIds,
+    mutedChannelIds,
+    mutedDirectConversationIds
   ]);
 
   useEffect(() => {
@@ -4437,134 +4415,6 @@ const MainPage = () => {
     }
   };
 
-  const handleOpenReportModal = ({ userId, username, contextType = "profile", contextId = null }) => {
-    if (!userId) {
-      return;
-    }
-
-    setReportModal({
-      isOpen: true,
-      userId,
-      username: username || "this user",
-      contextType,
-      contextId
-    });
-    setReportReason("");
-    setReportSuccess("");
-    setSafetyActionError("");
-  };
-
-  const handleCloseReportModal = () => {
-    setReportModal({
-      isOpen: false,
-      userId: null,
-      username: "",
-      contextType: "profile",
-      contextId: null
-    });
-    setReportReason("");
-    setIsSubmittingReport(false);
-  };
-
-  const handleSubmitReport = async (event) => {
-    event.preventDefault();
-
-    const token = getAuthToken();
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    const reason = reportReason.trim();
-
-    if (!reason) {
-      setSafetyActionError("Please write a short reason before submitting the report.");
-      return;
-    }
-
-    try {
-      setIsSubmittingReport(true);
-      setSafetyActionError("");
-      await reportUser(token, reportModal.userId, {
-        reason,
-        context_type: reportModal.contextType,
-        context_id: reportModal.contextId
-      });
-      setReportSuccess("Report submitted successfully.");
-      handleCloseReportModal();
-    } catch (error) {
-      setSafetyActionError(error.message || "Failed to submit report.");
-    } finally {
-      setIsSubmittingReport(false);
-    }
-  };
-
-  const handleBlockUser = async (targetUserId, targetUsername = "this user") => {
-    const token = getAuthToken();
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    if (!targetUserId) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Block ${targetUsername}? This will remove them from your friends and stop direct messages between you.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setSafetyActionKey(`block-${targetUserId}`);
-      setSafetyActionError("");
-      const response = await blockUser(token, targetUserId);
-      setBlockedUsers(normalizeBlockedUsers(response));
-      await Promise.all([
-        loadFriends(token),
-        loadDirectConversationList(token),
-        loadFriendRequests(token),
-        loadUnreadCounts(token)
-      ]);
-
-      if (
-        activeConversationUser &&
-        String(activeConversationUser.user_id) === String(targetUserId)
-      ) {
-        setActiveConversationId(null);
-      }
-    } catch (error) {
-      setSafetyActionError(error.message || "Failed to block user.");
-    } finally {
-      setSafetyActionKey(null);
-    }
-  };
-
-  const handleUnblockUser = async (targetUserId) => {
-    const token = getAuthToken();
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    try {
-      setSafetyActionKey(`unblock-${targetUserId}`);
-      setSafetyActionError("");
-      const response = await unblockUser(token, targetUserId);
-      setBlockedUsers(normalizeBlockedUsers(response));
-    } catch (error) {
-      setSafetyActionError(error.message || "Failed to unblock user.");
-    } finally {
-      setSafetyActionKey(null);
-    }
-  };
-
   const handleJumpToPinnedMessage = async (message) => {
     const messageId = isDmView ? getDirectMessageId(message) : getMessageId(message);
 
@@ -5164,8 +5014,13 @@ const MainPage = () => {
                 const serverId = getServerId(server);
                 const serverName = getServerName(server);
                 const isActive = String(serverId) === String(activeServerId);
-                const serverUnreadCount = getUnreadValue(unreadServerCounts, serverId);
-                const serverMentionCount = getUnreadValue(mentionServerCounts, serverId);
+                const serverIsMuted = mutedServerIds.includes(String(serverId));
+                const serverUnreadCount = serverIsMuted
+                  ? 0
+                  : getUnreadValue(unreadServerCounts, serverId);
+                const serverMentionCount = serverIsMuted
+                  ? 0
+                  : getUnreadValue(mentionServerCounts, serverId);
                 const hasServerActivity = serverUnreadCount > 0 || serverMentionCount > 0;
 
 
@@ -5333,10 +5188,12 @@ const MainPage = () => {
                           String(conversationId) === String(activeConversationId);
                         const presenceStatus =
                           getConversationPresenceStatus(conversation);
-                        const unreadCount = getUnreadValue(
-                          unreadDirectCounts,
-                          conversationId
+                        const conversationIsMuted = mutedDirectConversationIds.includes(
+                          String(conversationId)
                         );
+                        const unreadCount = conversationIsMuted
+                          ? 0
+                          : getUnreadValue(unreadDirectCounts, conversationId);
 
                         return (
                           <div
@@ -5433,38 +5290,6 @@ const MainPage = () => {
                                         : "Mute DM"}
                                     </button>
 
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenReportModal({
-                                          userId: getConversationOtherUserId(conversation),
-                                          username: getConversationOtherUsername(conversation),
-                                          contextType: "direct_conversation",
-                                          contextId: conversationId
-                                        });
-                                        setOpenConversationMenuId(null);
-                                      }}
-                                      className="auth-button compact-button"
-                                    >
-                                      Report user
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleBlockUser(
-                                          getConversationOtherUserId(conversation),
-                                          getConversationOtherUsername(conversation)
-                                        );
-                                        setOpenConversationMenuId(null);
-                                      }}
-                                      className="auth-button auth-button-danger compact-button discord-menu-button-danger"
-                                      disabled={safetyActionKey === `block-${getConversationOtherUserId(conversation)}`}
-                                    >
-                                      Block user
-                                    </button>
 
                                     <button
                                       type="button"
@@ -5502,14 +5327,15 @@ const MainPage = () => {
                             String(channelId) === String(activeChannelId);
                           const isGeneralChannel =
                             getChannelName(channel).trim().toLowerCase() === "general";
-                          const unreadCount = getUnreadValue(
-                            unreadChannelCounts,
-                            channelId
-                          );
-                          const mentionCount = getUnreadValue(
-                            mentionChannelCounts,
-                            channelId
-                          );
+                          const channelIsMuted =
+                            mutedServerIds.includes(String(activeServerId)) ||
+                            mutedChannelIds.includes(String(channelId));
+                          const unreadCount = channelIsMuted
+                            ? 0
+                            : getUnreadValue(unreadChannelCounts, channelId);
+                          const mentionCount = channelIsMuted
+                            ? 0
+                            : getUnreadValue(mentionChannelCounts, channelId);
                           const hasChannelActivity = unreadCount > 0 || mentionCount > 0;
 
                           return (
@@ -5831,17 +5657,6 @@ const MainPage = () => {
               </p>
             ) : null}
 
-            {safetyActionError ? (
-              <p className="auth-error server-inline-error discord-header-inline-error">
-                {safetyActionError}
-              </p>
-            ) : null}
-
-            {reportSuccess ? (
-              <p className="auth-success server-inline-success discord-header-inline-error">
-                {reportSuccess}
-              </p>
-            ) : null}
 
             {((!isDmView && activeServerId) || (isDmView && activeConversationId)) ? (
               <div className="discord-chat-header-actions">
@@ -5877,23 +5692,6 @@ const MainPage = () => {
                     >
                       {activeConversationMuted ? "Unmute DM" : "Mute DM"}
                     </button>
-
-                    {activeConversationUser ? (
-                      <button
-                        type="button"
-                        className="discord-header-action-button"
-                        onClick={() =>
-                          handleOpenReportModal({
-                            userId: activeConversationUser.user_id,
-                            username: activeConversationUser.username,
-                            contextType: "direct_conversation",
-                            contextId: activeConversationId
-                          })
-                        }
-                      >
-                        Report
-                      </button>
-                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -6070,62 +5868,12 @@ const MainPage = () => {
                                     ? "Removing..."
                                     : "Remove"}
                                 </button>
-                                <button
-                                  type="button"
-                                  className="auth-button discord-friend-home-action"
-                                  onClick={() =>
-                                    handleOpenReportModal({
-                                      userId: getFriendId(friend),
-                                      username: getFriendName(friend),
-                                      contextType: "profile"
-                                    })
-                                  }
-                                >
-                                  Report
-                                </button>
-
-                                <button
-                                  type="button"
-                                  className="auth-button auth-button-danger discord-friend-home-action discord-friend-home-action-danger"
-                                  onClick={() => handleBlockUser(getFriendId(friend), getFriendName(friend))}
-                                  disabled={safetyActionKey === `block-${getFriendId(friend)}`}
-                                >
-                                  {safetyActionKey === `block-${getFriendId(friend)}`
-                                    ? "Blocking..."
-                                    : "Block"}
-                                </button>
                               </div>
                             </div>
                           );
                         })}
                       </div>
                     )}
-
-                    {blockedUsers.length > 0 ? (
-                      <div className="discord-blocked-users-panel">
-                        <div className="discord-section-heading">Blocked Users</div>
-                        <div className="discord-blocked-users-list">
-                          {blockedUsers.map((blockedUser) => (
-                            <div
-                              key={blockedUser.user_id || blockedUser.block_id}
-                              className="discord-blocked-user-row"
-                            >
-                              <span>{blockedUser.username}</span>
-                              <button
-                                type="button"
-                                className="auth-button compact-button"
-                                onClick={() => handleUnblockUser(blockedUser.user_id)}
-                                disabled={safetyActionKey === `unblock-${blockedUser.user_id}`}
-                              >
-                                {safetyActionKey === `unblock-${blockedUser.user_id}`
-                                  ? "Unblocking..."
-                                  : "Unblock"}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
                   </>
                 ) : activeDmSection === "add-friend" ? (
                   <>
@@ -7200,62 +6948,6 @@ const MainPage = () => {
                 Download
               </a>
             </div>
-          </div>
-        </div>
-      ) : null}
-
-      {reportModal.isOpen ? (
-        <div
-          className="discord-create-server-backdrop"
-          onClick={handleCloseReportModal}
-        >
-          <div
-            className="discord-create-server-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="discord-modal-header">
-              <h2 className="discord-modal-title">Report {reportModal.username}</h2>
-              <p className="discord-modal-subtitle">
-                Send a short moderation note so the report can be reviewed later.
-              </p>
-            </div>
-
-            {safetyActionError ? (
-              <p className="auth-error server-inline-error">{safetyActionError}</p>
-            ) : null}
-
-            <form onSubmit={handleSubmitReport} className="discord-form-stack">
-              <textarea
-                className="auth-input compact-input compact-textarea"
-                value={reportReason}
-                onChange={(e) => {
-                  setReportReason(e.target.value);
-                  setSafetyActionError("");
-                }}
-                placeholder="Reason for reporting this user"
-                rows="4"
-                maxLength="1000"
-              />
-
-              <div className="discord-modal-actions">
-                <button
-                  type="button"
-                  className="auth-button auth-button-secondary compact-button"
-                  onClick={handleCloseReportModal}
-                  disabled={isSubmittingReport}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="auth-button compact-button"
-                  disabled={isSubmittingReport}
-                >
-                  {isSubmittingReport ? "Submitting..." : "Submit report"}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       ) : null}
