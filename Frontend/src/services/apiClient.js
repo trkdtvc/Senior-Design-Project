@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE_URL = "http://localhost:5000/api";
+const API_REQUEST_TIMEOUT_MS = 30000;
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL?.replace(/\/$/, "") || DEFAULT_API_BASE_URL;
@@ -52,23 +53,53 @@ const parseResponseBody = async (response) => {
   return text ? { message: text } : null;
 };
 
+const createApiError = (message, response = null) => {
+  const error = new Error(message);
+
+  if (response) {
+    error.response = response;
+  }
+
+  return error;
+};
+
 export const handleResponse = async (response) => {
   const data = await parseResponseBody(response);
 
   if (!response.ok) {
-    const error = new Error(
-      data?.message || data?.error || "Request failed."
-    );
-
-    error.response = {
+    throw createApiError(data?.message || data?.error || "Request failed.", {
       data,
       status: response.status
-    };
-
-    throw error;
+    });
   }
 
   return data;
+};
+
+const buildRequestHeaders = ({ body, headers, isFormData, token }) => {
+  if (isFormData) {
+    return {
+      ...getAuthHeaders(token),
+      ...headers
+    };
+  }
+
+  return {
+    ...(body !== undefined ? getJsonHeaders(token) : getAuthHeaders(token)),
+    ...headers
+  };
+};
+
+const buildRequestBody = ({ body, isFormData }) => {
+  if (body === undefined) {
+    return undefined;
+  }
+
+  if (isFormData || typeof body === "string") {
+    return body;
+  }
+
+  return JSON.stringify(body);
 };
 
 export const apiRequest = async (
@@ -78,24 +109,39 @@ export const apiRequest = async (
     token,
     body,
     headers = {},
-    isFormData = body instanceof FormData
+    isFormData = body instanceof FormData,
+    timeoutMs = API_REQUEST_TIMEOUT_MS
   } = {}
 ) => {
-  const requestHeaders = isFormData
-    ? {
-        ...getAuthHeaders(token),
-        ...headers
-      }
-    : {
-        ...(body !== undefined ? getJsonHeaders(token) : getAuthHeaders(token)),
-        ...headers
-      };
+  const controller = typeof AbortController !== "undefined"
+    ? new AbortController()
+    : null;
+  const timeoutId = controller
+    ? globalThis.setTimeout(() => controller.abort(), timeoutMs)
+    : null;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: requestHeaders,
-    body: isFormData || typeof body === "string" ? body : JSON.stringify(body)
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: buildRequestHeaders({ body, headers, isFormData, token }),
+      body: buildRequestBody({ body, isFormData }),
+      signal: controller?.signal
+    });
 
-  return handleResponse(response);
+    return await handleResponse(response);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw createApiError("Request timed out. Please try again.");
+    }
+
+    if (error instanceof TypeError) {
+      throw createApiError("Unable to reach the server. Please try again.");
+    }
+
+    throw error;
+  } finally {
+    if (timeoutId) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
 };

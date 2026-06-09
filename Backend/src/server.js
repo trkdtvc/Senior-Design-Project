@@ -13,6 +13,12 @@ const {
 } = require("./models/directMessageModel");
 
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === "production";
+const debugLog = (...args) => {
+  if (!isProduction) {
+    console.log(...args);
+  }
+};
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const SOCKET_CORS_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",")
@@ -119,10 +125,10 @@ io.on("connection", async (socket) => {
   const userId = socket.user.user_id;
   const username = socket.user.username;
 
-  console.log(`Socket connected: ${socket.id} (user ${userId})`);
+  debugLog(`Socket connected: ${socket.id} (user ${userId})`);
 
   addActiveSocket(userId, socket.id);
-  console.log(
+  debugLog(
     `Active sockets after connect for user ${userId}: ${getActiveSocketCount(userId)}`
   );
   socket.join(`user_${userId}`);
@@ -261,10 +267,10 @@ io.on("connection", async (socket) => {
   });
 
   socket.on("disconnect", async () => {
-    console.log(`Socket disconnected: ${socket.id} (user ${userId})`);
+    debugLog(`Socket disconnected: ${socket.id} (user ${userId})`);
 
     removeActiveSocket(userId, socket.id);
-    console.log(
+    debugLog(
       `Active sockets after disconnect for user ${userId}: ${getActiveSocketCount(userId)}`
     );
 

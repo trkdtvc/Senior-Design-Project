@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getMe, updateProfile } from "../services/authService";
 import {
@@ -74,12 +74,13 @@ import {
   reportUser
 } from "../services/userSafetyService";
 import "../styles/auth.css";
-import EmojiPicker, { Theme } from "emoji-picker-react";
+const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
 const FILE_BASE_URL = getFileBaseUrl();
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MESSAGE_PAGE_SIZE = 30;
 const QUICK_REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏"];
+const EMOJI_PICKER_THEME = "dark";
 const getAuthToken = () => localStorage.getItem("token");
 
 const ATTACHMENT_ACCEPT_TYPES = [
@@ -6926,17 +6927,25 @@ const MainPage = () => {
 
                   {isEmojiPickerOpen ? (
                     <div className="discord-emoji-picker-popover">
-                      <EmojiPicker
-                        theme={Theme.DARK}
-                        onEmojiClick={handleAddEmoji}
-                        previewConfig={{
-                          showPreview: false
-                        }}
-                        searchDisabled={false}
-                        skinTonesDisabled={false}
-                        height={420}
-                        width={330}
-                      />
+                      <Suspense
+                        fallback={
+                          <div className="discord-emoji-picker-loading">
+                            Loading emoji picker…
+                          </div>
+                        }
+                      >
+                        <EmojiPicker
+                          theme={EMOJI_PICKER_THEME}
+                          onEmojiClick={handleAddEmoji}
+                          previewConfig={{
+                            showPreview: false
+                          }}
+                          searchDisabled={false}
+                          skinTonesDisabled={false}
+                          height={420}
+                          width={330}
+                        />
+                      </Suspense>
                     </div>
                   ) : null}
                 </div>
