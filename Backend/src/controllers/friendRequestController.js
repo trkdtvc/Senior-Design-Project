@@ -48,6 +48,16 @@ const sendFriendRequest = async (req, res, next) => {
     }
 
 
+    const usersBlockedEachOther = await friendRequestModel.hasBlockBetweenUsers(
+      senderId,
+      receiver.user_id
+    );
+
+    if (usersBlockedEachOther) {
+      res.status(403);
+      throw new Error("You cannot send a friend request to this user");
+    }
+
     const existingFriendship =
       await friendRequestModel.getFriendshipBetweenUsers(
         senderId,
@@ -162,6 +172,17 @@ const acceptFriendRequest = async (req, res, next) => {
       throw new Error("Only the receiver can accept this friend request");
     }
 
+
+    const usersBlockedEachOther = await friendRequestModel.hasBlockBetweenUsers(
+      request.sender_id,
+      request.receiver_id
+    );
+
+    if (usersBlockedEachOther) {
+      await friendRequestModel.updateFriendRequestStatus(requestId, "rejected");
+      res.status(403);
+      throw new Error("This friend request can no longer be accepted");
+    }
 
     const existingFriendship =
       await friendRequestModel.getFriendshipBetweenUsers(

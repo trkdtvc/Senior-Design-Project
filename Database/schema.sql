@@ -215,6 +215,42 @@ CREATE TABLE friendships (
   CONSTRAINT friendships_ibfk_2 FOREIGN KEY (user_two_id) REFERENCES users (user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+
+CREATE TABLE user_blocks (
+  block_id INT NOT NULL AUTO_INCREMENT,
+  blocker_id INT NOT NULL,
+  blocked_id INT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (block_id),
+  UNIQUE KEY unique_user_block (blocker_id, blocked_id),
+  KEY blocked_id (blocked_id),
+  CONSTRAINT user_blocks_blocker_fk
+    FOREIGN KEY (blocker_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_blocks_blocked_fk
+    FOREIGN KEY (blocked_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_blocks_no_self_check CHECK (blocker_id <> blocked_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE user_reports (
+  report_id INT NOT NULL AUTO_INCREMENT,
+  reporter_id INT NOT NULL,
+  reported_user_id INT NOT NULL,
+  reason VARCHAR(100) NOT NULL,
+  details TEXT DEFAULT NULL,
+  status ENUM('open','reviewed','dismissed') NOT NULL DEFAULT 'open',
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at DATETIME DEFAULT NULL,
+  PRIMARY KEY (report_id),
+  KEY reporter_id (reporter_id),
+  KEY reported_user_id (reported_user_id),
+  KEY status (status),
+  CONSTRAINT user_reports_reporter_fk
+    FOREIGN KEY (reporter_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_reports_reported_fk
+    FOREIGN KEY (reported_user_id) REFERENCES users (user_id) ON DELETE CASCADE,
+  CONSTRAINT user_reports_no_self_check CHECK (reporter_id <> reported_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE direct_conversations (
   conversation_id INT NOT NULL AUTO_INCREMENT,
   user_one_id INT NOT NULL,

@@ -3066,3 +3066,19 @@ textarea.auth-input {
   color: #f5f7ff;
   font-size: 14px;
 }
+
+.discord-profile-warning {
+  color: #fbbf24;
+}
+
+.discord-mini-action-button {
+  width: auto;
+  min-width: 86px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+}
+
+.discord-report-textarea {
+  min-height: 120px;
+  resize: vertical;
+}

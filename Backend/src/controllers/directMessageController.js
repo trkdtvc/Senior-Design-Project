@@ -20,6 +20,7 @@ const {
   markDirectConversationAsRead,
   getUnreadDirectConversationCountsByUserId
 } = require("../models/directMessageModel");
+const userSafetyModel = require("../models/userSafetyModel");
 
 const createAttachmentPayload = (file) => {
   if (!file) {
@@ -102,6 +103,27 @@ const userExists = async (userId) => {
   return !!rows[0];
 };
 
+
+const getOtherConversationUserId = (conversation, currentUserId) =>
+  Number(conversation.user_one_id) === Number(currentUserId)
+    ? Number(conversation.user_two_id)
+    : Number(conversation.user_one_id);
+
+const assertConversationNotBlocked = async (conversation, currentUserId, res) => {
+  const otherUserId = getOtherConversationUserId(conversation, currentUserId);
+  const block = await userSafetyModel.getBlockBetweenUsers(
+    currentUserId,
+    otherUserId
+  );
+
+  if (block) {
+    res.status(403);
+    throw new Error("You cannot send messages in this blocked conversation");
+  }
+
+  return otherUserId;
+};
+
 const getOrCreateDirectConversation = async (req, res, next) => {
   try {
     const currentUserId = req.user.user_id;
@@ -124,6 +146,16 @@ const getOrCreateDirectConversation = async (req, res, next) => {
       throw new Error("Friend user not found");
     }
 
+
+    const usersBlockedEachOther = await userSafetyModel.hasBlockBetweenUsers(
+      currentUserId,
+      friendId
+    );
+
+    if (usersBlockedEachOther) {
+      res.status(403);
+      throw new Error("You cannot create a direct conversation with this user");
+    }
 
     const friends = await areUsersFriends(currentUserId, friendId);
 
@@ -262,6 +294,12 @@ const sendDirectMessageToConversation = async (req, res, next) => {
     }
 
 
+    const otherUserId = await assertConversationNotBlocked(
+      conversation,
+      currentUserId,
+      res
+    );
+
     let replyToMessage = null;
 
     if (replyToDirectMessageId) {
@@ -308,10 +346,6 @@ const sendDirectMessageToConversation = async (req, res, next) => {
     newMessage.pinned_at = null;
 
     const io = req.app.get("io");
-    const otherUserId =
-      Number(conversation.user_one_id) === Number(currentUserId)
-        ? Number(conversation.user_two_id)
-        : Number(conversation.user_one_id);
 
     const socketPayload = {
       conversation_id: Number(conversationId),

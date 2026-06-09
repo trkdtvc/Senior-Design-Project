@@ -58,7 +58,7 @@ import {
   setServerMute,
   setChannelMute,
   setDirectConversationMute
-} from "../services/notificationSettingsService";
+} from "../services/notificationSettingsService.js";
 import {
   getFriends,
   getIncomingFriendRequests,
@@ -67,6 +67,12 @@ import {
   respondToFriendRequest,
   removeFriend
 } from "../services/friendService";
+import {
+  getBlockedUsers,
+  blockUser,
+  unblockUser,
+  reportUser
+} from "../services/userSafetyService";
 import "../styles/auth.css";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 
@@ -251,6 +257,29 @@ const getFriendPresenceStatus = (friend) =>
   normalizePresenceStatus(
     friend?.presence_status ?? friend?.presenceStatus ?? friend?.is_online
   );
+
+const getBlockedUserId = (blockedUser) =>
+  blockedUser?.blocked_id ||
+  blockedUser?.blocked_user_id ||
+  blockedUser?.user_id ||
+  blockedUser?.id ||
+  null;
+
+const getBlockedUsername = (blockedUser) =>
+  blockedUser?.username || blockedUser?.blocked_username || "Unknown user";
+
+const getBlockedEmail = (blockedUser) =>
+  blockedUser?.email || blockedUser?.blocked_email || "";
+
+const getConversationBlockedByMe = (conversation) =>
+  Number(conversation?.blocked_by_me || conversation?.blockedByMe || 0) === 1 ||
+  conversation?.blocked_by_me === true ||
+  conversation?.blockedByMe === true;
+
+const getConversationBlockedMe = (conversation) =>
+  Number(conversation?.blocked_me || conversation?.blockedMe || 0) === 1 ||
+  conversation?.blocked_me === true ||
+  conversation?.blockedMe === true;
 
 const getConversationId = (conversation) =>
   conversation?.conversation_id ||
@@ -604,6 +633,14 @@ const applyNotificationSettingsPayload = (payload) =>
     muted_channel_ids: [],
     muted_direct_conversation_ids: []
   };
+
+const normalizeBlockedUsers = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.blocked_users)) return payload.blocked_users;
+  if (Array.isArray(payload?.blockedUsers)) return payload.blockedUsers;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+};
 
 
 const getMentionedUserIds = (message) => {
@@ -995,6 +1032,18 @@ const MainPage = () => {
   });
   const [settingsActionError, setSettingsActionError] = useState("");
   const [settingsActionKey, setSettingsActionKey] = useState(null);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [safetyActionError, setSafetyActionError] = useState("");
+  const [safetyActionSuccess, setSafetyActionSuccess] = useState("");
+  const [safetyActionKey, setSafetyActionKey] = useState(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportTargetUser, setReportTargetUser] = useState(null);
+  const [reportFormData, setReportFormData] = useState({
+    reason: "",
+    details: ""
+  });
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportError, setReportError] = useState("");
   const [previewAttachment, setPreviewAttachment] = useState(null);
 
   const [activeServerId, setActiveServerId] = useState(null);
@@ -1291,6 +1340,19 @@ const MainPage = () => {
   const activeConversationMuted = activeConversationId
     ? mutedDirectConversationIds.includes(String(activeConversationId))
     : false;
+  const blockedUserIds = useMemo(
+    () => new Set(blockedUsers.map((blockedUser) => String(getBlockedUserId(blockedUser)))),
+    [blockedUsers]
+  );
+  const activeConversationBlockedByMe = activeConversationUser
+    ? blockedUserIds.has(String(activeConversationUser.user_id)) ||
+      getConversationBlockedByMe(activeConversation)
+    : false;
+  const activeConversationBlockedMe = activeConversation
+    ? getConversationBlockedMe(activeConversation)
+    : false;
+  const activeConversationBlocked =
+    Boolean(activeConversationBlockedByMe || activeConversationBlockedMe);
 
   const activeMessageSearchLabel = isDmView
     ? "direct message"
@@ -1661,6 +1723,13 @@ const MainPage = () => {
     });
 
     return normalizedSettings;
+  }, []);
+
+  const loadBlockedUsers = useCallback(async (token) => {
+    const blockedData = await getBlockedUsers(token);
+    const normalizedBlockedUsers = normalizeBlockedUsers(blockedData);
+    setBlockedUsers(normalizedBlockedUsers);
+    return normalizedBlockedUsers;
   }, []);
 
   const loadFriendRequests = useCallback(async (token) => {
@@ -2056,7 +2125,8 @@ const MainPage = () => {
           loadFriends(token),
           loadDirectConversationList(token),
           loadFriendRequests(token),
-          loadNotificationSettings(token)
+          loadNotificationSettings(token),
+          loadBlockedUsers(token)
         ]);
 
         try {
@@ -2088,6 +2158,7 @@ const MainPage = () => {
     loadDirectConversationList,
     loadFriendRequests,
     loadNotificationSettings,
+    loadBlockedUsers,
     loadUnreadCounts
   ]);
 
@@ -2972,6 +3043,66 @@ const MainPage = () => {
       updatePinnedMessageInState(message, true);
     };
 
+
+    const handleUserBlockUpdated = (payload) => {
+      const blockedUserId = payload?.blocked_id || payload?.blockedId;
+      const token = getAuthToken();
+
+      if (token) {
+        loadBlockedUsers(token);
+        loadFriends(token);
+        loadFriendRequests(token);
+      }
+
+      if (!blockedUserId) {
+        return;
+      }
+
+      setDirectConversations((prevConversations) =>
+        prevConversations.map((conversation) =>
+          String(getConversationOtherUserId(conversation)) === String(blockedUserId)
+            ? {
+                ...conversation,
+                blocked_by_me: Boolean(payload?.blocked)
+              }
+            : conversation
+        )
+      );
+    };
+
+    const handleBlockedByUserUpdated = (payload) => {
+      const blockerId = payload?.blocker_id || payload?.blockerId;
+
+      if (!blockerId) {
+        return;
+      }
+
+      const token = getAuthToken();
+
+      if (token) {
+        loadFriendRequests(token);
+      }
+
+      setDirectConversations((prevConversations) =>
+        prevConversations.map((conversation) =>
+          String(getConversationOtherUserId(conversation)) === String(blockerId)
+            ? {
+                ...conversation,
+                blocked_me: Boolean(payload?.blocked)
+              }
+            : conversation
+        )
+      );
+
+      if (payload?.blocked) {
+        setFriends((prevFriends) =>
+          prevFriends.filter(
+            (friend) => String(getFriendId(friend)) !== String(blockerId)
+          )
+        );
+      }
+    };
+
     socket.on("presence_update", handlePresenceUpdate);
     socket.on("user_profile_updated", handleProfileUpdated);
     socket.on("new_message", handleNewMessage);
@@ -2991,6 +3122,8 @@ const MainPage = () => {
     socket.on("friend_removed", handleFriendRemoved);
     socket.on("channel_message_notification", handleChannelMessageNotification);
     socket.on("friend_request_received", handleFriendRequestReceived);
+    socket.on("user_block_updated", handleUserBlockUpdated);
+    socket.on("blocked_by_user_updated", handleBlockedByUserUpdated);
 
     return () => {
       socket.off("presence_update", handlePresenceUpdate);
@@ -3012,6 +3145,8 @@ const MainPage = () => {
       socket.off("friend_removed", handleFriendRemoved);
       socket.off("channel_message_notification", handleChannelMessageNotification);
       socket.off("friend_request_received", handleFriendRequestReceived);
+      socket.off("user_block_updated", handleUserBlockUpdated);
+      socket.off("blocked_by_user_updated", handleBlockedByUserUpdated);
     };
   }, [
     isSocketReady,
@@ -3019,6 +3154,9 @@ const MainPage = () => {
     activeChannelId,
     activeConversationId,
     loadDirectConversationList,
+    loadBlockedUsers,
+    loadFriends,
+    loadFriendRequests,
     fetchFriendRequests,
     currentUserId,
     persistChannelReadState,
@@ -4415,6 +4553,181 @@ const MainPage = () => {
     }
   };
 
+
+  const updateConversationBlockState = (targetUserId, updates) => {
+    setDirectConversations((prevConversations) =>
+      prevConversations.map((conversation) =>
+        String(getConversationOtherUserId(conversation)) === String(targetUserId)
+          ? {
+              ...conversation,
+              ...updates
+            }
+          : conversation
+      )
+    );
+  };
+
+  const handleBlockUser = async (targetUser) => {
+    const token = getAuthToken();
+    const targetUserId = targetUser?.user_id || targetUser?.id;
+    const targetUsername = targetUser?.username || "this user";
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!targetUserId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Block ${targetUsername}? They will not be able to send you friend requests or direct messages.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSafetyActionKey(`block-${targetUserId}`);
+      setSafetyActionError("");
+      setSafetyActionSuccess("");
+
+      const response = await blockUser(token, targetUserId);
+      const block = response?.block || response?.data?.block || null;
+
+      await Promise.all([
+        loadBlockedUsers(token),
+        loadFriends(token),
+        loadFriendRequests(token)
+      ]);
+
+      updateConversationBlockState(targetUserId, {
+        blocked_by_me: true,
+        blocked_me: false
+      });
+
+      if (block) {
+        setBlockedUsers((prevBlockedUsers) => {
+          const alreadyExists = prevBlockedUsers.some(
+            (blockedUser) =>
+              String(getBlockedUserId(blockedUser)) === String(targetUserId)
+          );
+
+          return alreadyExists ? prevBlockedUsers : [block, ...prevBlockedUsers];
+        });
+      }
+
+      setSafetyActionSuccess(`${targetUsername} has been blocked.`);
+    } catch (error) {
+      setSafetyActionError(error.message || "Failed to block user.");
+    } finally {
+      setSafetyActionKey(null);
+    }
+  };
+
+  const handleUnblockUser = async (targetUser) => {
+    const token = getAuthToken();
+    const targetUserId = targetUser?.user_id || targetUser?.id;
+    const targetUsername = targetUser?.username || "this user";
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!targetUserId) {
+      return;
+    }
+
+    try {
+      setSafetyActionKey(`unblock-${targetUserId}`);
+      setSafetyActionError("");
+      setSafetyActionSuccess("");
+
+      await unblockUser(token, targetUserId);
+      setBlockedUsers((prevBlockedUsers) =>
+        prevBlockedUsers.filter(
+          (blockedUser) =>
+            String(getBlockedUserId(blockedUser)) !== String(targetUserId)
+        )
+      );
+      updateConversationBlockState(targetUserId, {
+        blocked_by_me: false
+      });
+      setSafetyActionSuccess(`${targetUsername} has been unblocked.`);
+    } catch (error) {
+      setSafetyActionError(error.message || "Failed to unblock user.");
+    } finally {
+      setSafetyActionKey(null);
+    }
+  };
+
+  const handleOpenReportModal = (targetUser) => {
+    setReportTargetUser(targetUser);
+    setReportFormData({
+      reason: "",
+      details: ""
+    });
+    setReportError("");
+    setIsReportModalOpen(true);
+  };
+
+  const handleCloseReportModal = () => {
+    if (isSubmittingReport) {
+      return;
+    }
+
+    setIsReportModalOpen(false);
+    setReportTargetUser(null);
+    setReportError("");
+  };
+
+  const handleSubmitReport = async (event) => {
+    event.preventDefault();
+
+    const token = getAuthToken();
+    const targetUserId = reportTargetUser?.user_id || reportTargetUser?.id;
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!targetUserId) {
+      setReportError("Select a user to report.");
+      return;
+    }
+
+    const reason = reportFormData.reason.trim();
+
+    if (!reason) {
+      setReportError("Report reason is required.");
+      return;
+    }
+
+    try {
+      setIsSubmittingReport(true);
+      setReportError("");
+      setSafetyActionError("");
+      setSafetyActionSuccess("");
+
+      await reportUser(token, targetUserId, {
+        reason,
+        details: reportFormData.details.trim()
+      });
+
+      setIsReportModalOpen(false);
+      setReportTargetUser(null);
+      setSafetyActionSuccess("Report submitted successfully.");
+    } catch (error) {
+      setReportError(error.message || "Failed to submit report.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const handleJumpToPinnedMessage = async (message) => {
     const messageId = isDmView ? getDirectMessageId(message) : getMessageId(message);
 
@@ -4501,6 +4814,15 @@ const MainPage = () => {
       if (isDmView) {
         if (!activeConversationId) {
           setMessageError("Select a direct conversation first.");
+          return;
+        }
+
+        if (activeConversationBlocked) {
+          setMessageError(
+            activeConversationBlockedByMe
+              ? "Unblock this user before sending a direct message."
+              : "You cannot send messages in this conversation."
+          );
           return;
         }
 
@@ -5194,6 +5516,10 @@ const MainPage = () => {
                         const unreadCount = conversationIsMuted
                           ? 0
                           : getUnreadValue(unreadDirectCounts, conversationId);
+                        const conversationBlockedByMe =
+                          getConversationBlockedByMe(conversation) ||
+                          blockedUserIds.has(String(getConversationOtherUserId(conversation)));
+                        const conversationBlockedMe = getConversationBlockedMe(conversation);
 
                         return (
                           <div
@@ -5246,7 +5572,11 @@ const MainPage = () => {
                                 </div>
 
                                 <p className="discord-dm-preview">
-                                  {getConversationLastMessage(conversation) || "No messages yet."}
+                                  {conversationBlockedByMe
+                                    ? "Blocked"
+                                    : conversationBlockedMe
+                                      ? "Messaging unavailable"
+                                      : getConversationLastMessage(conversation) || "No messages yet."}
                                 </p>
                               </div>
                             </button>
@@ -5810,6 +6140,18 @@ const MainPage = () => {
                       </p>
                     ) : null}
 
+                    {safetyActionError ? (
+                      <p className="auth-error server-inline-error server-inline-error-tight">
+                        {safetyActionError}
+                      </p>
+                    ) : null}
+
+                    {safetyActionSuccess ? (
+                      <p className="auth-success discord-inline-success">
+                        {safetyActionSuccess}
+                      </p>
+                    ) : null}
+
                     {filteredFriends.length === 0 ? (
                       <div className="discord-home-empty-card">
                         No friends found.
@@ -5856,6 +6198,37 @@ const MainPage = () => {
                                   onClick={() => handleStartDirectConversation(friend)}
                                 >
                                   Message
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="auth-button discord-friend-home-action"
+                                  onClick={() =>
+                                    handleOpenReportModal({
+                                      user_id: getFriendId(friend),
+                                      username: getFriendName(friend),
+                                      email: getFriendEmail(friend)
+                                    })
+                                  }
+                                >
+                                  Report
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="auth-button auth-button-danger discord-friend-home-action discord-friend-home-action-danger"
+                                  onClick={() =>
+                                    handleBlockUser({
+                                      user_id: getFriendId(friend),
+                                      username: getFriendName(friend),
+                                      email: getFriendEmail(friend)
+                                    })
+                                  }
+                                  disabled={safetyActionKey === `block-${getFriendId(friend)}`}
+                                >
+                                  {safetyActionKey === `block-${getFriendId(friend)}`
+                                    ? "Blocking..."
+                                    : "Block"}
                                 </button>
 
                                 <button
@@ -6449,6 +6822,14 @@ const MainPage = () => {
                 </p>
               )}
 
+              {isDmView && activeConversationBlocked ? (
+                <p className="auth-error server-inline-error server-inline-error-tight">
+                  {activeConversationBlockedByMe
+                    ? "You blocked this user. Unblock them to send messages again."
+                    : "You cannot send messages in this conversation."}
+                </p>
+              ) : null}
+
               {selectedReplyMessage ? (
                 <div className="discord-composer-preview">
                   <div className="discord-composer-preview-body">
@@ -6520,7 +6901,7 @@ const MainPage = () => {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={
                       isSendingMessage ||
-                      (isDmView && !activeConversationId) ||
+                      (isDmView && (!activeConversationId || activeConversationBlocked)) ||
                       (!isDmView && !activeChannelId)
                     }
                     title="Add attachment"
@@ -6533,7 +6914,7 @@ const MainPage = () => {
                     type="button"
                     onClick={() => setIsEmojiPickerOpen((isOpen) => !isOpen)}
                     disabled={
-                      (isDmView && !activeConversationId) ||
+                      (isDmView && (!activeConversationId || activeConversationBlocked)) ||
                       (!isDmView && !activeChannelId)
                     }
                     title="Add emoji"
@@ -6619,9 +7000,13 @@ const MainPage = () => {
                   className="message-input discord-composer-input"
                   placeholder={
                     isDmView
-                      ? activeConversationUser
-                        ? `Message @${activeConversationUser.username}`
-                        : "Select a direct conversation"
+                      ? activeConversationBlockedByMe
+                        ? "You blocked this user"
+                        : activeConversationBlockedMe
+                          ? "Messaging unavailable"
+                          : activeConversationUser
+                            ? `Message @${activeConversationUser.username}`
+                            : "Select a direct conversation"
                       : activeChannel
                         ? `Message #${getChannelName(activeChannel)}`
                         : "Select a channel"
@@ -6636,7 +7021,7 @@ const MainPage = () => {
                     window.setTimeout(() => closeMentionMenu(), 120);
                   }}
                   disabled={
-                    (isDmView && !activeConversationId) ||
+                    (isDmView && (!activeConversationId || activeConversationBlocked)) ||
                     (!isDmView && !activeChannelId)
                   }
                 />
@@ -6646,7 +7031,7 @@ const MainPage = () => {
                   className="auth-button discord-send-button"
                   disabled={
                     isSendingMessage ||
-                    (isDmView && !activeConversationId) ||
+                    (isDmView && (!activeConversationId || activeConversationBlocked)) ||
                     (!isDmView && !activeChannelId)
                   }
                 >
@@ -6688,6 +7073,64 @@ const MainPage = () => {
                       ? "Online"
                       : "Offline"}
                   </div>
+                  {activeConversationBlockedByMe ? (
+                    <p className="discord-profile-meta discord-profile-warning">
+                      You blocked this user.
+                    </p>
+                  ) : activeConversationBlockedMe ? (
+                    <p className="discord-profile-meta discord-profile-warning">
+                      Messaging with this user is unavailable.
+                    </p>
+                  ) : null}
+
+                  {safetyActionError ? (
+                    <p className="auth-error discord-profile-action-error">
+                      {safetyActionError}
+                    </p>
+                  ) : null}
+
+                  {safetyActionSuccess ? (
+                    <p className="auth-success discord-profile-action-success">
+                      {safetyActionSuccess}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="auth-button discord-profile-action-button"
+                    onClick={() => handleOpenReportModal(activeConversationUser)}
+                  >
+                    Report user
+                  </button>
+
+                  {activeConversationBlockedByMe ? (
+                    <button
+                      type="button"
+                      className="auth-button discord-profile-action-button"
+                      onClick={() => handleUnblockUser(activeConversationUser)}
+                      disabled={
+                        safetyActionKey === `unblock-${activeConversationUser.user_id}`
+                      }
+                    >
+                      {safetyActionKey === `unblock-${activeConversationUser.user_id}`
+                        ? "Unblocking..."
+                        : "Unblock user"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="auth-button auth-button-danger discord-profile-action-button"
+                      onClick={() => handleBlockUser(activeConversationUser)}
+                      disabled={
+                        safetyActionKey === `block-${activeConversationUser.user_id}`
+                      }
+                    >
+                      {safetyActionKey === `block-${activeConversationUser.user_id}`
+                        ? "Blocking..."
+                        : "Block user"}
+                    </button>
+                  )}
+
                   {activeConversationIsFriend ? (
                     <>
                       {removeFriendError ? (
@@ -6736,6 +7179,48 @@ const MainPage = () => {
                   >
                     Edit profile
                   </button>
+
+                  <div className="discord-blocked-users-panel">
+                    <div className="discord-home-section-label">Blocked Users</div>
+                    {blockedUsers.length === 0 ? (
+                      <p className="discord-profile-meta">No blocked users.</p>
+                    ) : (
+                      <div className="discord-blocked-users-list">
+                        {blockedUsers.map((blockedUser) => {
+                          const blockedUserId = getBlockedUserId(blockedUser);
+
+                          return (
+                            <div
+                              key={blockedUserId}
+                              className="discord-blocked-user-row"
+                            >
+                              <span>
+                                {getBlockedUsername(blockedUser)}
+                                {getBlockedEmail(blockedUser)
+                                  ? ` · ${getBlockedEmail(blockedUser)}`
+                                  : ""}
+                              </span>
+                              <button
+                                type="button"
+                                className="auth-button discord-mini-action-button"
+                                onClick={() =>
+                                  handleUnblockUser({
+                                    user_id: blockedUserId,
+                                    username: getBlockedUsername(blockedUser)
+                                  })
+                                }
+                                disabled={safetyActionKey === `unblock-${blockedUserId}`}
+                              >
+                                {safetyActionKey === `unblock-${blockedUserId}`
+                                  ? "Unblocking..."
+                                  : "Unblock"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </>
@@ -6811,6 +7296,92 @@ const MainPage = () => {
           )}
         </aside>
       </div>
+
+
+      {isReportModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={handleCloseReportModal}
+        >
+          <div
+            className="discord-create-server-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 className="discord-modal-title">Report User</h2>
+              <p className="discord-modal-subtitle">
+                Tell us what happened with {reportTargetUser?.username || "this user"}.
+              </p>
+            </div>
+
+            {reportError ? (
+              <p className="auth-error server-inline-error">{reportError}</p>
+            ) : null}
+
+            <form onSubmit={handleSubmitReport} className="discord-form-stack">
+              <label className="auth-label" htmlFor="report_reason">
+                Reason
+              </label>
+              <select
+                id="report_reason"
+                name="reason"
+                className="auth-input compact-input"
+                value={reportFormData.reason}
+                onChange={(event) =>
+                  setReportFormData((prevData) => ({
+                    ...prevData,
+                    reason: event.target.value
+                  }))
+                }
+              >
+                <option value="">Select a reason</option>
+                <option value="Harassment">Harassment</option>
+                <option value="Spam">Spam</option>
+                <option value="Inappropriate content">Inappropriate content</option>
+                <option value="Impersonation">Impersonation</option>
+                <option value="Other">Other</option>
+              </select>
+
+              <label className="auth-label" htmlFor="report_details">
+                Details
+              </label>
+              <textarea
+                id="report_details"
+                name="details"
+                className="auth-input compact-input discord-report-textarea"
+                value={reportFormData.details}
+                onChange={(event) =>
+                  setReportFormData((prevData) => ({
+                    ...prevData,
+                    details: event.target.value
+                  }))
+                }
+                placeholder="Add any useful context for this report"
+                maxLength="1000"
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={handleCloseReportModal}
+                  disabled={isSubmittingReport}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isSubmittingReport}
+                >
+                  {isSubmittingReport ? "Submitting..." : "Submit report"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {isEditProfileModalOpen ? (
         <div

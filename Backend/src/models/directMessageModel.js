@@ -102,6 +102,18 @@ const getUserConversations = async (userId) => {
         u.username AS other_username,
         u.email AS other_email,
         u.is_online AS other_is_online,
+        EXISTS (
+          SELECT 1
+          FROM user_blocks ub_me
+          WHERE ub_me.blocker_id = ?
+            AND ub_me.blocked_id = u.user_id
+        ) AS blocked_by_me,
+        EXISTS (
+          SELECT 1
+          FROM user_blocks ub_other
+          WHERE ub_other.blocker_id = u.user_id
+            AND ub_other.blocked_id = ?
+        ) AS blocked_me,
         (
           SELECT dm.content
           FROM direct_messages dm
@@ -146,7 +158,7 @@ const getUserConversations = async (userId) => {
         )
       ORDER BY COALESCE(last_message_created_at, dc.updated_at) DESC
     `,
-    [userId, userId, userId, userId]
+    [userId, userId, userId, userId, userId, userId]
   );
 
   return rows;

@@ -1,5 +1,18 @@
 const { pool } = require("../config/db");
 
+const hasBlockBetweenUsers = async (userAId, userBId) => {
+  const [rows] = await pool.execute(
+    `SELECT block_id
+     FROM user_blocks
+     WHERE (blocker_id = ? AND blocked_id = ?)
+        OR (blocker_id = ? AND blocked_id = ?)
+     LIMIT 1`,
+    [userAId, userBId, userBId, userAId]
+  );
+
+  return Boolean(rows[0]);
+};
+
 const findUserByUsernameOrEmail = async (value) => {
   const [rows] = await pool.execute(
     `SELECT user_id, username, email
@@ -84,6 +97,12 @@ const getIncomingPendingRequestsByUserId = async (userId) => {
      JOIN users u ON fr.sender_id = u.user_id
      WHERE fr.receiver_id = ?
        AND fr.status = 'pending'
+       AND NOT EXISTS (
+         SELECT 1
+         FROM user_blocks ub
+         WHERE (ub.blocker_id = fr.sender_id AND ub.blocked_id = fr.receiver_id)
+            OR (ub.blocker_id = fr.receiver_id AND ub.blocked_id = fr.sender_id)
+       )
      ORDER BY fr.created_at DESC`,
     [userId]
   );
@@ -105,6 +124,12 @@ const getOutgoingPendingRequestsByUserId = async (userId) => {
      JOIN users u ON fr.receiver_id = u.user_id
      WHERE fr.sender_id = ?
        AND fr.status = 'pending'
+       AND NOT EXISTS (
+         SELECT 1
+         FROM user_blocks ub
+         WHERE (ub.blocker_id = fr.sender_id AND ub.blocked_id = fr.receiver_id)
+            OR (ub.blocker_id = fr.receiver_id AND ub.blocked_id = fr.sender_id)
+       )
      ORDER BY fr.created_at DESC`,
     [userId]
   );
@@ -197,15 +222,22 @@ const getFriendsByUserId = async (userId) => {
          WHEN f.user_one_id = ? THEN f.user_two_id
          ELSE f.user_one_id
        END
-     WHERE f.user_one_id = ? OR f.user_two_id = ?
+     WHERE (f.user_one_id = ? OR f.user_two_id = ?)
+       AND NOT EXISTS (
+         SELECT 1
+         FROM user_blocks ub
+         WHERE (ub.blocker_id = ? AND ub.blocked_id = u.user_id)
+            OR (ub.blocker_id = u.user_id AND ub.blocked_id = ?)
+       )
      ORDER BY u.username ASC`,
-    [userId, userId, userId]
+    [userId, userId, userId, userId, userId]
   );
 
   return rows;
 };
 
 module.exports = {
+  hasBlockBetweenUsers,
   findUserByUsernameOrEmail,
   getPendingFriendRequestBetweenUsers,
   getFriendRequestBetweenUsers,

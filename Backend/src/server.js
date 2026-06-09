@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
 const { setUserOnlineState } = require("./models/userModel");
+const userSafetyModel = require("./models/userSafetyModel");
 const { isUserMemberOfChannelServer } = require("./models/messageModel");
 const {
   getConversationById,
@@ -207,6 +208,13 @@ io.on("connection", async (socket) => {
           ? Number(conversation.user_two_id)
           : Number(conversation.user_one_id);
 
+      const usersBlockedEachOther = await userSafetyModel.hasBlockBetweenUsers(
+        userId,
+        recipientUserId
+      );
+
+      if (usersBlockedEachOther) return;
+
       io.to(`user_${recipientUserId}`).emit("direct_typing_start", {
         conversation_id: Number(conversationId),
         user_id: Number(userId),
@@ -234,6 +242,13 @@ io.on("connection", async (socket) => {
         Number(conversation.user_one_id) === Number(userId)
           ? Number(conversation.user_two_id)
           : Number(conversation.user_one_id);
+
+      const usersBlockedEachOther = await userSafetyModel.hasBlockBetweenUsers(
+        userId,
+        recipientUserId
+      );
+
+      if (usersBlockedEachOther) return;
 
       io.to(`user_${recipientUserId}`).emit("direct_typing_stop", {
         conversation_id: Number(conversationId),
