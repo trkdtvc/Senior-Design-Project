@@ -269,9 +269,6 @@ const getBlockedUserId = (blockedUser) =>
 const getBlockedUsername = (blockedUser) =>
   blockedUser?.username || blockedUser?.blocked_username || "Unknown user";
 
-const getBlockedEmail = (blockedUser) =>
-  blockedUser?.email || blockedUser?.blocked_email || "";
-
 const getConversationBlockedByMe = (conversation) =>
   Number(conversation?.blocked_by_me || conversation?.blockedByMe || 0) === 1 ||
   conversation?.blocked_by_me === true ||
@@ -6547,7 +6544,7 @@ const MainPage = () => {
                       <div className="discord-message-body">
                         {!isThisMessageEditing ? (
                           <div
-                            className={`discord-message-menu${openMessageMenuKey === messageDeleteKey ? " discord-message-menu-open" : ""}`}
+                            className={`discord-message-menu${reactions.length > 0 ? " discord-message-menu-has-reactions" : ""}${openMessageMenuKey === messageDeleteKey ? " discord-message-menu-open" : ""}`}
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
@@ -7203,11 +7200,11 @@ const MainPage = () => {
                               key={blockedUserId}
                               className="discord-blocked-user-row"
                             >
-                              <span>
+                              <span
+                                className="discord-blocked-user-name"
+                                title={getBlockedUsername(blockedUser)}
+                              >
                                 {getBlockedUsername(blockedUser)}
-                                {getBlockedEmail(blockedUser)
-                                  ? ` · ${getBlockedEmail(blockedUser)}`
-                                  : ""}
                               </span>
                               <button
                                 type="button"

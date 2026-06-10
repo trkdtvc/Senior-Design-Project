@@ -3780,3 +3780,30 @@ textarea:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Targeted polish: message menu alignment + compact blocked user names */
+.discord-message-menu {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.discord-message-menu-has-reactions {
+  top: 0;
+  transform: none;
+}
+
+.discord-blocked-user-row {
+  min-width: 0;
+}
+
+.discord-blocked-user-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.discord-blocked-user-row .discord-mini-action-button {
+  flex-shrink: 0;
+}

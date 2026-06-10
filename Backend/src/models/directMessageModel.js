@@ -638,22 +638,58 @@ const getDirectMessageReactionsByMessageId = async (
 
 const toggleDirectMessageReaction = async (directMessageId, userId, emoji) => {
   const [existingRows] = await pool.execute(
-    `SELECT reaction_id
+    `SELECT reaction_id, emoji
      FROM direct_message_reactions
-     WHERE direct_message_id = ? AND user_id = ? AND emoji = ?
-     LIMIT 1`,
-    [directMessageId, userId, emoji]
+     WHERE direct_message_id = ? AND user_id = ?
+     ORDER BY created_at ASC, reaction_id ASC`,
+    [directMessageId, userId]
   );
 
   if (existingRows.length) {
-    await pool.execute(
-      `DELETE FROM direct_message_reactions
-       WHERE reaction_id = ?`,
-      [existingRows[0].reaction_id]
-    );
+    const matchingReaction = existingRows.find((row) => row.emoji === emoji);
+    const reactionToKeep = matchingReaction || existingRows[0];
+
+    if (existingRows.length === 1 && matchingReaction) {
+      await pool.execute(
+        `DELETE FROM direct_message_reactions
+         WHERE reaction_id = ?`,
+        [reactionToKeep.reaction_id]
+      );
+
+      return {
+        action: "removed",
+        reactions: await getDirectMessageReactionsByMessageId(
+          directMessageId,
+          userId
+        )
+      };
+    }
+
+    const reactionIdsToRemove = existingRows
+      .filter((row) => row.reaction_id !== reactionToKeep.reaction_id)
+      .map((row) => row.reaction_id);
+
+    if (reactionIdsToRemove.length) {
+      const placeholders = reactionIdsToRemove.map(() => "?").join(",");
+
+      await pool.execute(
+        `DELETE FROM direct_message_reactions
+         WHERE reaction_id IN (${placeholders})`,
+        reactionIdsToRemove
+      );
+    }
+
+    if (reactionToKeep.emoji !== emoji) {
+      await pool.execute(
+        `UPDATE direct_message_reactions
+         SET emoji = ?, created_at = CURRENT_TIMESTAMP
+         WHERE reaction_id = ?`,
+        [emoji, reactionToKeep.reaction_id]
+      );
+    }
 
     return {
-      action: "removed",
+      action: "updated",
       reactions: await getDirectMessageReactionsByMessageId(
         directMessageId,
         userId

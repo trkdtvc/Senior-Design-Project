@@ -430,22 +430,55 @@ const getMessageReactionsByMessageId = async (messageId, currentUserId = null) =
 
 const toggleMessageReaction = async (messageId, userId, emoji) => {
   const [existingRows] = await pool.query(
-    `SELECT reaction_id
+    `SELECT reaction_id, emoji
      FROM message_reactions
-     WHERE message_id = ? AND user_id = ? AND emoji = ?
-     LIMIT 1`,
-    [messageId, userId, emoji]
+     WHERE message_id = ? AND user_id = ?
+     ORDER BY created_at ASC, reaction_id ASC`,
+    [messageId, userId]
   );
 
   if (existingRows.length) {
-    await pool.query(
-      `DELETE FROM message_reactions
-       WHERE reaction_id = ?`,
-      [existingRows[0].reaction_id]
-    );
+    const matchingReaction = existingRows.find((row) => row.emoji === emoji);
+    const reactionToKeep = matchingReaction || existingRows[0];
+
+    if (existingRows.length === 1 && matchingReaction) {
+      await pool.query(
+        `DELETE FROM message_reactions
+         WHERE reaction_id = ?`,
+        [reactionToKeep.reaction_id]
+      );
+
+      return {
+        action: "removed",
+        reactions: await getMessageReactionsByMessageId(messageId, userId)
+      };
+    }
+
+    const reactionIdsToRemove = existingRows
+      .filter((row) => row.reaction_id !== reactionToKeep.reaction_id)
+      .map((row) => row.reaction_id);
+
+    if (reactionIdsToRemove.length) {
+      const placeholders = reactionIdsToRemove.map(() => "?").join(",");
+
+      await pool.query(
+        `DELETE FROM message_reactions
+         WHERE reaction_id IN (${placeholders})`,
+        reactionIdsToRemove
+      );
+    }
+
+    if (reactionToKeep.emoji !== emoji) {
+      await pool.query(
+        `UPDATE message_reactions
+         SET emoji = ?, created_at = CURRENT_TIMESTAMP
+         WHERE reaction_id = ?`,
+        [emoji, reactionToKeep.reaction_id]
+      );
+    }
 
     return {
-      action: "removed",
+      action: "updated",
       reactions: await getMessageReactionsByMessageId(messageId, userId)
     };
   }
