@@ -3777,14 +3777,209 @@ textarea:focus-visible,
   }
 }
 
-/* Targeted polish: message menu alignment + compact blocked user names */
+/* Targeted polish: premium message action menu + compact blocked user names */
 .discord-message-menu {
   top: 50%;
+  right: 8px;
+  z-index: 80;
   transform: translateY(-50%);
 }
 
 .discord-message-menu-has-reactions {
-  top: 0;
+  top: 4px;
+  transform: none;
+}
+
+.discord-message-menu-trigger {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(187, 199, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(42, 50, 74, 0.96), rgba(25, 31, 48, 0.96));
+  color: #dce4ff;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.discord-message-menu-trigger:hover,
+.discord-message-menu-open .discord-message-menu-trigger {
+  background:
+    linear-gradient(180deg, rgba(95, 110, 255, 0.34), rgba(52, 62, 100, 0.98));
+  border-color: rgba(157, 176, 255, 0.42);
+  color: #ffffff;
+}
+
+.discord-message-options-menu {
+  top: 40px;
+  right: 0;
+  min-width: 226px;
+  padding: 10px;
+  border: 1px solid rgba(187, 199, 255, 0.17);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(124, 140, 255, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(22, 28, 44, 0.98), rgba(12, 17, 29, 0.98));
+  box-shadow:
+    0 26px 72px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  transform-origin: top right;
+  animation: discordMessageMenuIn 140ms ease-out;
+}
+
+.discord-message-row-own .discord-message-options-menu {
+  right: auto;
+  left: 0;
+  transform-origin: top left;
+}
+
+@keyframes discordMessageMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.discord-message-reaction-picker {
+  display: flex;
+  grid-template-columns: none;
+  gap: 6px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid rgba(187, 199, 255, 0.13);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.discord-message-reaction-option {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-text);
+  display: grid;
+  place-items: center;
+  font-size: 1.05rem;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.discord-message-reaction-option:hover {
+  background: rgba(124, 140, 255, 0.16);
+  border-color: rgba(157, 176, 255, 0.28);
+  transform: translateY(-2px) scale(1.04);
+}
+
+.discord-message-reaction-option-active {
+  background: linear-gradient(135deg, rgba(124, 140, 255, 0.36), rgba(88, 101, 242, 0.24));
+  border-color: rgba(157, 176, 255, 0.52);
+  box-shadow: 0 8px 18px rgba(88, 101, 242, 0.22);
+}
+
+.discord-message-options-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(187, 199, 255, 0.1);
+}
+
+.discord-message-options-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.discord-message-options-section-danger {
+  border-top-color: rgba(255, 120, 125, 0.16);
+}
+
+.discord-message-option {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--app-text-soft);
+  box-shadow: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.2;
+  transition:
+    background-color var(--app-transition),
+    border-color var(--app-transition),
+    color var(--app-transition),
+    transform var(--app-transition),
+    opacity var(--app-transition);
+}
+
+.discord-message-option:hover,
+.discord-message-option-active {
+  background: rgba(124, 140, 255, 0.14);
+  border-color: rgba(157, 176, 255, 0.2);
+  color: #ffffff;
+  transform: translateX(2px);
+}
+
+.discord-message-option-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #dce4ff;
+  display: grid;
+  place-items: center;
+  font-size: 0.98rem;
+  line-height: 1;
+}
+
+.discord-message-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discord-message-option-danger {
+  color: #ffb8bc;
+}
+
+.discord-message-option-danger .discord-message-option-icon {
+  background: rgba(237, 66, 69, 0.13);
+  color: #ffc7ca;
+}
+
+.discord-message-option-danger:hover {
+  background: rgba(237, 66, 69, 0.14);
+  border-color: rgba(237, 66, 69, 0.3);
+  color: #ffe0e2;
+}
+
+.discord-message-option:disabled,
+.discord-message-reaction-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
   transform: none;
 }
 
@@ -3802,4 +3997,14 @@ textarea:focus-visible,
 
 .discord-blocked-user-row .discord-mini-action-button {
   flex-shrink: 0;
+}
+
+@media (max-width: 700px) {
+  .discord-message-options-menu {
+    min-width: 208px;
+  }
+
+  .discord-message-option {
+    min-height: 42px;
+  }
 }

@@ -4426,6 +4426,40 @@ const MainPage = () => {
     }
   };
 
+  const handleCopyMessageText = async (message) => {
+    const textToCopy = (isDmView
+      ? getDirectMessageContent(message)
+      : getMessageContent(message)
+    ).trim();
+
+    if (!textToCopy) {
+      return;
+    }
+
+    try {
+      setMessageError("");
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+        return;
+      }
+
+      const temporaryTextArea = document.createElement("textarea");
+      temporaryTextArea.value = textToCopy;
+      temporaryTextArea.setAttribute("readonly", "");
+      temporaryTextArea.style.position = "fixed";
+      temporaryTextArea.style.left = "-9999px";
+      temporaryTextArea.style.opacity = "0";
+
+      document.body.appendChild(temporaryTextArea);
+      temporaryTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(temporaryTextArea);
+    } catch {
+      setMessageError("Failed to copy message text.");
+    }
+  };
+
   const handleToggleMessageReaction = async (message, emoji) => {
     const token = getAuthToken();
 
@@ -6399,6 +6433,9 @@ const MainPage = () => {
 
                   const attachments = getMessageAttachments(message);
                   const reactions = getMessageReactions(message);
+                  const activeReactionEmoji = getReactionEmoji(
+                    reactions.find((reaction) => userReactedToReaction(reaction))
+                  );
                   const isThisMessagePinned = messageIsPinned(message);
 
                   const key = isDmView
@@ -6478,37 +6515,10 @@ const MainPage = () => {
 
                             {openMessageMenuKey === messageDeleteKey ? (
                               <div className="discord-message-options-menu">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenMessageMenuKey(null);
-                                    handleStartReplyingToMessage(message);
-                                  }}
-                                  disabled={!messageIdForDelete}
-                                  className="discord-message-option"
+                                <div
+                                  className="discord-message-reaction-picker"
+                                  aria-label="Quick message reactions"
                                 >
-                                  Reply
-                                </button>
-
-                                {canPinThisMessage ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenMessageMenuKey(null);
-                                      handleTogglePinMessage(message);
-                                    }}
-                                    disabled={!messageIdForDelete || isThisMessagePinning}
-                                    className="discord-message-option"
-                                  >
-                                    {isThisMessagePinning
-                                      ? "Updating..."
-                                      : isThisMessagePinned
-                                        ? "Unpin"
-                                        : "Pin"}
-                                  </button>
-                                ) : null}
-
-                                <div className="discord-message-reaction-picker">
                                   {QUICK_REACTION_EMOJIS.map((emoji) => (
                                     <button
                                       key={emoji}
@@ -6521,7 +6531,11 @@ const MainPage = () => {
                                         !messageIdForDelete ||
                                         reactingMessageKey === `${messageDeleteKey}-${emoji}`
                                       }
-                                      className="discord-message-reaction-option"
+                                      className={`discord-message-reaction-option${
+                                        activeReactionEmoji === emoji
+                                          ? " discord-message-reaction-option-active"
+                                          : ""
+                                      }`}
                                       aria-label={`React with ${emoji}`}
                                       title={`React with ${emoji}`}
                                     >
@@ -6530,32 +6544,101 @@ const MainPage = () => {
                                   ))}
                                 </div>
 
-                                {isOwnMessage ? (
+                                <div className="discord-message-options-section">
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setOpenMessageMenuKey(null);
-                                      handleStartEditingMessage(message);
+                                      handleStartReplyingToMessage(message);
                                     }}
                                     disabled={!messageIdForDelete}
                                     className="discord-message-option"
                                   >
-                                    Edit
+                                    <span className="discord-message-option-icon" aria-hidden="true">
+                                      ↩
+                                    </span>
+                                    <span className="discord-message-option-label">Reply</span>
                                   </button>
-                                ) : null}
 
-                                {isOwnMessage || (!isDmView && currentUserCanManageServer) ? (
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setOpenMessageMenuKey(null);
-                                      handleDeleteChatMessage(message);
+                                      handleCopyMessageText(message);
                                     }}
-                                    disabled={isThisMessageDeleting || !messageIdForDelete}
-                                    className="discord-message-option discord-message-option-danger"
+                                    disabled={!content?.trim()}
+                                    className="discord-message-option"
                                   >
-                                    {isThisMessageDeleting ? "Deleting..." : "Delete"}
+                                    <span className="discord-message-option-icon" aria-hidden="true">
+                                      ⧉
+                                    </span>
+                                    <span className="discord-message-option-label">Copy text</span>
                                   </button>
+
+                                  {canPinThisMessage ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMessageMenuKey(null);
+                                        handleTogglePinMessage(message);
+                                      }}
+                                      disabled={!messageIdForDelete || isThisMessagePinning}
+                                      className={`discord-message-option${
+                                        isThisMessagePinned ? " discord-message-option-active" : ""
+                                      }`}
+                                    >
+                                      <span className="discord-message-option-icon" aria-hidden="true">
+                                        📌
+                                      </span>
+                                      <span className="discord-message-option-label">
+                                        {isThisMessagePinning
+                                          ? "Updating..."
+                                          : isThisMessagePinned
+                                            ? "Unpin"
+                                            : "Pin"}
+                                      </span>
+                                    </button>
+                                  ) : null}
+                                </div>
+
+                                {isOwnMessage ? (
+                                  <div className="discord-message-options-section">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMessageMenuKey(null);
+                                        handleStartEditingMessage(message);
+                                      }}
+                                      disabled={!messageIdForDelete}
+                                      className="discord-message-option"
+                                    >
+                                      <span className="discord-message-option-icon" aria-hidden="true">
+                                        ✎
+                                      </span>
+                                      <span className="discord-message-option-label">Edit</span>
+                                    </button>
+                                  </div>
+                                ) : null}
+
+                                {isOwnMessage || (!isDmView && currentUserCanManageServer) ? (
+                                  <div className="discord-message-options-section discord-message-options-section-danger">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMessageMenuKey(null);
+                                        handleDeleteChatMessage(message);
+                                      }}
+                                      disabled={isThisMessageDeleting || !messageIdForDelete}
+                                      className="discord-message-option discord-message-option-danger"
+                                    >
+                                      <span className="discord-message-option-icon" aria-hidden="true">
+                                        🗑
+                                      </span>
+                                      <span className="discord-message-option-label">
+                                        {isThisMessageDeleting ? "Deleting..." : "Delete"}
+                                      </span>
+                                    </button>
+                                  </div>
                                 ) : null}
                               </div>
                             ) : null}
@@ -6655,7 +6738,6 @@ const MainPage = () => {
                               <span className="discord-own-message-time">
                                 {timestamp}
                                 {messageWasEdited ? " · edited" : ""}
-                                {isThisMessagePinned ? " · pinned" : ""}
                                 {isThisMessagePinned ? " · pinned" : ""}
                               </span>
                             ) : null}
