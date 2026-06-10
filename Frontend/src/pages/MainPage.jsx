@@ -70,8 +70,7 @@ import {
 import {
   getBlockedUsers,
   blockUser,
-  unblockUser,
-  reportUser
+  unblockUser
 } from "../services/userSafetyService";
 import "../styles/auth.css";
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
@@ -1034,14 +1033,6 @@ const MainPage = () => {
   const [safetyActionError, setSafetyActionError] = useState("");
   const [safetyActionSuccess, setSafetyActionSuccess] = useState("");
   const [safetyActionKey, setSafetyActionKey] = useState(null);
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [reportTargetUser, setReportTargetUser] = useState(null);
-  const [reportFormData, setReportFormData] = useState({
-    reason: "",
-    details: ""
-  });
-  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
-  const [reportError, setReportError] = useState("");
   const [previewAttachment, setPreviewAttachment] = useState(null);
 
   const [activeServerId, setActiveServerId] = useState(null);
@@ -4662,69 +4653,6 @@ const MainPage = () => {
     }
   };
 
-  const handleOpenReportModal = (targetUser) => {
-    setReportTargetUser(targetUser);
-    setReportFormData({
-      reason: "",
-      details: ""
-    });
-    setReportError("");
-    setIsReportModalOpen(true);
-  };
-
-  const handleCloseReportModal = () => {
-    if (isSubmittingReport) {
-      return;
-    }
-
-    setIsReportModalOpen(false);
-    setReportTargetUser(null);
-    setReportError("");
-  };
-
-  const handleSubmitReport = async (event) => {
-    event.preventDefault();
-
-    const token = getAuthToken();
-    const targetUserId = reportTargetUser?.user_id || reportTargetUser?.id;
-
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    if (!targetUserId) {
-      setReportError("Select a user to report.");
-      return;
-    }
-
-    const reason = reportFormData.reason.trim();
-
-    if (!reason) {
-      setReportError("Report reason is required.");
-      return;
-    }
-
-    try {
-      setIsSubmittingReport(true);
-      setReportError("");
-      setSafetyActionError("");
-      setSafetyActionSuccess("");
-
-      await reportUser(token, targetUserId, {
-        reason,
-        details: reportFormData.details.trim()
-      });
-
-      setIsReportModalOpen(false);
-      setReportTargetUser(null);
-      setSafetyActionSuccess("Report submitted successfully.");
-    } catch (error) {
-      setReportError(error.message || "Failed to submit report.");
-    } finally {
-      setIsSubmittingReport(false);
-    }
-  };
 
   const handleJumpToPinnedMessage = async (message) => {
     const messageId = isDmView ? getDirectMessageId(message) : getMessageId(message);
@@ -6200,20 +6128,6 @@ const MainPage = () => {
 
                                 <button
                                   type="button"
-                                  className="auth-button discord-friend-home-action"
-                                  onClick={() =>
-                                    handleOpenReportModal({
-                                      user_id: getFriendId(friend),
-                                      username: getFriendName(friend),
-                                      email: getFriendEmail(friend)
-                                    })
-                                  }
-                                >
-                                  Report
-                                </button>
-
-                                <button
-                                  type="button"
                                   className="auth-button auth-button-danger discord-friend-home-action discord-friend-home-action-danger"
                                   onClick={() =>
                                     handleBlockUser({
@@ -7101,14 +7015,6 @@ const MainPage = () => {
                     </p>
                   ) : null}
 
-                  <button
-                    type="button"
-                    className="auth-button discord-profile-action-button"
-                    onClick={() => handleOpenReportModal(activeConversationUser)}
-                  >
-                    Report user
-                  </button>
-
                   {activeConversationBlockedByMe ? (
                     <button
                       type="button"
@@ -7303,91 +7209,6 @@ const MainPage = () => {
         </aside>
       </div>
 
-
-      {isReportModalOpen ? (
-        <div
-          className="discord-create-server-backdrop"
-          onClick={handleCloseReportModal}
-        >
-          <div
-            className="discord-create-server-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="discord-modal-header">
-              <h2 className="discord-modal-title">Report User</h2>
-              <p className="discord-modal-subtitle">
-                Tell us what happened with {reportTargetUser?.username || "this user"}.
-              </p>
-            </div>
-
-            {reportError ? (
-              <p className="auth-error server-inline-error">{reportError}</p>
-            ) : null}
-
-            <form onSubmit={handleSubmitReport} className="discord-form-stack">
-              <label className="auth-label" htmlFor="report_reason">
-                Reason
-              </label>
-              <select
-                id="report_reason"
-                name="reason"
-                className="auth-input compact-input"
-                value={reportFormData.reason}
-                onChange={(event) =>
-                  setReportFormData((prevData) => ({
-                    ...prevData,
-                    reason: event.target.value
-                  }))
-                }
-              >
-                <option value="">Select a reason</option>
-                <option value="Harassment">Harassment</option>
-                <option value="Spam">Spam</option>
-                <option value="Inappropriate content">Inappropriate content</option>
-                <option value="Impersonation">Impersonation</option>
-                <option value="Other">Other</option>
-              </select>
-
-              <label className="auth-label" htmlFor="report_details">
-                Details
-              </label>
-              <textarea
-                id="report_details"
-                name="details"
-                className="auth-input compact-input discord-report-textarea"
-                value={reportFormData.details}
-                onChange={(event) =>
-                  setReportFormData((prevData) => ({
-                    ...prevData,
-                    details: event.target.value
-                  }))
-                }
-                placeholder="Add any useful context for this report"
-                maxLength="1000"
-              />
-
-              <div className="discord-modal-actions">
-                <button
-                  type="button"
-                  className="auth-button auth-button-secondary compact-button"
-                  onClick={handleCloseReportModal}
-                  disabled={isSubmittingReport}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="auth-button compact-button"
-                  disabled={isSubmittingReport}
-                >
-                  {isSubmittingReport ? "Submitting..." : "Submit report"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
 
       {isEditProfileModalOpen ? (
         <div

@@ -3078,10 +3078,6 @@ textarea.auth-input {
   font-size: 0.82rem;
 }
 
-.discord-report-textarea {
-  min-height: 120px;
-  resize: vertical;
-}
 
 /* FULL UI REPOLISH / DESKTOP FINISHING PASS */
 :root {

@@ -7,7 +7,7 @@ const { protect } = require("../middleware/authMiddleware");
  * @swagger
  * tags:
  *   - name: User Safety
- *     description: User blocking and reporting routes
+ *     description: User blocking routes
  */
 
 /**
@@ -77,46 +77,5 @@ router.post("/users/:userId/block", protect, userSafetyController.blockUser);
  *         description: User not found
  */
 router.delete("/users/:userId/block", protect, userSafetyController.unblockUser);
-
-/**
- * @swagger
- * /api/user-safety/users/{userId}/report:
- *   post:
- *     summary: Report a user
- *     tags: [User Safety]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - reason
- *             properties:
- *               reason:
- *                 type: string
- *                 example: Harassment
- *               details:
- *                 type: string
- *                 example: This user sent inappropriate messages.
- *     responses:
- *       201:
- *         description: Report submitted successfully
- *       400:
- *         description: Report reason is required
- *       401:
- *         description: Not authorized
- *       404:
- *         description: User not found
- */
-router.post("/users/:userId/report", protect, userSafetyController.reportUser);
 
 module.exports = router;

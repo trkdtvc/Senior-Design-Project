@@ -143,38 +143,6 @@ const deleteBlock = async (blockerId, blockedId) => {
   return result;
 };
 
-const createUserReport = async ({
-  reporterId,
-  reportedUserId,
-  reason,
-  details = null
-}) => {
-  const [result] = await pool.execute(
-    `INSERT INTO user_reports (reporter_id, reported_user_id, reason, details)
-     VALUES (?, ?, ?, ?)`,
-    [reporterId, reportedUserId, reason, details]
-  );
-
-  const [rows] = await pool.execute(
-    `SELECT
-        ur.report_id,
-        ur.reporter_id,
-        ur.reported_user_id,
-        ur.reason,
-        ur.details,
-        ur.status,
-        ur.created_at,
-        reported.username AS reported_username,
-        reported.email AS reported_email
-     FROM user_reports ur
-     JOIN users reported ON ur.reported_user_id = reported.user_id
-     WHERE ur.report_id = ?
-     LIMIT 1`,
-    [result.insertId]
-  );
-
-  return rows[0] || null;
-};
 
 module.exports = {
   getUserById,
@@ -183,6 +151,5 @@ module.exports = {
   hasUserBlocked,
   getBlockedUsersByUserId,
   createBlockAndCleanup,
-  deleteBlock,
-  createUserReport
+  deleteBlock
 };

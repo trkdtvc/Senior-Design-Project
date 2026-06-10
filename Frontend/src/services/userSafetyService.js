@@ -16,10 +16,3 @@ export const unblockUser = async (token, userId) =>
     method: "DELETE",
     token
   });
-
-export const reportUser = async (token, userId, reportData) =>
-  apiRequest(`/user-safety/users/${userId}/report`, {
-    method: "POST",
-    token,
-    body: reportData
-  });

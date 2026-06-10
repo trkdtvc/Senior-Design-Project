@@ -1,25 +1,11 @@
 const userSafetyModel = require("../models/userSafetyModel");
 
-const MAX_REPORT_REASON_LENGTH = 100;
-const MAX_REPORT_DETAILS_LENGTH = 1000;
 
 const normalizeUserId = (value) => {
   const userId = Number(value);
   return Number.isInteger(userId) && userId > 0 ? userId : null;
 };
 
-const normalizeReportReason = (reason) =>
-  String(reason || "").trim().slice(0, MAX_REPORT_REASON_LENGTH);
-
-const normalizeReportDetails = (details) => {
-  const normalizedDetails = String(details || "").trim();
-
-  if (!normalizedDetails) {
-    return null;
-  }
-
-  return normalizedDetails.slice(0, MAX_REPORT_DETAILS_LENGTH);
-};
 
 const assertTargetUser = async (currentUserId, targetUserId, res) => {
   if (!targetUserId) {
@@ -120,39 +106,9 @@ const unblockUser = async (req, res, next) => {
   }
 };
 
-const reportUser = async (req, res, next) => {
-  try {
-    const currentUserId = req.user.user_id;
-    const targetUserId = normalizeUserId(req.params.userId || req.body.userId);
-    const reason = normalizeReportReason(req.body.reason);
-    const details = normalizeReportDetails(req.body.details);
-
-    await assertTargetUser(currentUserId, targetUserId, res);
-
-    if (!reason) {
-      res.status(400);
-      throw new Error("Report reason is required");
-    }
-
-    const report = await userSafetyModel.createUserReport({
-      reporterId: currentUserId,
-      reportedUserId: targetUserId,
-      reason,
-      details
-    });
-
-    res.status(201).json({
-      message: "Report submitted successfully",
-      report
-    });
-  } catch (error) {
-    next(error);
-  }
-};
 
 module.exports = {
   getBlockedUsers,
   blockUser,
-  unblockUser,
-  reportUser
+  unblockUser
 };
