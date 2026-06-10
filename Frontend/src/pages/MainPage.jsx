@@ -955,6 +955,8 @@ const MainPage = () => {
   const messageSearchRequestRef = useRef(0);
   const scrollRestoreRef = useRef(null);
   const searchJumpPendingRef = useRef(null);
+  const pinnedJumpPendingRef = useRef(null);
+  const pinnedHighlightTimeoutRef = useRef(null);
   const channelMessagesRef = useRef([]);
   const directMessagesRef = useRef([]);
   const typingStopTimeoutRef = useRef(null);
@@ -1020,6 +1022,7 @@ const MainPage = () => {
   const [directTypingUsers, setDirectTypingUsers] = useState([]);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [isPinnedMessagesOpen, setIsPinnedMessagesOpen] = useState(false);
+  const [activePinnedJumpMessageId, setActivePinnedJumpMessageId] = useState(null);
   const [reactingMessageKey, setReactingMessageKey] = useState(null);
   const [pinningMessageKey, setPinningMessageKey] = useState(null);
   const [notificationSettings, setNotificationSettings] = useState({
@@ -1130,6 +1133,23 @@ const MainPage = () => {
   directMessagesRef.current = directMessages;
 
   const currentUserId = user?.user_id || user?.id || null;
+
+  const flashPinnedMessage = useCallback((messageId) => {
+    if (!messageId) {
+      return;
+    }
+
+    if (pinnedHighlightTimeoutRef.current) {
+      window.clearTimeout(pinnedHighlightTimeoutRef.current);
+    }
+
+    setActivePinnedJumpMessageId(String(messageId));
+
+    pinnedHighlightTimeoutRef.current = window.setTimeout(() => {
+      setActivePinnedJumpMessageId(null);
+      pinnedHighlightTimeoutRef.current = null;
+    }, 1800);
+  }, []);
 
   const clearDirectUnread = useCallback((conversationId) => {
     if (!conversationId) {
@@ -2207,6 +2227,19 @@ const MainPage = () => {
   }, [activeMentionHighlight]);
 
   useEffect(() => {
+    return () => {
+      if (pinnedHighlightTimeoutRef.current) {
+        window.clearTimeout(pinnedHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setActivePinnedJumpMessageId(null);
+    pinnedJumpPendingRef.current = null;
+  }, [activeChannelId, activeConversationId, isDmView]);
+
+  useEffect(() => {
     const token = getAuthToken();
 
     if (!token || !isDmView) {
@@ -3185,7 +3218,15 @@ const MainPage = () => {
 
     if (searchJumpPendingRef.current) {
       const pendingMessageId = searchJumpPendingRef.current;
+      const shouldFlashPinnedMessage =
+        pinnedJumpPendingRef.current &&
+        String(pinnedJumpPendingRef.current) === String(pendingMessageId);
+
       searchJumpPendingRef.current = null;
+
+      if (shouldFlashPinnedMessage) {
+        pinnedJumpPendingRef.current = null;
+      }
 
       requestAnimationFrame(() => {
         const targetMessage = container.querySelector(
@@ -3194,6 +3235,10 @@ const MainPage = () => {
 
         if (targetMessage) {
           targetMessage.scrollIntoView({ block: "center" });
+
+          if (shouldFlashPinnedMessage) {
+            flashPinnedMessage(pendingMessageId);
+          }
         }
       });
 
@@ -3205,7 +3250,7 @@ const MainPage = () => {
     }
 
     container.scrollTop = container.scrollHeight;
-  }, [displayedMessages]);
+  }, [displayedMessages, flashPinnedMessage]);
 
   useEffect(() => {
     const handleGlobalClick = (event) => {
@@ -3240,7 +3285,7 @@ const MainPage = () => {
     [isDmView]
   );
 
-  const scrollToLoadedMessage = useCallback((messageId) => {
+  const scrollToLoadedMessage = useCallback((messageId, options = {}) => {
     const container = messagesContainerRef.current;
 
     if (!container || !messageId) {
@@ -3256,8 +3301,13 @@ const MainPage = () => {
     }
 
     targetMessage.scrollIntoView({ block: "center" });
+
+    if (options.flash) {
+      flashPinnedMessage(messageId);
+    }
+
     return true;
-  }, []);
+  }, [flashPinnedMessage]);
 
   const jumpToSearchMatch = useCallback(
     async (nextIndex, matchesOverride = []) => {
@@ -4697,7 +4747,7 @@ const MainPage = () => {
 
     shouldAutoScrollRef.current = false;
 
-    if (scrollToLoadedMessage(messageId)) {
+    if (scrollToLoadedMessage(messageId, { flash: true })) {
       setIsPinnedMessagesOpen(false);
       return;
     }
@@ -4711,6 +4761,7 @@ const MainPage = () => {
 
     try {
       searchJumpPendingRef.current = String(messageId);
+      pinnedJumpPendingRef.current = String(messageId);
 
       if (isDmView) {
         const response = await getDirectMessages(token, activeConversationId, {
@@ -4738,6 +4789,7 @@ const MainPage = () => {
     } catch (error) {
       setMessageError(error.message || "Failed to jump to pinned message.");
       searchJumpPendingRef.current = null;
+      pinnedJumpPendingRef.current = null;
     }
   };
 
@@ -5516,18 +5568,18 @@ const MainPage = () => {
                                 <div className="discord-dm-name-row">
                                   <span className="discord-dm-name">
                                     {getConversationOtherUsername(conversation)}
-                                  </span>
+                                 </span>
 
                                   {unreadCount > 0 ? (
                                     <span className="discord-notification-badge discord-list-notification-badge">
                                       {formatBadgeCount(unreadCount)}
-                                    </span>
+                                   </span>
                                   ) : (
                                     <span className="discord-dm-time">
                                       {formatTimestamp(
                                         getConversationLastTimestamp(conversation)
                                       )}
-                                    </span>
+                                   </span>
                                   )}
                                 </div>
 
@@ -5651,17 +5703,17 @@ const MainPage = () => {
                                 <span className="channel-hash">#</span>
                                 <span className="channel-name">
                                   {getChannelName(channel)}
-                                </span>
+                               </span>
                                 {mentionCount > 0 ? (
                                   <span className="discord-notification-badge discord-list-notification-badge">
                                     {formatMentionBadgeCount(mentionCount)}
-                                  </span>
+                                 </span>
                                 ) : null}
 
                                 {unreadCount > 0 ? (
                                   <span className="discord-notification-badge discord-list-notification-badge">
                                     {formatBadgeCount(unreadCount)}
-                                  </span>
+                                 </span>
                                 ) : null}
                               </button>
 
@@ -5994,13 +6046,26 @@ const MainPage = () => {
                 <button
                   type="button"
                   className="discord-pinned-messages-toggle"
-                  onClick={() => setIsPinnedMessagesOpen((isOpen) => !isOpen)}
+                  onClick={() => {
+                    if (pinnedMessageCount === 1) {
+                      handleJumpToPinnedMessage(pinnedMessages[0]);
+                      return;
+                    }
+
+                    setIsPinnedMessagesOpen((isOpen) => !isOpen);
+                  }}
+                  aria-expanded={pinnedMessageCount > 1 ? isPinnedMessagesOpen : undefined}
                 >
-                  <span>📌 {pinnedMessageCount} pinned message{pinnedMessageCount === 1 ? "" : "s"}</span>
-                  <span>{isPinnedMessagesOpen ? "Hide" : "Show"}</span>
+                  <span className="discord-pinned-message-count">
+                    <span aria-hidden="true">📌</span>
+                    <span>{pinnedMessageCount} pinned message{pinnedMessageCount === 1 ? "" : "s"}</span>
+                  </span>
+                  <span className="discord-pinned-message-action">
+                    {pinnedMessageCount === 1 ? "Jump" : isPinnedMessagesOpen ? "Hide" : "Show"}
+                  </span>
                 </button>
 
-                {isPinnedMessagesOpen ? (
+                {pinnedMessageCount > 1 && isPinnedMessagesOpen ? (
                   <div className="discord-pinned-messages-list">
                     {pinnedMessages.map((pinnedMessage) => {
                       const pinnedMessageId = isDmView
@@ -6484,7 +6549,7 @@ const MainPage = () => {
                     <div
                       key={key}
                       data-message-key={String(messageIdForDelete || key)}
-                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}${shouldShowMentionEmphasis ? " discord-message-row-mentioned" : ""}`}
+                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}${shouldShowMentionEmphasis ? " discord-message-row-mentioned" : ""}${activePinnedJumpMessageId && messageIdForDelete && String(activePinnedJumpMessageId) === String(messageIdForDelete) ? " discord-message-row-pinned-jump" : ""}`}
                     >
                       {!isOwnMessage ? (
                         <div className="discord-message-avatar">
@@ -6556,7 +6621,7 @@ const MainPage = () => {
                                   >
                                     <span className="discord-message-option-icon" aria-hidden="true">
                                       ↩
-                                    </span>
+                                   </span>
                                     <span className="discord-message-option-label">Reply</span>
                                   </button>
 
@@ -6571,7 +6636,7 @@ const MainPage = () => {
                                   >
                                     <span className="discord-message-option-icon" aria-hidden="true">
                                       ⧉
-                                    </span>
+                                   </span>
                                     <span className="discord-message-option-label">Copy text</span>
                                   </button>
 
@@ -6589,14 +6654,14 @@ const MainPage = () => {
                                     >
                                       <span className="discord-message-option-icon" aria-hidden="true">
                                         📌
-                                      </span>
+                                     </span>
                                       <span className="discord-message-option-label">
                                         {isThisMessagePinning
                                           ? "Updating..."
                                           : isThisMessagePinned
                                             ? "Unpin"
                                             : "Pin"}
-                                      </span>
+                                     </span>
                                     </button>
                                   ) : null}
                                 </div>
@@ -6614,7 +6679,7 @@ const MainPage = () => {
                                     >
                                       <span className="discord-message-option-icon" aria-hidden="true">
                                         ✎
-                                      </span>
+                                     </span>
                                       <span className="discord-message-option-label">Edit</span>
                                     </button>
                                   </div>
@@ -6633,10 +6698,10 @@ const MainPage = () => {
                                     >
                                       <span className="discord-message-option-icon" aria-hidden="true">
                                         🗑
-                                      </span>
+                                     </span>
                                       <span className="discord-message-option-label">
                                         {isThisMessageDeleting ? "Deleting..." : "Delete"}
-                                      </span>
+                                     </span>
                                     </button>
                                   </div>
                                 ) : null}
@@ -6669,9 +6734,6 @@ const MainPage = () => {
                               <span className="discord-message-time">edited</span>
                             ) : null}
 
-                            {isThisMessagePinned ? (
-                              <span className="discord-message-pinned-pill">Pinned</span>
-                            ) : null}
 
                             {shouldShowMentionEmphasis ? (
                               <span className="discord-message-mentioned-pill">
@@ -6738,7 +6800,6 @@ const MainPage = () => {
                               <span className="discord-own-message-time">
                                 {timestamp}
                                 {messageWasEdited ? " · edited" : ""}
-                                {isThisMessagePinned ? " · pinned" : ""}
                               </span>
                             ) : null}
                           </p>
@@ -6983,7 +7044,7 @@ const MainPage = () => {
                               {memberEmail ? (
                                 <span className="discord-mention-email">
                                   {memberEmail}
-                                </span>
+                               </span>
                               ) : null}
                             </span>
                           </button>
