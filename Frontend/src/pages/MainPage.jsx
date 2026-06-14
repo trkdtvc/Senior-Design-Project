@@ -74,9 +74,7 @@ import {
 } from "../services/userSafetyService";
 import {
   askChannelAi,
-  askDirectAi,
-  getChannelConversationIntelligence,
-  getDirectConversationIntelligence
+  askDirectAi
 } from "../services/aiService";
 import "../styles/auth.css";
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
@@ -485,30 +483,6 @@ const formatTimestamp = (timestamp) => {
     hour: "numeric",
     minute: "2-digit"
   });
-};
-
-const normalizeAiItems = (items) => (Array.isArray(items) ? items : []);
-
-const getAiItemText = (item) => {
-  if (typeof item === "string") return item;
-
-  return (
-    item?.task ||
-    item?.question ||
-    item?.text ||
-    item?.content ||
-    item?.summary ||
-    ""
-  );
-};
-
-const getAiItemMeta = (item) => {
-  if (!item || typeof item === "string") return "";
-
-  const author = item.author || item.owner || "";
-  const timestamp = formatTimestamp(item.created_at || item.createdAt);
-
-  return [author, timestamp].filter(Boolean).join(" · ");
 };
 
 const getPresenceColorClass = (status) => {
@@ -1121,10 +1095,8 @@ const MainPage = () => {
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiAnswer, setAiAnswer] = useState(null);
-  const [aiIntelligence, setAiIntelligence] = useState(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
-  const [aiActiveMode, setAiActiveMode] = useState("ask");
 
   const isDmView = !activeServerId;
 
@@ -1566,9 +1538,7 @@ const MainPage = () => {
   useEffect(() => {
     setAiQuestion("");
     setAiAnswer(null);
-    setAiIntelligence(null);
     setAiError("");
-    setAiActiveMode("ask");
   }, [activeChannelId, activeConversationId, isDmView]);
 
   const applyUserProfileUpdate = useCallback((updatedUser) => {
@@ -4716,8 +4686,7 @@ const MainPage = () => {
     try {
       setIsAiLoading(true);
       setAiError("");
-      setAiActiveMode("ask");
-
+      setAiAnswer(null);
       const response = target.type === "direct"
         ? await askDirectAi(token, target.id, question)
         : await askChannelAi(token, target.id, question);
@@ -4730,35 +4699,7 @@ const MainPage = () => {
     }
   };
 
-  const handleGenerateConversationIntelligence = async () => {
-    const token = getAuthToken();
-    const target = getActiveAiTarget();
 
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-
-    if (!target) {
-      return;
-    }
-
-    try {
-      setIsAiLoading(true);
-      setAiError("");
-      setAiActiveMode("intelligence");
-
-      const response = target.type === "direct"
-        ? await getDirectConversationIntelligence(token, target.id)
-        : await getChannelConversationIntelligence(token, target.id);
-
-      setAiIntelligence(response?.data || response);
-    } catch (error) {
-      setAiError(error.message || "Failed to generate conversation intelligence.");
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
 
 
   const updateConversationBlockState = (targetUserId, updates) => {
@@ -6191,10 +6132,10 @@ const MainPage = () => {
               <div className="discord-ai-panel">
                 <div className="discord-ai-panel-header">
                   <div>
-                    <div className="discord-ai-eyebrow">AI Assistant</div>
-                    <h3>Conversation Intelligence</h3>
+                    <div className="discord-ai-eyebrow">AI Conversation Search</div>
+                    <h3>Ask this chat anything</h3>
                     <p>
-                      Ask about {activeAiConversationTitle}, or generate a smart summary with action items, decisions, questions, and suggested pins.
+                      Ask a specific question about {activeAiConversationTitle}. The assistant searches relevant messages first, then answers directly from the conversation.
                     </p>
                   </div>
 
@@ -6208,129 +6149,105 @@ const MainPage = () => {
                   </button>
                 </div>
 
-                <div className="discord-ai-actions-row">
-                  <form className="discord-ai-question-form" onSubmit={handleAskAi}>
-                    <input
-                      type="text"
-                      value={aiQuestion}
-                      onChange={(event) => setAiQuestion(event.target.value)}
-                      placeholder="Ask the AI about this conversation..."
-                      className="discord-ai-question-input"
-                      disabled={isAiLoading}
-                    />
-                    <button
-                      type="submit"
-                      className="auth-button compact-button discord-ai-action-button"
-                      disabled={isAiLoading || !aiQuestion.trim()}
-                    >
-                      {isAiLoading && aiActiveMode === "ask" ? "Thinking..." : "Ask"}
-                    </button>
-                  </form>
-
-                  <button
-                    type="button"
-                    className="auth-button compact-button discord-ai-secondary-button"
-                    onClick={handleGenerateConversationIntelligence}
+                <form className="discord-ai-question-form" onSubmit={handleAskAi}>
+                  <input
+                    type="text"
+                    value={aiQuestion}
+                    onChange={(event) => setAiQuestion(event.target.value)}
+                    placeholder="Example: Does anyone mention an appointment?"
+                    className="discord-ai-question-input"
                     disabled={isAiLoading}
+                  />
+                  <button
+                    type="submit"
+                    className="auth-button compact-button discord-ai-action-button"
+                    disabled={isAiLoading || !aiQuestion.trim()}
                   >
-                    {isAiLoading && aiActiveMode === "intelligence"
-                      ? "Analyzing..."
-                      : "Smart summary"}
+                    {isAiLoading ? "Searching..." : "Ask AI"}
                   </button>
+                </form>
+
+                <div className="discord-ai-example-row" aria-label="Example AI questions">
+                  {[
+                    "Does anyone mention an appointment?",
+                    "What did we decide?",
+                    "What tasks are left?"
+                  ].map((exampleQuestion) => (
+                    <button
+                      key={exampleQuestion}
+                      type="button"
+                      className="discord-ai-example-chip"
+                      onClick={() => setAiQuestion(exampleQuestion)}
+                      disabled={isAiLoading}
+                    >
+                      {exampleQuestion}
+                    </button>
+                  ))}
                 </div>
 
                 {aiError ? (
-                  <p className="auth-error server-inline-error server-inline-error-tight">
+                  <p className="auth-error server-inline-error discord-ai-error">
                     {aiError}
                   </p>
                 ) : null}
 
                 {aiAnswer ? (
-                  <div className="discord-ai-result-card">
+                  <div className="discord-ai-result-card discord-ai-answer-card">
                     <div className="discord-ai-result-title">Answer</div>
                     <p>{aiAnswer.answer}</p>
                     <div className="discord-ai-result-meta">
-                      Provider: {aiAnswer.provider || "AI"}
-                      {aiAnswer.context?.message_count !== undefined
-                        ? ` · ${aiAnswer.context.message_count} messages analyzed`
-                        : ""}
+                      {aiAnswer.context?.retrieval?.mode === "no_match"
+                        ? "No matching messages found"
+                        : `${aiAnswer.context?.message_count ?? aiAnswer.sources?.length ?? 0} relevant message${
+                            (aiAnswer.context?.message_count ?? aiAnswer.sources?.length ?? 0) === 1 ? "" : "s"
+                          } checked`}
+                      {aiAnswer.provider ? ` · Provider: ${aiAnswer.provider}` : ""}
                     </div>
-                  </div>
-                ) : null}
 
-                {aiIntelligence ? (
-                  <div className="discord-ai-intelligence-grid">
-                    <div className="discord-ai-result-card discord-ai-result-card-wide">
-                      <div className="discord-ai-result-title">Summary</div>
-                      <p>{aiIntelligence.summary}</p>
-                      <div className="discord-ai-result-meta">
-                        Provider: {aiIntelligence.provider || "AI"}
-                        {aiIntelligence.context?.message_count !== undefined
-                          ? ` · ${aiIntelligence.context.message_count} messages analyzed`
-                          : ""}
+                    {Array.isArray(aiAnswer.sources) && aiAnswer.sources.length > 0 ? (
+                      <div className="discord-ai-sources">
+                        <div className="discord-ai-sources-title">Relevant messages</div>
+                        {aiAnswer.sources.map((source, index) => {
+                          const sourceMessageId = isDmView
+                            ? source.direct_message_id || source.message_id
+                            : source.message_id || source.direct_message_id;
+
+                          return (
+                            <button
+                              key={`${sourceMessageId || "source"}-${index}`}
+                              type="button"
+                              className="discord-ai-source-item"
+                              onClick={() => {
+                                if (sourceMessageId) {
+                                  jumpToSearchMatch(0, [source]);
+                                }
+                              }}
+                              disabled={!sourceMessageId}
+                            >
+                              <span className="discord-ai-source-author">
+                                {source.author || "Unknown user"}
+                              </span>
+                              <span className="discord-ai-source-content">
+                                {source.content}
+                              </span>
+                              {source.created_at ? (
+                                <small>{formatTimestamp(source.created_at)}</small>
+                              ) : null}
+                            </button>
+                          );
+                        })}
                       </div>
-                    </div>
-
-                    <div className="discord-ai-result-card">
-                      <div className="discord-ai-result-title">Action items</div>
-                      {normalizeAiItems(aiIntelligence.action_items).length > 0 ? (
-                        <ul className="discord-ai-list">
-                          {normalizeAiItems(aiIntelligence.action_items).map((item, index) => (
-                            <li key={`ai-action-${index}`}>
-                              <span>{getAiItemText(item)}</span>
-                              {getAiItemMeta(item) ? (
-                                <small>{getAiItemMeta(item)}</small>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>No clear action items found yet.</p>
-                      )}
-                    </div>
-
-                    <div className="discord-ai-result-card">
-                      <div className="discord-ai-result-title">Open questions</div>
-                      {normalizeAiItems(aiIntelligence.unanswered_questions).length > 0 ? (
-                        <ul className="discord-ai-list">
-                          {normalizeAiItems(aiIntelligence.unanswered_questions).map((item, index) => (
-                            <li key={`ai-question-${index}`}>
-                              <span>{getAiItemText(item)}</span>
-                              {getAiItemMeta(item) ? (
-                                <small>{getAiItemMeta(item)}</small>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>No obvious unanswered questions found.</p>
-                      )}
-                    </div>
-
-                    <div className="discord-ai-result-card">
-                      <div className="discord-ai-result-title">Suggested pins</div>
-                      {normalizeAiItems(aiIntelligence.suggested_pins).length > 0 ? (
-                        <ul className="discord-ai-list">
-                          {normalizeAiItems(aiIntelligence.suggested_pins).map((item, index) => (
-                            <li key={`ai-pin-${index}`}>
-                              <span>{getAiItemText(item)}</span>
-                              {getAiItemMeta(item) ? (
-                                <small>{getAiItemMeta(item)}</small>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>No suggested pins yet.</p>
-                      )}
-                    </div>
-
-                    <div className="discord-ai-result-card">
-                      <div className="discord-ai-result-title">Next best step</div>
-                      <p>{aiIntelligence.next_best_step}</p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="discord-ai-empty-state">
+                    <span aria-hidden="true">🔎</span>
+                    <div>
+                      <strong>Ask a question instead of scrolling forever.</strong>
+                      <p>The assistant searches this conversation and answers from the messages it finds.</p>
                     </div>
                   </div>
-                ) : null}
+                )}
               </div>
             ) : null}
 

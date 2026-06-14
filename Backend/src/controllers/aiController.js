@@ -56,7 +56,11 @@ const askChannelAi = async (req, res, next) => {
 
     await ensureChannelAccess(channelId, userId, res);
 
-    const context = await aiModel.getChannelConversationContext(channelId, limit);
+    const context = await aiModel.getChannelQuestionContext(
+      channelId,
+      prompt,
+      limit
+    );
     const result = await aiService.askAssistant({ prompt, context });
 
     res.status(200).json({
@@ -66,7 +70,8 @@ const askChannelAi = async (req, res, next) => {
         context: {
           type: context.type,
           title: context.title,
-          message_count: context.messages.length
+          message_count: context.messages.length,
+          retrieval: context.retrieval || {}
         }
       }
     });
@@ -84,9 +89,10 @@ const askDirectAi = async (req, res, next) => {
 
     await ensureConversationAccess(conversationId, userId, res);
 
-    const context = await aiModel.getDirectConversationContext(
+    const context = await aiModel.getDirectQuestionContext(
       conversationId,
       userId,
+      prompt,
       limit
     );
     const result = await aiService.askAssistant({ prompt, context });
@@ -98,7 +104,8 @@ const askDirectAi = async (req, res, next) => {
         context: {
           type: context.type,
           title: context.title,
-          message_count: context.messages.length
+          message_count: context.messages.length,
+          retrieval: context.retrieval || {}
         }
       }
     });
@@ -127,7 +134,8 @@ const getChannelIntelligence = async (req, res, next) => {
         context: {
           type: context.type,
           title: context.title,
-          message_count: context.messages.length
+          message_count: context.messages.length,
+          retrieval: context.retrieval || {}
         }
       }
     });
@@ -160,7 +168,8 @@ const getDirectIntelligence = async (req, res, next) => {
         context: {
           type: context.type,
           title: context.title,
-          message_count: context.messages.length
+          message_count: context.messages.length,
+          retrieval: context.retrieval || {}
         }
       }
     });
