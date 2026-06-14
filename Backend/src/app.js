@@ -19,6 +19,7 @@ const friendRequestRoutes = require("./routes/friendRequestRoutes");
 const directMessageRoutes = require("./routes/directMessageRoutes");
 const notificationSettingsRoutes = require("./routes/notificationSettingsRoutes");
 const userSafetyRoutes = require("./routes/userSafetyRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
@@ -72,6 +73,7 @@ app.use("/api/friends", friendRequestRoutes);
 app.use("/api/direct-messages", directMessageRoutes);
 app.use("/api/notification-settings", notificationSettingsRoutes);
 app.use("/api/user-safety", userSafetyRoutes);
+app.use("/api/ai", aiRoutes);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
