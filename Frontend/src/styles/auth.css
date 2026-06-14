@@ -4141,8 +4141,11 @@ textarea:focus-visible,
 }
 
 .discord-ai-panel {
+  flex-shrink: 0;
   margin: 14px 18px 0;
   padding: 16px;
+  max-height: min(560px, calc(100vh - 220px));
+  overflow-y: auto;
   border: 1px solid rgba(139, 92, 246, 0.32);
   border-radius: 18px;
   background:
@@ -4198,22 +4201,24 @@ textarea:focus-visible,
 }
 
 .discord-ai-actions-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: stretch;
   margin-top: 14px;
 }
 
 .discord-ai-question-form {
-  display: flex;
-  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 10px;
   min-width: 0;
 }
 
 .discord-ai-question-input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+  min-height: 42px;
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.84);
@@ -4229,10 +4234,14 @@ textarea:focus-visible,
 
 .discord-ai-action-button,
 .discord-ai-secondary-button {
+  width: auto;
+  min-width: 86px;
+  padding: 0 16px;
   white-space: nowrap;
 }
 
 .discord-ai-secondary-button {
+  min-width: 170px;
   border-color: rgba(196, 181, 253, 0.32);
   background: rgba(88, 101, 242, 0.15);
 }
@@ -4295,11 +4304,12 @@ textarea:focus-visible,
 @media (max-width: 900px) {
   .discord-ai-actions-row,
   .discord-ai-question-form {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
-  .discord-ai-question-input {
-    min-height: 42px;
+  .discord-ai-action-button,
+  .discord-ai-secondary-button {
+    width: 100%;
   }
 
   .discord-ai-intelligence-grid {
