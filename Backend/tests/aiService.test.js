@@ -2,10 +2,16 @@ const aiService = require("../src/services/aiService");
 
 describe("AI service local conversation assistant", () => {
   const originalProvider = process.env.AI_PROVIDER;
+  const originalGeminiKey = process.env.GEMINI_API_KEY;
+  const originalAiModel = process.env.AI_MODEL;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     process.env.AI_PROVIDER = "local";
     delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.AI_MODEL;
+    global.fetch = originalFetch;
   });
 
   afterAll(() => {
@@ -14,6 +20,20 @@ describe("AI service local conversation assistant", () => {
     } else {
       process.env.AI_PROVIDER = originalProvider;
     }
+
+    if (originalGeminiKey === undefined) {
+      delete process.env.GEMINI_API_KEY;
+    } else {
+      process.env.GEMINI_API_KEY = originalGeminiKey;
+    }
+
+    if (originalAiModel === undefined) {
+      delete process.env.AI_MODEL;
+    } else {
+      process.env.AI_MODEL = originalAiModel;
+    }
+
+    global.fetch = originalFetch;
   });
 
   test("generates summary, action items, questions, and suggested pins from context", async () => {
@@ -75,6 +95,83 @@ describe("AI service local conversation assistant", () => {
     expect(response.answer).toContain("Tarik");
     expect(response.answer).toContain("appointment tomorrow at 2pm");
     expect(response.sources).toHaveLength(1);
+  });
+
+  test("askAssistant extracts a direct appointment time in local fallback mode", async () => {
+    const response = await aiService.askAssistant({
+      prompt: "At what time is the appointment?",
+      context: {
+        title: "Project chat",
+        type: "direct_message",
+        retrieval: { search_terms: ["appointment", "meeting"] },
+        messages: [
+          {
+            id: 1,
+            direct_message_id: 1,
+            author: "Tarik",
+            content: "I have an appointment tomorrow at 2pm.",
+            created_at: "2026-06-14T10:00:00Z"
+          }
+        ]
+      }
+    });
+
+    expect(response.provider).toBe("local");
+    expect(response.answer).toContain("The appointment is at 2pm");
+    expect(response.answer).toContain("Tarik");
+  });
+
+  test("uses Gemini when Gemini provider and API key are configured", async () => {
+    process.env.AI_PROVIDER = "gemini";
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.AI_MODEL = "gemini-test-model";
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: "The appointment is at 2pm. Tarik said: ‘I have an appointment tomorrow at 2pm.’"
+                }
+              ]
+            }
+          }
+        ]
+      })
+    });
+
+    const response = await aiService.askAssistant({
+      prompt: "At what time is the appointment?",
+      context: {
+        title: "Project chat",
+        type: "channel",
+        retrieval: { search_terms: ["appointment"] },
+        messages: [
+          {
+            id: 1,
+            message_id: 1,
+            author: "Tarik",
+            content: "I have an appointment tomorrow at 2pm.",
+            created_at: "2026-06-14T10:00:00Z"
+          }
+        ]
+      }
+    });
+
+    expect(response.provider).toBe("gemini");
+    expect(response.model).toBe("gemini-test-model");
+    expect(response.answer).toContain("2pm");
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("gemini-test-model:generateContent"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-goog-api-key": "test-key"
+        })
+      })
+    );
   });
 
   test("extractSearchTerms corrects common long typos", () => {

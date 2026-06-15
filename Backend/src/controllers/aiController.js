@@ -53,6 +53,7 @@ const askChannelAi = async (req, res, next) => {
     const userId = getUserId(req);
     const prompt = req.body?.prompt || req.body?.question || "";
     const limit = req.body?.limit || req.query?.limit;
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
 
     await ensureChannelAccess(channelId, userId, res);
 
@@ -61,7 +62,7 @@ const askChannelAi = async (req, res, next) => {
       prompt,
       limit
     );
-    const result = await aiService.askAssistant({ prompt, context });
+    const result = await aiService.askAssistant({ prompt, context, history });
 
     res.status(200).json({
       message: "AI response generated successfully.",
@@ -86,6 +87,7 @@ const askDirectAi = async (req, res, next) => {
     const userId = getUserId(req);
     const prompt = req.body?.prompt || req.body?.question || "";
     const limit = req.body?.limit || req.query?.limit;
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
 
     await ensureConversationAccess(conversationId, userId, res);
 
@@ -95,7 +97,7 @@ const askDirectAi = async (req, res, next) => {
       prompt,
       limit
     );
-    const result = await aiService.askAssistant({ prompt, context });
+    const result = await aiService.askAssistant({ prompt, context, history });
 
     res.status(200).json({
       message: "AI response generated successfully.",

@@ -1,9 +1,16 @@
-const DEFAULT_AI_MODEL = process.env.AI_MODEL || "gpt-4o-mini";
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || process.env.AI_MODEL || "gemini-2.5-flash";
 const OPENAI_API_URL =
   process.env.OPENAI_API_URL || "https://api.openai.com/v1/chat/completions";
-const MAX_PROMPT_LENGTH = 1200;
+const GEMINI_API_BASE_URL =
+  process.env.GEMINI_API_URL || "https://generativelanguage.googleapis.com/v1beta";
+
+const MAX_PROMPT_LENGTH = 1800;
 const MAX_TRANSCRIPT_MESSAGES = 80;
-const MAX_SOURCE_MESSAGES = 5;
+const MAX_SOURCE_MESSAGES = 6;
+const MAX_HISTORY_MESSAGES = 8;
+const MAX_GEMINI_OUTPUT_TOKENS = 900;
+const MAX_OPENAI_OUTPUT_TOKENS = 900;
 
 const STOP_WORDS = new Set([
   "about",
@@ -70,7 +77,7 @@ const SEARCH_SYNONYMS = {
   email: ["email", "mail", "gmail", "smtp"],
   file: ["file", "attachment", "upload", "download"],
   attachment: ["attachment", "file", "upload", "download"],
-  ai: ["ai", "bot", "assistant", "openai", "chatgpt"]
+  ai: ["ai", "bot", "assistant", "openai", "gemini", "chatgpt"]
 };
 
 const KNOWN_SEARCH_WORDS = Object.keys(SEARCH_SYNONYMS);
@@ -104,7 +111,7 @@ const normalizeTextForSearch = (value = "") =>
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/[^a-z0-9\s:]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -192,7 +199,7 @@ const extractSearchTerms = (prompt = "") => {
   return [...terms]
     .map((term) => normalizeTextForSearch(term))
     .filter((term) => term.length >= 2 && !STOP_WORDS.has(term))
-    .slice(0, 16);
+    .slice(0, 18);
 };
 
 const normalizeContext = (context = {}) => ({
@@ -205,11 +212,25 @@ const normalizeContext = (context = {}) => ({
         message_id: message.message_id || message.id || null,
         direct_message_id: message.direct_message_id || null,
         author: message.author || message.username || message.sender_username || "Unknown user",
-        content: clampText(message.content || "", 900),
+        content: clampText(message.content || "", 1000),
         created_at: message.created_at || null
       }))
     : []
 });
+
+const normalizeAiHistory = (history = []) => {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .filter((item) => item && item.role && item.content)
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map((item) => ({
+      role: item.role === "assistant" ? "assistant" : "user",
+      content: clampText(item.content, 800)
+    }));
+};
 
 const buildTranscript = (context = {}) => {
   const normalizedContext = normalizeContext(context);
@@ -226,6 +247,18 @@ const buildTranscript = (context = {}) => {
 
       return `${messageNumber}. [${timestamp}] ${message.author}: ${content}`;
     })
+    .join("\n");
+};
+
+const buildAiHistoryText = (history = []) => {
+  const normalizedHistory = normalizeAiHistory(history);
+
+  if (!normalizedHistory.length) {
+    return "No previous AI assistant messages in this panel.";
+  }
+
+  return normalizedHistory
+    .map((item) => `${item.role === "assistant" ? "Assistant" : "User"}: ${item.content}`)
     .join("\n");
 };
 
@@ -384,19 +417,11 @@ const buildLocalIntelligence = (context = {}) => {
   };
 };
 
-const isDirectLookupQuestion = (prompt = "") => {
-  const normalizedPrompt = normalizeTextForSearch(prompt);
-
-  return /\b(does|did|do|is|are|was|were|has|have|anyone|who|what|when|where|which)\b/.test(
-    normalizedPrompt
-  );
-};
-
 const createSourceFromMessage = (message) => ({
   message_id: message.message_id || message.id || null,
   direct_message_id: message.direct_message_id || null,
   author: message.author || "Unknown user",
-  content: clampText(message.content, 260),
+  content: clampText(message.content, 300),
   created_at: message.created_at || null
 });
 
@@ -413,7 +438,7 @@ const rankMessagesForQuestion = (messages = [], prompt = "", contextTerms = []) 
     .sort((a, b) => b.score - a.score || b.originalIndex - a.originalIndex);
 };
 
-const buildLocalQuestionAnswer = ({ prompt, context }) => {
+const getSourceMessages = (context = {}, prompt = "") => {
   const normalizedContext = normalizeContext(context);
   const contextTerms = Array.isArray(normalizedContext.retrieval?.search_terms)
     ? normalizedContext.retrieval.search_terms
@@ -423,7 +448,43 @@ const buildLocalQuestionAnswer = ({ prompt, context }) => {
     prompt,
     contextTerms
   );
-  const sources = rankedMessages.slice(0, MAX_SOURCE_MESSAGES).map(createSourceFromMessage);
+  const fallbackMessages = getMeaningfulMessages(normalizedContext.messages).slice(-MAX_SOURCE_MESSAGES);
+  const selectedMessages = rankedMessages.length ? rankedMessages : fallbackMessages;
+
+  return selectedMessages.slice(0, MAX_SOURCE_MESSAGES).map(createSourceFromMessage);
+};
+
+const isYesNoLookupQuestion = (prompt = "") => {
+  const normalizedPrompt = normalizeTextForSearch(prompt);
+
+  return /\b(does|did|do|is|are|was|were|has|have|anyone)\b/.test(normalizedPrompt);
+};
+
+const isTimeQuestion = (prompt = "") =>
+  /\b(what\s+time|which\s+time|at\s+what\s+time|time)\b/i.test(prompt);
+
+const isWhenQuestion = (prompt = "") =>
+  /\b(when|what\s+day|which\s+day|date)\b/i.test(prompt);
+
+const extractTimeText = (content = "") => {
+  const timeMatch = String(content).match(
+    /\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s?(?:am|pm)\b|\b(?:[01]?\d|2[0-3]):[0-5]\d\b/i
+  );
+
+  return timeMatch ? timeMatch[0].replace(/\s+/g, "") : "";
+};
+
+const extractDateText = (content = "") => {
+  const dateMatch = String(content).match(
+    /\b(today|tonight|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next\s+(?:week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\b/i
+  );
+
+  return dateMatch ? dateMatch[0] : "";
+};
+
+const buildLocalQuestionAnswer = ({ prompt, context }) => {
+  const normalizedContext = normalizeContext(context);
+  const sources = getSourceMessages(normalizedContext, prompt);
 
   if (!sources.length) {
     return {
@@ -438,20 +499,30 @@ const buildLocalQuestionAnswer = ({ prompt, context }) => {
 
   const [bestSource] = sources;
   const quotedContent = `“${bestSource.content}”`;
-  const hasMoreSources = sources.length > 1;
-  const additionalSources = hasMoreSources
-    ? ` I also found ${sources.length - 1} other relevant message${
-        sources.length - 1 === 1 ? "" : "s"
-      } below.`
-    : "";
-  const directPrefix = isDirectLookupQuestion(prompt)
-    ? "Yes."
-    : "The most relevant message I found is this.";
+  const timeText = extractTimeText(bestSource.content);
+  const dateText = extractDateText(bestSource.content);
+
+  let answer;
+
+  if (isTimeQuestion(prompt) && timeText) {
+    answer = `The appointment is at ${timeText}. ${bestSource.author} said: ${quotedContent}`;
+  } else if (isWhenQuestion(prompt) && (dateText || timeText)) {
+    const whenText = [dateText, timeText ? `at ${timeText}` : ""].filter(Boolean).join(" ");
+    answer = `It is ${whenText}. ${bestSource.author} said: ${quotedContent}`;
+  } else if (isYesNoLookupQuestion(prompt)) {
+    answer = `Yes. ${bestSource.author} said: ${quotedContent}`;
+  } else {
+    answer = `${bestSource.author} said: ${quotedContent}`;
+  }
+
+  if (sources.length > 1) {
+    answer += ` I also found ${sources.length - 1} other relevant message${sources.length - 1 === 1 ? "" : "s"} below.`;
+  }
 
   return {
     provider: "local",
     model: "local-conversation-search",
-    answer: `${directPrefix} ${bestSource.author} said: ${quotedContent}${additionalSources}`,
+    answer,
     sources,
     confidence: bestSource.content ? "medium" : "low",
     generated_at: new Date().toISOString()
@@ -503,8 +574,41 @@ const extractOpenAiText = (data) => {
   return "";
 };
 
-const shouldUseOpenAi = () =>
-  process.env.AI_PROVIDER !== "local" && Boolean(process.env.OPENAI_API_KEY);
+const extractGeminiText = (data) => {
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || "")
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  if (text) {
+    return text;
+  }
+
+  const blockReason = data?.promptFeedback?.blockReason;
+
+  if (blockReason) {
+    throw new Error(`Gemini blocked the request: ${blockReason}.`);
+  }
+
+  return "";
+};
+
+const getConfiguredProvider = () => {
+  const requestedProvider = String(process.env.AI_PROVIDER || "local")
+    .trim()
+    .toLowerCase();
+
+  if (requestedProvider === "gemini" && process.env.GEMINI_API_KEY) {
+    return "gemini";
+  }
+
+  if (requestedProvider === "openai" && process.env.OPENAI_API_KEY) {
+    return "openai";
+  }
+
+  return "local";
+};
 
 const callOpenAi = async ({ systemPrompt, userPrompt, jsonMode = false }) => {
   const response = await fetch(OPENAI_API_URL, {
@@ -514,7 +618,7 @@ const callOpenAi = async ({ systemPrompt, userPrompt, jsonMode = false }) => {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: DEFAULT_AI_MODEL,
+      model: process.env.OPENAI_MODEL || process.env.AI_MODEL || DEFAULT_OPENAI_MODEL,
       messages: [
         {
           role: "system",
@@ -525,7 +629,8 @@ const callOpenAi = async ({ systemPrompt, userPrompt, jsonMode = false }) => {
           content: userPrompt
         }
       ],
-      temperature: 0.15,
+      temperature: 0.3,
+      max_tokens: MAX_OPENAI_OUTPUT_TOKENS,
       ...(jsonMode ? { response_format: { type: "json_object" } } : {})
     })
   });
@@ -535,48 +640,123 @@ const callOpenAi = async ({ systemPrompt, userPrompt, jsonMode = false }) => {
   if (!response.ok) {
     throw new Error(
       data?.error?.message ||
-        "The AI provider could not complete the request. Please try again."
+        "The OpenAI provider could not complete the request. Please try again."
     );
   }
 
   return extractOpenAiText(data);
 };
 
-const askAssistant = async ({ prompt, context }) => {
+const normalizeGeminiModelName = (model = DEFAULT_GEMINI_MODEL) =>
+  String(model || DEFAULT_GEMINI_MODEL).replace(/^models\//, "").trim();
+
+const callGemini = async ({ systemPrompt, userPrompt, jsonMode = false }) => {
+  const model = normalizeGeminiModelName(process.env.GEMINI_MODEL || process.env.AI_MODEL || DEFAULT_GEMINI_MODEL);
+  const response = await fetch(
+    `${GEMINI_API_BASE_URL.replace(/\/$/, "")}/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": process.env.GEMINI_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [
+            {
+              text: systemPrompt
+            }
+          ]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: userPrompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.35,
+          maxOutputTokens: MAX_GEMINI_OUTPUT_TOKENS,
+          ...(jsonMode ? { responseMimeType: "application/json" } : {})
+        }
+      })
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error?.message ||
+        "The Gemini provider could not complete the request. Please try again."
+    );
+  }
+
+  return extractGeminiText(data);
+};
+
+const buildAssistantSystemPrompt = () =>
+  "You are the built-in AI assistant in a modern chat application. " +
+  "Speak naturally, like a helpful human assistant in a chat. " +
+  "When the user asks about the current conversation, answer using the retrieved chat messages. " +
+  "Do not dump a generic summary unless the user asks for one. " +
+  "If the retrieved messages contain the answer, give the exact answer first, then mention who said it and quote the useful message. " +
+  "If the user asks for a time, date, person, decision, task, file, or appointment, extract that exact detail directly. " +
+  "If the retrieved messages do not answer a conversation-specific question, say you could not find it in this conversation. " +
+  "If the user asks a normal general question that is not about the conversation, answer normally. " +
+  "Never invent chat facts that are not present in the retrieved messages. Keep answers concise and useful.";
+
+const buildAssistantUserPrompt = ({ prompt, context, history }) => {
+  const normalizedContext = normalizeContext(context);
+  const transcript = buildTranscript(normalizedContext);
+  const historyText = buildAiHistoryText(history);
+
+  return (
+    `Current chat: ${normalizedContext.title}\n` +
+    `Chat type: ${normalizedContext.type}\n` +
+    `Retrieved message count: ${normalizedContext.messages.length}\n` +
+    `Retrieval mode: ${normalizedContext.retrieval?.mode || "unknown"}\n\n` +
+    `Recent AI panel history:\n${historyText}\n\n` +
+    `Retrieved chat messages:\n${transcript}\n\n` +
+    `User's latest question:\n${prompt}\n\n` +
+    "Answer the latest question naturally. If the answer comes from the chat, use only the retrieved chat messages as evidence."
+  );
+};
+
+const askAssistant = async ({ prompt, context, history = [] }) => {
   const safePrompt = normalizePrompt(prompt);
   const normalizedContext = normalizeContext(context);
-  const sources = normalizedContext.messages
-    .slice(0, MAX_SOURCE_MESSAGES)
-    .map(createSourceFromMessage);
+  const sources = getSourceMessages(normalizedContext, safePrompt);
+  const provider = getConfiguredProvider();
 
   if (!safePrompt) {
     throw new Error("AI question is required.");
   }
 
-  if (!shouldUseOpenAi()) {
+  if (provider === "local") {
     return buildLocalQuestionAnswer({ prompt: safePrompt, context: normalizedContext });
   }
 
-  const transcript = buildTranscript(normalizedContext);
-  const answer = await callOpenAi({
-    systemPrompt:
-      "You are the built-in AI conversation search assistant for a chat app. " +
-      "Answer the user's question using only the provided retrieved chat messages. " +
-      "Be direct and precise. If the answer exists, mention who said it and quote the useful part. " +
-      "If the retrieved messages do not answer the question, say that you could not find it in this conversation. " +
-      "Do not invent details. Do not summarize the whole chat unless the user specifically asks for a summary.",
-    userPrompt:
-      `Conversation title: ${normalizedContext.title}\n` +
-      `Conversation type: ${normalizedContext.type}\n` +
-      `Retrieved message count: ${normalizedContext.messages.length}\n\n` +
-      `Relevant chat messages:\n${transcript}\n\n` +
-      `User question:\n${safePrompt}`,
-    jsonMode: false
+  const userPrompt = buildAssistantUserPrompt({
+    prompt: safePrompt,
+    context: normalizedContext,
+    history
   });
+  const systemPrompt = buildAssistantSystemPrompt();
+  const answer = provider === "gemini"
+    ? await callGemini({ systemPrompt, userPrompt, jsonMode: false })
+    : await callOpenAi({ systemPrompt, userPrompt, jsonMode: false });
 
   return {
-    provider: "openai",
-    model: DEFAULT_AI_MODEL,
+    provider,
+    model:
+      provider === "gemini"
+        ? normalizeGeminiModelName(process.env.GEMINI_MODEL || process.env.AI_MODEL || DEFAULT_GEMINI_MODEL)
+        : process.env.OPENAI_MODEL || process.env.AI_MODEL || DEFAULT_OPENAI_MODEL,
     answer: answer || `I could not find a relevant answer in ${normalizedContext.title}.`,
     sources,
     confidence: normalizedContext.messages.length ? "high" : "low",
@@ -587,24 +767,26 @@ const askAssistant = async ({ prompt, context }) => {
 const generateConversationIntelligence = async ({ context }) => {
   const normalizedContext = normalizeContext(context);
   const transcript = buildTranscript(normalizedContext);
+  const provider = getConfiguredProvider();
 
-  if (!shouldUseOpenAi()) {
+  if (provider === "local") {
     return buildLocalIntelligence(normalizedContext);
   }
 
-  const text = await callOpenAi({
-    systemPrompt:
-      "You generate conversation intelligence for a chat app. Return strict JSON only. Do not invent facts. Keep every field short and useful.",
-    userPrompt:
-      `Analyze this ${normalizedContext.type} and return JSON with exactly these keys: ` +
-      `summary, decisions, action_items, unanswered_questions, important_moments, suggested_pins, next_best_step. ` +
-      `decisions should be an array of objects with text, author, message_id, created_at. ` +
-      `action_items should be an array of objects with task, owner, message_id, created_at. ` +
-      `unanswered_questions should be an array of objects with question, author, message_id, created_at. ` +
-      `important_moments and suggested_pins should be arrays of objects with content, author, message_id, created_at.\n\n` +
-      `Conversation title: ${normalizedContext.title}\nTranscript:\n${transcript}`,
-    jsonMode: true
-  });
+  const systemPrompt =
+    "You generate conversation intelligence for a chat app. Return strict JSON only. Do not invent facts. Keep every field short and useful.";
+  const userPrompt =
+    `Analyze this ${normalizedContext.type} and return JSON with exactly these keys: ` +
+    `summary, decisions, action_items, unanswered_questions, important_moments, suggested_pins, next_best_step. ` +
+    `decisions should be an array of objects with text, author, message_id, created_at. ` +
+    `action_items should be an array of objects with task, owner, message_id, created_at. ` +
+    `unanswered_questions should be an array of objects with question, author, message_id, created_at. ` +
+    `important_moments and suggested_pins should be arrays of objects with content, author, message_id, created_at.\n\n` +
+    `Conversation title: ${normalizedContext.title}\nTranscript:\n${transcript}`;
+
+  const text = provider === "gemini"
+    ? await callGemini({ systemPrompt, userPrompt, jsonMode: true })
+    : await callOpenAi({ systemPrompt, userPrompt, jsonMode: true });
 
   const parsed = parseJsonFromText(text);
   const localFallback = buildLocalIntelligence(normalizedContext);
@@ -612,8 +794,11 @@ const generateConversationIntelligence = async ({ context }) => {
   return {
     ...localFallback,
     ...(parsed || { summary: text || localFallback.summary }),
-    provider: "openai",
-    model: DEFAULT_AI_MODEL,
+    provider,
+    model:
+      provider === "gemini"
+        ? normalizeGeminiModelName(process.env.GEMINI_MODEL || process.env.AI_MODEL || DEFAULT_GEMINI_MODEL)
+        : process.env.OPENAI_MODEL || process.env.AI_MODEL || DEFAULT_OPENAI_MODEL,
     generated_at: new Date().toISOString()
   };
 };
@@ -625,5 +810,8 @@ module.exports = {
   askAssistant,
   normalizePrompt,
   extractSearchTerms,
-  buildLocalQuestionAnswer
+  buildLocalQuestionAnswer,
+  getConfiguredProvider,
+  extractTimeText,
+  extractDateText
 };

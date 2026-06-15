@@ -31,6 +31,24 @@ const buildLikeClause = (column, terms = []) => {
   };
 };
 
+
+const mergeMessageRowsById = (messageRows = [], idField, limit) => {
+  const safeLimit = normalizeLimit(limit);
+  const rowsById = new Map();
+
+  messageRows.forEach((row) => {
+    const rowId = row?.[idField];
+
+    if (rowId !== undefined && rowId !== null && !rowsById.has(String(rowId))) {
+      rowsById.set(String(rowId), row);
+    }
+  });
+
+  return [...rowsById.values()]
+    .sort((a, b) => Number(b[idField]) - Number(a[idField]))
+    .slice(0, safeLimit);
+};
+
 const normalizeChannelMessages = (messageRows = []) =>
   messageRows.reverse().map((message) => ({
     id: Number(message.message_id),
@@ -267,84 +285,64 @@ const getDirectConversationContext = async (conversationId, userId, limit) => {
 
 const getChannelQuestionContext = async (channelId, question, limit) => {
   const safeLimit = normalizeLimit(limit);
+  const latestLimit = Math.min(DEFAULT_LATEST_FALLBACK_LIMIT, safeLimit);
   const searchTerms = extractSearchTerms(question);
   const channel = await getChannelDetails(channelId);
 
-  if (!searchTerms.length) {
-    const latestRows = await getLatestChannelMessageRows(
-      channelId,
-      DEFAULT_LATEST_FALLBACK_LIMIT
-    );
-
-    return buildChannelContext({
-      channelId,
-      channel,
-      messages: latestRows,
-      retrieval: {
-        mode: "latest_context",
-        search_terms: [],
-        matched_message_count: latestRows.length
-      }
-    });
-  }
-
-  const matchingRows = await getMatchingChannelMessageRows(
-    channelId,
-    searchTerms,
+  const [matchingRows, latestRows] = await Promise.all([
+    searchTerms.length
+      ? getMatchingChannelMessageRows(channelId, searchTerms, safeLimit)
+      : Promise.resolve([]),
+    getLatestChannelMessageRows(channelId, latestLimit)
+  ]);
+  const mergedRows = mergeMessageRowsById(
+    [...matchingRows, ...latestRows],
+    "message_id",
     safeLimit
   );
 
   return buildChannelContext({
     channelId,
     channel,
-    messages: matchingRows,
+    messages: mergedRows,
     retrieval: {
-      mode: matchingRows.length ? "relevant_search" : "no_match",
+      mode: matchingRows.length ? "hybrid_relevant_and_recent" : "recent_context",
       search_terms: searchTerms,
-      matched_message_count: matchingRows.length
+      matched_message_count: matchingRows.length,
+      recent_message_count: latestRows.length,
+      returned_message_count: mergedRows.length
     }
   });
 };
 
 const getDirectQuestionContext = async (conversationId, userId, question, limit) => {
   const safeLimit = normalizeLimit(limit);
+  const latestLimit = Math.min(DEFAULT_LATEST_FALLBACK_LIMIT, safeLimit);
   const searchTerms = extractSearchTerms(question);
   const conversation = await getDirectConversationDetails(conversationId, userId);
 
-  if (!searchTerms.length) {
-    const latestRows = await getLatestDirectMessageRows(
-      conversationId,
-      userId,
-      DEFAULT_LATEST_FALLBACK_LIMIT
-    );
-
-    return buildDirectContext({
-      conversationId,
-      conversation,
-      messages: latestRows,
-      retrieval: {
-        mode: "latest_context",
-        search_terms: [],
-        matched_message_count: latestRows.length
-      }
-    });
-  }
-
-  const matchingRows = await getMatchingDirectMessageRows(
-    conversationId,
-    userId,
-    searchTerms,
+  const [matchingRows, latestRows] = await Promise.all([
+    searchTerms.length
+      ? getMatchingDirectMessageRows(conversationId, userId, searchTerms, safeLimit)
+      : Promise.resolve([]),
+    getLatestDirectMessageRows(conversationId, userId, latestLimit)
+  ]);
+  const mergedRows = mergeMessageRowsById(
+    [...matchingRows, ...latestRows],
+    "direct_message_id",
     safeLimit
   );
 
   return buildDirectContext({
     conversationId,
     conversation,
-    messages: matchingRows,
+    messages: mergedRows,
     retrieval: {
-      mode: matchingRows.length ? "relevant_search" : "no_match",
+      mode: matchingRows.length ? "hybrid_relevant_and_recent" : "recent_context",
       search_terms: searchTerms,
-      matched_message_count: matchingRows.length
+      matched_message_count: matchingRows.length,
+      recent_message_count: latestRows.length,
+      returned_message_count: mergedRows.length
     }
   });
 };

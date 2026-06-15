@@ -1094,7 +1094,7 @@ const MainPage = () => {
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [aiQuestion, setAiQuestion] = useState("");
-  const [aiAnswer, setAiAnswer] = useState(null);
+  const [aiMessages, setAiMessages] = useState([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
 
@@ -1386,6 +1386,12 @@ const MainPage = () => {
 
   const activeSearchCount = messageSearchMatches.length;
 
+  useEffect(() => {
+    setAiQuestion("");
+    setAiMessages([]);
+    setAiError("");
+  }, [activeChannelId, activeConversationId, isDmView]);
+
   const activeMessageSearchEmptyText = isDmView
     ? `No direct messages found for "${messageSearchTerm.trim()}".`
     : `No channel messages found for "${messageSearchTerm.trim()}".`;
@@ -1537,7 +1543,6 @@ const MainPage = () => {
 
   useEffect(() => {
     setAiQuestion("");
-    setAiAnswer(null);
     setAiError("");
   }, [activeChannelId, activeConversationId, isDmView]);
 
@@ -4679,19 +4684,45 @@ const MainPage = () => {
       return;
     }
 
-    if (!target || !question) {
+    if (!target || !question || isAiLoading) {
       return;
     }
+
+    const aiHistoryForRequest = aiMessages
+      .filter((message) => message.role && message.content)
+      .map((message) => ({
+        role: message.role,
+        content: message.content
+      }));
+    const userAiMessage = {
+      role: "user",
+      content: question,
+      created_at: new Date().toISOString()
+    };
 
     try {
       setIsAiLoading(true);
       setAiError("");
-      setAiAnswer(null);
-      const response = target.type === "direct"
-        ? await askDirectAi(token, target.id, question)
-        : await askChannelAi(token, target.id, question);
+        setAiQuestion("");
+      setAiMessages((currentMessages) => [...currentMessages, userAiMessage]);
 
-      setAiAnswer(response?.data || response);
+      const response = target.type === "direct"
+        ? await askDirectAi(token, target.id, question, 60, aiHistoryForRequest)
+        : await askChannelAi(token, target.id, question, 60, aiHistoryForRequest);
+      const aiData = response?.data || response;
+
+      setAiMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          role: "assistant",
+          content: aiData?.answer || "I could not generate an answer.",
+          sources: aiData?.sources || [],
+          provider: aiData?.provider,
+          model: aiData?.model,
+          context: aiData?.context,
+          created_at: aiData?.generated_at || new Date().toISOString()
+        }
+      ]);
     } catch (error) {
       setAiError(error.message || "Failed to ask the AI assistant.");
     } finally {
@@ -6131,46 +6162,154 @@ const MainPage = () => {
             {showComposer && isAiPanelOpen ? (
               <div className="discord-ai-panel">
                 <div className="discord-ai-panel-header">
-                  <div>
-                    <div className="discord-ai-eyebrow">AI Conversation Search</div>
-                    <h3>Ask this chat anything</h3>
+                  <div className="discord-ai-heading-block">
+                    <div className="discord-ai-eyebrow">Gemini-powered chat assistant</div>
+                    <h3>Ask naturally about this chat</h3>
                     <p>
-                      Ask a specific question about {activeAiConversationTitle}. The assistant searches relevant messages first, then answers directly from the conversation.
+                      Ask freely about {activeAiConversationTitle}. The assistant checks the most relevant messages first, then answers like a normal conversation.
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    className="discord-ai-close-button"
-                    onClick={() => setIsAiPanelOpen(false)}
-                    aria-label="Close AI assistant"
-                  >
-                    ×
-                  </button>
+                  <div className="discord-ai-panel-controls">
+                    {aiMessages.length > 0 ? (
+                      <button
+                        type="button"
+                        className="discord-ai-clear-button"
+                        onClick={() => {
+                          setAiMessages([]);
+                                                setAiError("");
+                        }}
+                        disabled={isAiLoading}
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="discord-ai-close-button"
+                      onClick={() => setIsAiPanelOpen(false)}
+                      aria-label="Close AI assistant"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+
+                <div className="discord-ai-chat-shell">
+                  {aiMessages.length > 0 ? (
+                    <div className="discord-ai-chat-thread" aria-live="polite">
+                      {aiMessages.map((message, messageIndex) => (
+                        <div
+                          key={`${message.role}-${message.created_at || messageIndex}`}
+                          className={`discord-ai-message discord-ai-message-${message.role}`}
+                        >
+                          <div className="discord-ai-message-avatar">
+                            {message.role === "assistant" ? "✨" : "You"}
+                          </div>
+                          <div className="discord-ai-message-body">
+                            <p>{message.content}</p>
+
+                            {message.role === "assistant" && (message.provider || message.context) ? (
+                              <div className="discord-ai-result-meta">
+                                {message.context?.message_count
+                                  ? `${message.context.message_count} relevant message${message.context.message_count === 1 ? "" : "s"} checked`
+                                  : "Conversation context checked"}
+                                {message.provider ? ` · ${String(message.provider).toUpperCase()}${message.model ? ` / ${message.model}` : ""}` : ""}
+                              </div>
+                            ) : null}
+
+                            {message.role === "assistant" && Array.isArray(message.sources) && message.sources.length > 0 ? (
+                              <div className="discord-ai-sources">
+                                <div className="discord-ai-sources-title">Sources from this chat</div>
+                                {message.sources.map((source, index) => {
+                                  const sourceMessageId = isDmView
+                                    ? source.direct_message_id || source.message_id
+                                    : source.message_id || source.direct_message_id;
+
+                                  return (
+                                    <button
+                                      key={`${sourceMessageId || "source"}-${index}`}
+                                      type="button"
+                                      className="discord-ai-source-item"
+                                      onClick={() => {
+                                        if (sourceMessageId) {
+                                          jumpToSearchMatch(0, [source]);
+                                        }
+                                      }}
+                                      disabled={!sourceMessageId}
+                                    >
+                                      <span className="discord-ai-source-author">
+                                        {source.author || "Unknown user"}
+                                      </span>
+                                      <span className="discord-ai-source-content">
+                                        {source.content}
+                                      </span>
+                                      {source.created_at ? (
+                                        <small>{formatTimestamp(source.created_at)}</small>
+                                      ) : null}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+
+                      {isAiLoading ? (
+                        <div className="discord-ai-message discord-ai-message-assistant discord-ai-thinking">
+                          <div className="discord-ai-message-avatar">✨</div>
+                          <div className="discord-ai-message-body">
+                            <span className="discord-ai-thinking-dots">
+                              <span></span>
+                              <span></span>
+                              <span></span>
+                            </span>
+                            <p>Thinking through the conversation…</p>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="discord-ai-empty-state">
+                      <span aria-hidden="true">💬</span>
+                      <div>
+                        <strong>Talk to the assistant normally.</strong>
+                        <p>Ask about appointments, decisions, tasks, files, plans, or anything else in this conversation.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <form className="discord-ai-question-form" onSubmit={handleAskAi}>
-                  <input
-                    type="text"
+                  <textarea
                     value={aiQuestion}
                     onChange={(event) => setAiQuestion(event.target.value)}
-                    placeholder="Example: Does anyone mention an appointment?"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        handleAskAi(event);
+                      }
+                    }}
+                    placeholder="Ask anything, e.g. At what time is the appointment?"
                     className="discord-ai-question-input"
                     disabled={isAiLoading}
+                    rows={2}
                   />
                   <button
                     type="submit"
                     className="auth-button compact-button discord-ai-action-button"
                     disabled={isAiLoading || !aiQuestion.trim()}
                   >
-                    {isAiLoading ? "Searching..." : "Ask AI"}
+                    {isAiLoading ? "Thinking..." : "Ask"}
                   </button>
                 </form>
 
                 <div className="discord-ai-example-row" aria-label="Example AI questions">
                   {[
-                    "Does anyone mention an appointment?",
-                    "What did we decide?",
+                    "At what time is the appointment?",
+                    "What did we decide about deployment?",
                     "What tasks are left?"
                   ].map((exampleQuestion) => (
                     <button
@@ -6190,64 +6329,6 @@ const MainPage = () => {
                     {aiError}
                   </p>
                 ) : null}
-
-                {aiAnswer ? (
-                  <div className="discord-ai-result-card discord-ai-answer-card">
-                    <div className="discord-ai-result-title">Answer</div>
-                    <p>{aiAnswer.answer}</p>
-                    <div className="discord-ai-result-meta">
-                      {aiAnswer.context?.retrieval?.mode === "no_match"
-                        ? "No matching messages found"
-                        : `${aiAnswer.context?.message_count ?? aiAnswer.sources?.length ?? 0} relevant message${
-                            (aiAnswer.context?.message_count ?? aiAnswer.sources?.length ?? 0) === 1 ? "" : "s"
-                          } checked`}
-                      {aiAnswer.provider ? ` · Provider: ${aiAnswer.provider}` : ""}
-                    </div>
-
-                    {Array.isArray(aiAnswer.sources) && aiAnswer.sources.length > 0 ? (
-                      <div className="discord-ai-sources">
-                        <div className="discord-ai-sources-title">Relevant messages</div>
-                        {aiAnswer.sources.map((source, index) => {
-                          const sourceMessageId = isDmView
-                            ? source.direct_message_id || source.message_id
-                            : source.message_id || source.direct_message_id;
-
-                          return (
-                            <button
-                              key={`${sourceMessageId || "source"}-${index}`}
-                              type="button"
-                              className="discord-ai-source-item"
-                              onClick={() => {
-                                if (sourceMessageId) {
-                                  jumpToSearchMatch(0, [source]);
-                                }
-                              }}
-                              disabled={!sourceMessageId}
-                            >
-                              <span className="discord-ai-source-author">
-                                {source.author || "Unknown user"}
-                              </span>
-                              <span className="discord-ai-source-content">
-                                {source.content}
-                              </span>
-                              {source.created_at ? (
-                                <small>{formatTimestamp(source.created_at)}</small>
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="discord-ai-empty-state">
-                    <span aria-hidden="true">🔎</span>
-                    <div>
-                      <strong>Ask a question instead of scrolling forever.</strong>
-                      <p>The assistant searches this conversation and answers from the messages it finds.</p>
-                    </div>
-                  </div>
-                )}
               </div>
             ) : null}
 
