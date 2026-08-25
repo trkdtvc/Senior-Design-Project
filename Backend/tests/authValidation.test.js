@@ -11,6 +11,20 @@ describe("Auth validation routes", () => {
     expect(res.body.message).toBeTruthy();
   });
 
+  test("POST /api/auth/register returns 400 for an invalid email address", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "testuser123",
+        email: "not-an-email",
+        password: "Password123!",
+        confirmPassword: "Password123!"
+      });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe("Enter a valid email address");
+  });
+
   test("POST /api/auth/register returns 400 when passwords do not match", async () => {
     const res = await request(app)
       .post("/api/auth/register")

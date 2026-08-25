@@ -143,6 +143,19 @@ const registerUser = async (req, res, next) => {
       throw new Error("All fields are required");
     }
 
+    if (typeof email !== "string") {
+      res.status(400);
+      throw new Error("Enter a valid email address");
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUsername = username.trim();
+
+    if (normalizedEmail.length > 100 || !isValidEmail(normalizedEmail)) {
+      res.status(400);
+      throw new Error("Enter a valid email address");
+    }
+
     if (password !== confirmPassword) {
       res.status(400);
       throw new Error("Passwords do not match");
@@ -156,9 +169,6 @@ const registerUser = async (req, res, next) => {
         "Weak password not accepted. Your password must be at least medium strength."
       );
     }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedUsername = username.trim();
 
     const existingEmail = await findUserByEmail(normalizedEmail);
     if (existingEmail) {

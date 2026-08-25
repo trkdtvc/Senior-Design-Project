@@ -599,15 +599,33 @@ const getConfiguredProvider = () => {
     .trim()
     .toLowerCase();
 
-  if (requestedProvider === "gemini" && process.env.GEMINI_API_KEY) {
+  if (requestedProvider === "local") {
+    return "local";
+  }
+
+  if (requestedProvider === "gemini") {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error(
+        "AI_PROVIDER is set to gemini, but GEMINI_API_KEY is missing."
+      );
+    }
+
     return "gemini";
   }
 
-  if (requestedProvider === "openai" && process.env.OPENAI_API_KEY) {
+  if (requestedProvider === "openai") {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error(
+        "AI_PROVIDER is set to openai, but OPENAI_API_KEY is missing."
+      );
+    }
+
     return "openai";
   }
 
-  return "local";
+  throw new Error(
+    `Unsupported AI_PROVIDER "${requestedProvider}". Use local, gemini, or openai.`
+  );
 };
 
 const callOpenAi = async ({ systemPrompt, userPrompt, jsonMode = false }) => {

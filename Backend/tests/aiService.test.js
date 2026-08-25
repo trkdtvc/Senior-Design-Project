@@ -121,6 +121,23 @@ describe("AI service local conversation assistant", () => {
     expect(response.answer).toContain("Tarik");
   });
 
+  test("throws a clear error when Gemini is selected without an API key", () => {
+    process.env.AI_PROVIDER = "gemini";
+    delete process.env.GEMINI_API_KEY;
+
+    expect(() => aiService.getConfiguredProvider()).toThrow(
+      "AI_PROVIDER is set to gemini, but GEMINI_API_KEY is missing."
+    );
+  });
+
+  test("throws a clear error for an unsupported AI provider", () => {
+    process.env.AI_PROVIDER = "unknown-provider";
+
+    expect(() => aiService.getConfiguredProvider()).toThrow(
+      'Unsupported AI_PROVIDER "unknown-provider". Use local, gemini, or openai.'
+    );
+  });
+
   test("uses Gemini when Gemini provider and API key are configured", async () => {
     process.env.AI_PROVIDER = "gemini";
     process.env.GEMINI_API_KEY = "test-key";
