@@ -11,6 +11,12 @@ const {
   resetPassword
 } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
+const {
+  loginRateLimiter,
+  registrationRateLimiter,
+  emailActionRateLimiter,
+  passwordResetRateLimiter
+} = require("../middleware/rateLimitMiddleware");
 
 const router = express.Router();
 
@@ -60,7 +66,7 @@ const router = express.Router();
  *       400:
  *         description: Invalid registration data, duplicate account data, or weak password
  */
-router.post("/register", registerUser);
+router.post("/register", registrationRateLimiter, registerUser);
 
 /**
  * @swagger
@@ -96,7 +102,7 @@ router.post("/register", registerUser);
  *       403:
  *         description: Email not verified
  */
-router.post("/login", loginUser);
+router.post("/login", loginRateLimiter, loginUser);
 
 /**
  * @swagger
@@ -195,7 +201,11 @@ router.get("/verify-email", verifyEmail);
  *       400:
  *         description: Email is required or account is already verified
  */
-router.post("/resend-verification", resendVerificationEmail);
+router.post(
+  "/resend-verification",
+  emailActionRateLimiter,
+  resendVerificationEmail
+);
 
 /**
  * @swagger
@@ -222,7 +232,7 @@ router.post("/resend-verification", resendVerificationEmail);
  *       400:
  *         description: Email is required
  */
-router.post("/forgot-password", forgotPassword);
+router.post("/forgot-password", emailActionRateLimiter, forgotPassword);
 
 /**
  * @swagger
@@ -243,7 +253,11 @@ router.post("/forgot-password", forgotPassword);
  *       400:
  *         description: Invalid or expired password reset token
  */
-router.get("/reset-password/validate", validatePasswordResetToken);
+router.get(
+  "/reset-password/validate",
+  passwordResetRateLimiter,
+  validatePasswordResetToken
+);
 
 /**
  * @swagger
@@ -279,6 +293,6 @@ router.get("/reset-password/validate", validatePasswordResetToken);
  *       400:
  *         description: Invalid or expired token, weak password, or invalid input
  */
-router.post("/reset-password", resetPassword);
+router.post("/reset-password", passwordResetRateLimiter, resetPassword);
 
 module.exports = router;

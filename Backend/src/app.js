@@ -24,6 +24,10 @@ const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
 const app = express();
 
+// Production hosts such as Railway sit behind a reverse proxy.
+// Trust the nearest proxy so req.ip reflects the real client for rate limiting.
+app.set("trust proxy", 1);
+
 const parseAllowedOrigins = () => {
   const origins = process.env.CORS_ORIGINS || process.env.FRONTEND_URL;
 
