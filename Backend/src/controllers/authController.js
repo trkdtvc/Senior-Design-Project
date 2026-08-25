@@ -12,6 +12,7 @@ const {
   findUserByPasswordResetToken,
   updateUserPassword,
   updateUserProfile,
+  invalidateEmailVerificationTokens,
   createEmailVerificationToken,
   findEmailVerificationTokenRecord,
   markEmailVerificationTokenAsUsed
@@ -544,6 +545,13 @@ const updateProfile = async (req, res, next) => {
       throw new Error("Enter a valid email address");
     }
 
+    const currentUser = await findUserById(req.user.user_id);
+
+    if (!currentUser) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
     const existingUsername = await findUserByUsername(normalizedUsername);
 
     if (
@@ -564,10 +572,18 @@ const updateProfile = async (req, res, next) => {
       throw new Error("Email already exists");
     }
 
+    const emailChanged =
+      normalizedEmail !== String(currentUser.email || "").toLowerCase();
+
+    if (emailChanged) {
+      await invalidateEmailVerificationTokens(req.user.user_id);
+    }
+
     await updateUserProfile(
       req.user.user_id,
       normalizedUsername,
-      normalizedEmail
+      normalizedEmail,
+      emailChanged
     );
 
     const updatedUser = await findUserById(req.user.user_id);
@@ -575,6 +591,25 @@ const updateProfile = async (req, res, next) => {
     if (!updatedUser) {
       res.status(404);
       throw new Error("User not found");
+    }
+
+    if (emailChanged) {
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const verificationTokenExpires = new Date(
+        Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
+      );
+
+      await createEmailVerificationToken(
+        updatedUser.user_id,
+        verificationToken,
+        verificationTokenExpires
+      );
+
+      await sendVerificationEmailToUser(
+        updatedUser,
+        verificationToken,
+        EMAIL_VERIFICATION_EXPIRY_HOURS
+      );
     }
 
     const token = generateToken(updatedUser);
@@ -586,7 +621,9 @@ const updateProfile = async (req, res, next) => {
     }
 
     return res.status(200).json({
-      message: "Profile updated successfully",
+      message: emailChanged
+        ? "Profile updated. Please verify your new email address"
+        : "Profile updated successfully",
       token,
       user: safeUser
     });

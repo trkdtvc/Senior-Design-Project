@@ -103,13 +103,26 @@ const updateUserPassword = async (userId, passwordHash) => {
 };
 
 
-const updateUserProfile = async (userId, username, email) => {
+const updateUserProfile = async (userId, username, email, emailChanged = false) => {
   const [result] = await pool.execute(
     `UPDATE users
      SET username = ?,
-         email = ?
+         email = ?,
+         is_verified = CASE WHEN ? THEN 0 ELSE is_verified END
      WHERE user_id = ?`,
-    [username, email, userId]
+    [username, email, emailChanged ? 1 : 0, userId]
+  );
+
+  return result;
+};
+
+const invalidateEmailVerificationTokens = async (userId) => {
+  const [result] = await pool.execute(
+    `UPDATE email_verification_tokens
+     SET used_at = NOW()
+     WHERE user_id = ?
+       AND used_at IS NULL`,
+    [userId]
   );
 
   return result;
@@ -190,6 +203,7 @@ module.exports = {
   findUserByPasswordResetToken,
   updateUserPassword,
   updateUserProfile,
+  invalidateEmailVerificationTokens,
   updateUserPresenceStatus,
   setUserOnlineState,
   createEmailVerificationToken,

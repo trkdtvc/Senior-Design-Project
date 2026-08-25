@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
 const { setUserOnlineState } = require("./models/userModel");
+const { isUserMemberOfServer } = require("./models/serverMemberModel");
 const userSafetyModel = require("./models/userSafetyModel");
 const { isUserMemberOfChannelServer } = require("./models/messageModel");
 const {
@@ -140,9 +141,18 @@ io.on("connection", async (socket) => {
     console.error("Failed to mark user online:", error.message);
   }
 
-  socket.on("join_server", (serverId) => {
-    if (!serverId) return;
-    socket.join(`server_${serverId}`);
+  socket.on("join_server", async (serverId) => {
+    try {
+      if (!serverId) return;
+
+      const isMember = await isUserMemberOfServer(serverId, userId);
+
+      if (!isMember) return;
+
+      socket.join(`server_${serverId}`);
+    } catch (error) {
+      console.error("Failed to join server room:", error.message);
+    }
   });
 
   socket.on("leave_server", (serverId) => {
@@ -150,9 +160,18 @@ io.on("connection", async (socket) => {
     socket.leave(`server_${serverId}`);
   });
 
-  socket.on("join_channel", (channelId) => {
-    if (!channelId) return;
-    socket.join(`channel_${channelId}`);
+  socket.on("join_channel", async (channelId) => {
+    try {
+      if (!channelId) return;
+
+      const isMember = await isUserMemberOfChannelServer(channelId, userId);
+
+      if (!isMember) return;
+
+      socket.join(`channel_${channelId}`);
+    } catch (error) {
+      console.error("Failed to join channel room:", error.message);
+    }
   });
 
   socket.on("leave_channel", (channelId) => {
@@ -185,6 +204,10 @@ io.on("connection", async (socket) => {
       const channelId = payload.channel_id || payload.channelId;
 
       if (!channelId) return;
+
+      const isMember = await isUserMemberOfChannelServer(channelId, userId);
+
+      if (!isMember) return;
 
       socket.to(`channel_${channelId}`).emit("channel_typing_stop", {
         channel_id: Number(channelId),
