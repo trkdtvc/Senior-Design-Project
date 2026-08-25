@@ -5,7 +5,6 @@ const path = require("path");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 
-const testRoutes = require("./routes/testRoutes");
 const authRoutes = require("./routes/authRoutes");
 const serverRoutes = require("./routes/serverRoutes");
 const channelRoutes = require("./routes/channelRoutes");
@@ -23,6 +22,20 @@ const aiRoutes = require("./routes/aiRoutes");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
 const app = express();
+
+app.disable("x-powered-by");
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=()"
+  );
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
 
 // Production hosts such as Railway sit behind a reverse proxy.
 // Trust the nearest proxy so req.ip reflects the real client for rate limiting.
@@ -60,9 +73,14 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "..", "uploads"), {
+    maxAge: "7d",
+    immutable: true
+  })
+);
 
-app.use("/api/test", testRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/servers", serverRoutes);
 app.use("/api/channels", channelRoutes);

@@ -4538,3 +4538,118 @@ textarea:focus-visible,
     max-height: 300px;
   }
 }
+
+/* FINAL CHAT APP COMPLETION PASS */
+.discord-pane-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.discord-pane-header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.discord-pane-header-action {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 6px 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--app-text-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.discord-pane-header-action:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--app-text);
+}
+
+.discord-member-actions {
+  flex-wrap: wrap;
+}
+
+.discord-banned-users-panel {
+  margin: 8px 12px 16px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.discord-banned-users-list {
+  display: grid;
+  gap: 8px;
+}
+
+.discord-banned-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.discord-banned-user-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.discord-banned-user-name,
+.discord-banned-user-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discord-banned-user-name {
+  color: var(--app-text-soft);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.discord-banned-user-email {
+  margin-top: 2px;
+  color: var(--app-text-muted);
+  font-size: 0.72rem;
+}
+
+.discord-modal-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 20px 20px;
+  padding: 14px;
+  border: 1px solid rgba(237, 66, 69, 0.28);
+  border-radius: 12px;
+  background: rgba(237, 66, 69, 0.08);
+}
+
+.discord-modal-danger-zone strong {
+  color: var(--app-text);
+}
+
+.discord-modal-danger-zone p {
+  margin: 4px 0 0;
+  color: var(--app-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 560px) {
+  .discord-modal-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .discord-modal-danger-zone .auth-button {
+    width: 100%;
+  }
+}

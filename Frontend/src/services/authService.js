@@ -72,3 +72,26 @@ export const updateProfile = async (token, profileData) =>
     }
   });
 
+export const changePassword = async (
+  token,
+  currentPassword,
+  newPassword,
+  confirmPassword
+) =>
+  apiRequest("/auth/password", {
+    method: "PATCH",
+    token,
+    body: {
+      currentPassword,
+      newPassword,
+      confirmPassword
+    }
+  });
+
+export const deleteAccount = async (token, password) =>
+  apiRequest("/auth/account", {
+    method: "DELETE",
+    token,
+    body: { password }
+  });
+

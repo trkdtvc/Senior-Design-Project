@@ -99,6 +99,30 @@ const getServerById = async (serverId) => {
   return rows[0];
 };
 
+const updateServer = async (serverId, serverName, serverDescription) => {
+  const [result] = await pool.query(
+    `UPDATE servers
+     SET server_name = ?, server_description = ?
+     WHERE server_id = ?`,
+    [serverName, serverDescription, serverId]
+  );
+
+  return result;
+};
+
+const getServerAttachmentUrls = async (serverId) => {
+  const [rows] = await pool.query(
+    `SELECT ma.file_url
+     FROM message_attachments ma
+     JOIN messages m ON ma.message_id = m.message_id
+     JOIN channels c ON m.channel_id = c.channel_id
+     WHERE c.server_id = ?`,
+    [serverId]
+  );
+
+  return rows;
+};
+
 const deleteServer = async (serverId) => {
   const connection = await pool.getConnection();
 
@@ -154,5 +178,7 @@ module.exports = {
   createServerWithDefaults,
   getServersByUserId,
   getServerById,
+  updateServer,
+  getServerAttachmentUrls,
   deleteServer
 };

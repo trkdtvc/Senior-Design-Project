@@ -32,6 +32,41 @@ const getChannelById = async (channelId) => {
   return rows[0];
 };
 
+const updateChannelName = async (channelId, channelName) => {
+  const [result] = await pool.query(
+    `UPDATE channels
+     SET channel_name = ?
+     WHERE channel_id = ?`,
+    [channelName, channelId]
+  );
+
+  return result;
+};
+
+const getChannelByName = async (serverId, channelName) => {
+  const [rows] = await pool.query(
+    `SELECT channel_id, server_id, channel_name
+     FROM channels
+     WHERE server_id = ? AND LOWER(channel_name) = LOWER(?)
+     LIMIT 1`,
+    [serverId, channelName]
+  );
+
+  return rows[0] || null;
+};
+
+const getChannelAttachmentUrls = async (channelId) => {
+  const [rows] = await pool.query(
+    `SELECT ma.file_url
+     FROM message_attachments ma
+     JOIN messages m ON ma.message_id = m.message_id
+     WHERE m.channel_id = ?`,
+    [channelId]
+  );
+
+  return rows;
+};
+
 const deleteChannel = async (channelId) => {
   const [result] = await pool.query(
     "DELETE FROM channels WHERE channel_id = ?",
@@ -56,6 +91,9 @@ module.exports = {
   createChannel,
   getChannelsByServerId,
   getChannelById,
+  getChannelByName,
+  updateChannelName,
+  getChannelAttachmentUrls,
   deleteChannel,
   isUserMemberOfServer
 };

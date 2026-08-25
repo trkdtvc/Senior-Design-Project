@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
-const { setUserOnlineState } = require("./models/userModel");
+const { findUserById, setUserOnlineState } = require("./models/userModel");
 const { isUserMemberOfServer } = require("./models/serverMemberModel");
 const userSafetyModel = require("./models/userSafetyModel");
 const { isUserMemberOfChannelServer } = require("./models/messageModel");
@@ -105,7 +105,7 @@ const emitPresenceUpdate = (userId, username, isOnline, lastSeenAt = null) => {
   io.emit("presence_update", payload);
 };
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   try {
     const token = getSocketToken(socket);
 
@@ -114,7 +114,19 @@ io.use((socket, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.user = decoded;
+    const user = await findUserById(decoded.user_id);
+
+    if (!user) {
+      return next(new Error("Not authorized, account unavailable"));
+    }
+
+    socket.user = {
+      ...decoded,
+      user_id: user.user_id,
+      username: user.username,
+      email: user.email,
+      is_verified: user.is_verified
+    };
 
     next();
   } catch (error) {

@@ -127,8 +127,10 @@ router.get(
         req.query.query || req.query.searchTerm || req.query.q || ""
       ).trim();
 
-      if (!searchTerm) {
-        return res.status(400).json({ message: "Search term is required." });
+      if (searchTerm.length < 2) {
+        return res.status(400).json({
+          message: "Search term must be at least 2 characters."
+        });
       }
 
       const isMember = await isUserInConversation(conversationId, userId);

@@ -6,6 +6,7 @@ const {
   findUserByEmail,
   findUserByUsername,
   findUserById,
+  findUserCredentialsById,
   createUser,
   markUserAsVerified,
   setPasswordResetToken,
@@ -13,6 +14,8 @@ const {
   updateUserPassword,
   updateUserProfile,
   invalidateEmailVerificationTokens,
+  getAttachmentUrlsAffectedByUserDeletion,
+  deleteUserById,
   createEmailVerificationToken,
   findEmailVerificationTokenRecord,
   markEmailVerificationTokenAsUsed
@@ -20,6 +23,7 @@ const {
 
 const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_HOURS = 24;
+const { deleteStoredFiles } = require("../services/attachmentFileService");
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -143,13 +147,30 @@ const registerUser = async (req, res, next) => {
       throw new Error("All fields are required");
     }
 
-    if (typeof email !== "string") {
+    if (
+      typeof username !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      typeof confirmPassword !== "string"
+    ) {
       res.status(400);
-      throw new Error("Enter a valid email address");
+      throw new Error("Registration fields must be valid text values");
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const normalizedUsername = username.trim();
+    const normalizedUsername = String(username || "").trim();
+
+    if (normalizedUsername.length < 3 || normalizedUsername.length > 50) {
+      res.status(400);
+      throw new Error("Username must be between 3 and 50 characters");
+    }
+
+    if (!/^[a-zA-Z0-9_.-]+$/.test(normalizedUsername)) {
+      res.status(400);
+      throw new Error(
+        "Username can only contain letters, numbers, underscores, dots, and dashes"
+      );
+    }
 
     if (normalizedEmail.length > 100 || !isValidEmail(normalizedEmail)) {
       res.status(400);
@@ -227,9 +248,9 @@ const loginUser = async (req, res, next) => {
   try {
     const { login, identity, password } = req.body || {};
     const rawLoginValue = login || identity;
-    const loginValue = rawLoginValue ? rawLoginValue.trim() : "";
+    const loginValue = typeof rawLoginValue === "string" ? rawLoginValue.trim() : "";
 
-    if (!loginValue || !password) {
+    if (!loginValue || typeof password !== "string" || !password) {
       res.status(400);
       throw new Error("Login and password are required");
     }
@@ -346,11 +367,12 @@ const verifyEmail = async (req, res, next) => {
 const resendVerificationEmail = async (req, res, next) => {
   try {
     const { email } = req.body || {};
-    const normalizedEmail = email ? email.trim().toLowerCase() : "";
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
 
-    if (!normalizedEmail) {
+    if (!normalizedEmail || normalizedEmail.length > 100 || !isValidEmail(normalizedEmail)) {
       res.status(400);
-      throw new Error("Email is required");
+      throw new Error("Enter a valid email address");
     }
 
     const user = await findUserByEmail(normalizedEmail);
@@ -394,11 +416,12 @@ const resendVerificationEmail = async (req, res, next) => {
 const requestPasswordReset = async (req, res, next) => {
   try {
     const { email } = req.body || {};
-    const normalizedEmail = email ? email.trim().toLowerCase() : "";
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
 
-    if (!normalizedEmail) {
+    if (!normalizedEmail || normalizedEmail.length > 100 || !isValidEmail(normalizedEmail)) {
       res.status(400);
-      throw new Error("Email is required");
+      throw new Error("Enter a valid email address");
     }
 
     const user = await findUserByEmail(normalizedEmail);
@@ -472,7 +495,12 @@ const resetPassword = async (req, res, next) => {
       throw new Error("Invalid password reset token");
     }
 
-    if (!newPassword || !confirmPassword) {
+    if (
+      typeof newPassword !== "string" ||
+      typeof confirmPassword !== "string" ||
+      !newPassword ||
+      !confirmPassword
+    ) {
       res.status(400);
       throw new Error("New password and confirm password are required");
     }
@@ -529,11 +557,128 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (
+      typeof currentPassword !== "string" ||
+      typeof newPassword !== "string" ||
+      typeof confirmPassword !== "string" ||
+      !currentPassword ||
+      !newPassword ||
+      !confirmPassword
+    ) {
+      res.status(400);
+      throw new Error("Current password, new password, and confirmation are required");
+    }
+
+    if (newPassword !== confirmPassword) {
+      res.status(400);
+      throw new Error("New passwords do not match");
+    }
+
+    const passwordValidation = getPasswordValidation(newPassword);
+
+    if (!passwordValidation.isAccepted) {
+      res.status(400);
+      throw new Error(
+        "Weak password not accepted. Your password must be at least medium strength."
+      );
+    }
+
+    const user = await findUserCredentialsById(req.user.user_id);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const currentPasswordMatches = await bcrypt.compare(
+      currentPassword,
+      user.password_hash
+    );
+
+    if (!currentPasswordMatches) {
+      res.status(401);
+      throw new Error("Current password is incorrect");
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.password_hash);
+
+    if (isSamePassword) {
+      res.status(400);
+      throw new Error("New password must be different from your current password");
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await updateUserPassword(user.user_id, passwordHash);
+
+    const freshUser = await findUserById(user.user_id);
+    const token = generateToken(freshUser);
+
+    res.status(200).json({
+      message: "Password changed successfully",
+      token
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteAccount = async (req, res, next) => {
+  try {
+    const { password } = req.body || {};
+
+    if (typeof password !== "string" || !password) {
+      res.status(400);
+      throw new Error("Password is required to delete your account");
+    }
+
+    const userId = req.user.user_id;
+    const user = await findUserCredentialsById(userId);
+
+    if (!user) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const passwordMatches = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatches) {
+      res.status(401);
+      throw new Error("Password is incorrect");
+    }
+
+    const attachmentUrls = await getAttachmentUrlsAffectedByUserDeletion(userId);
+
+    await deleteUserById(userId);
+    await deleteStoredFiles(attachmentUrls);
+
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(`user_${userId}`).emit("account_deleted", {
+        user_id: Number(userId)
+      });
+      io.in(`user_${userId}`).disconnectSockets(true);
+    }
+
+    res.status(200).json({
+      message: "Account deleted successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const updateProfile = async (req, res, next) => {
   try {
     const { username, email } = req.body || {};
-    const normalizedUsername = username ? username.trim() : "";
-    const normalizedEmail = email ? email.trim().toLowerCase() : "";
+    const normalizedUsername =
+      typeof username === "string" ? username.trim() : "";
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
 
     if (!normalizedUsername || !normalizedEmail) {
       res.status(400);
@@ -662,6 +807,8 @@ module.exports = {
   loginUser,
   getMe,
   updateProfile,
+  changePassword,
+  deleteAccount,
   verifyEmail,
   resendVerificationEmail,
   forgotPassword: requestPasswordReset,

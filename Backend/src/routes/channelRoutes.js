@@ -70,6 +70,7 @@ router.post("/", protect, channelController.createChannel);
  *         description: You are not a member of this server
  */
 router.get("/:serverId", protect, channelController.getServerChannels);
+router.patch("/:channelId", protect, channelController.updateChannel);
 
 /**
  * @swagger

@@ -23,3 +23,22 @@ export const updateServerMemberRole = async (serverId, memberId, role, token) =>
     token,
     body: { role }
   });
+
+export const getServerBans = async (serverId, token) =>
+  apiRequest(`/server-members/${serverId}/bans`, {
+    token
+  });
+
+export const banServerMember = async (serverId, memberId, token, reason = "") =>
+  apiRequest(`/server-members/${serverId}/members/${memberId}/ban`, {
+    method: "POST",
+    token,
+    body: { reason }
+  });
+
+export const unbanServerUser = async (serverId, userId, token) =>
+  apiRequest(`/server-members/${serverId}/bans/${userId}`, {
+    method: "DELETE",
+    token
+  });
+

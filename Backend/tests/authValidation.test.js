@@ -39,6 +39,39 @@ describe("Auth validation routes", () => {
     expect(res.body.message).toBeTruthy();
   });
 
+
+  test("POST /api/auth/register returns 400 for an invalid username", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "bad username!",
+        email: "valid@example.com",
+        password: "Password123!",
+        confirmPassword: "Password123!"
+      });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/Username can only contain/i);
+  });
+
+  test("POST /api/auth/resend-verification rejects an invalid email", async () => {
+    const res = await request(app)
+      .post("/api/auth/resend-verification")
+      .send({ email: "not-an-email" });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe("Enter a valid email address");
+  });
+
+  test("POST /api/auth/forgot-password rejects an invalid email", async () => {
+    const res = await request(app)
+      .post("/api/auth/forgot-password")
+      .send({ email: "not-an-email" });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe("Enter a valid email address");
+  });
+
   test("POST /api/auth/login returns 400 when login and password are missing", async () => {
     const res = await request(app)
       .post("/api/auth/login")

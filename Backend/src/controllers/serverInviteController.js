@@ -11,6 +11,7 @@ const {
 
 const {
   isUserMemberOfServer,
+  isUserBannedFromServer,
   addServerMember
 } = require("../models/serverMemberModel");
 const { canManageServerContent } = require("../models/permissionModel");
@@ -97,7 +98,7 @@ const getServerInvites = async (req, res, next) => {
 const joinServerByInvite = async (req, res, next) => {
   try {
     const userId = req.user.user_id;
-    const inviteCode = req.body.invite_code?.trim();
+    const inviteCode = String(req.body?.invite_code || "").trim();
 
     if (!inviteCode) {
       res.status(400);
@@ -120,6 +121,13 @@ const joinServerByInvite = async (req, res, next) => {
       await deactivateInvite(invite.invite_id);
       res.status(400);
       throw new Error("This invite has expired.");
+    }
+
+    const isBanned = await isUserBannedFromServer(invite.server_id, userId);
+
+    if (isBanned) {
+      res.status(403);
+      throw new Error("You are banned from this server.");
     }
 
     const isAlreadyMember = await isUserMemberOfServer(invite.server_id, userId);

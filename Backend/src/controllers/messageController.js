@@ -1,5 +1,8 @@
 const messageModel = require("../models/messageModel");
 const { canManageServerContent } = require("../models/permissionModel");
+const { deleteStoredFiles } = require("../services/attachmentFileService");
+
+const MAX_MESSAGE_LENGTH = 4000;
 
 const createAttachmentPayload = (file) => {
   if (!file) {
@@ -96,7 +99,12 @@ const createMessage = async (req, res, next) => {
       throw new Error("Channel ID is required");
     }
 
-    const trimmedContent = content.trim();
+    const trimmedContent = String(content || "").trim();
+
+    if (trimmedContent.length > MAX_MESSAGE_LENGTH) {
+      res.status(400);
+      throw new Error(`Messages cannot exceed ${MAX_MESSAGE_LENGTH} characters`);
+    }
 
     if (!trimmedContent && !attachmentPayload) {
       res.status(400);
@@ -257,9 +265,9 @@ const searchChannelMessages = async (req, res, next) => {
       throw new Error("Channel ID is required");
     }
 
-    if (!searchTerm) {
+    if (searchTerm.length < 2) {
       res.status(400);
-      throw new Error("Search term is required");
+      throw new Error("Search term must be at least 2 characters");
     }
 
     const isMember = await messageModel.isUserMemberOfChannelServer(channelId, userId);
@@ -290,7 +298,7 @@ const updateMessage = async (req, res, next) => {
     const { messageId } = req.params;
     const userId = req.user.user_id;
     const content = req.body.content || "";
-    const trimmedContent = content.trim();
+    const trimmedContent = String(content || "").trim();
 
     if (!messageId) {
       res.status(400);
@@ -300,6 +308,11 @@ const updateMessage = async (req, res, next) => {
     if (!trimmedContent) {
       res.status(400);
       throw new Error("Message content is required");
+    }
+
+    if (trimmedContent.length > MAX_MESSAGE_LENGTH) {
+      res.status(400);
+      throw new Error(`Messages cannot exceed ${MAX_MESSAGE_LENGTH} characters`);
     }
 
     const message = await messageModel.getMessageById(messageId);
@@ -387,8 +400,11 @@ const deleteMessage = async (req, res, next) => {
       throw new Error("You can only delete your own messages unless you are a server owner or admin");
     }
 
+    const attachments = await messageModel.getMessageAttachmentsByMessageId(messageId);
+
     await messageModel.deleteMessageAttachmentsByMessageId(messageId);
     await messageModel.deleteMessageById(messageId);
+    await deleteStoredFiles(attachments);
 
     const deletedMessage = {
       message_id: Number(message.message_id),

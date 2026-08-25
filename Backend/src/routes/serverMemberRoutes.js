@@ -4,6 +4,9 @@ const {
   getServerMembers,
   leaveServer,
   removeMember,
+  getBannedUsers,
+  banMember,
+  unbanMember,
   updateMemberRole
 } = require("../controllers/serverMemberController");
 const { protect } = require("../middleware/authMiddleware");
@@ -103,6 +106,9 @@ router.delete("/:serverId/leave", protect, leaveServer);
  *         description: Server or member not found
  */
 router.delete("/:serverId/members/:memberId", protect, removeMember);
+router.get("/:serverId/bans", protect, getBannedUsers);
+router.post("/:serverId/members/:memberId/ban", protect, banMember);
+router.delete("/:serverId/bans/:userId", protect, unbanMember);
 
 /**
  * @swagger

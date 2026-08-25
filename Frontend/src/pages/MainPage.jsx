@@ -1,14 +1,16 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getMe, updateProfile } from "../services/authService";
+import { changePassword, deleteAccount, getMe, updateProfile } from "../services/authService";
 import {
   getUserServers,
   createServer,
+  updateServer,
   deleteServer
 } from "../services/serverService";
 import {
   getServerChannels,
   createChannel,
+  updateChannel,
   deleteChannel as deleteChannelById
 } from "../services/channelService";
 import {
@@ -27,8 +29,11 @@ import {
 } from "../services/messageService";
 import {
   getServerMembers,
+  getServerBans,
   leaveServer,
   removeServerMember,
+  banServerMember,
+  unbanServerUser,
   updateServerMemberRole
 } from "../services/serverMemberService";
 import {
@@ -82,6 +87,7 @@ const EmojiPicker = lazy(() => import("emoji-picker-react"));
 const FILE_BASE_URL = getFileBaseUrl();
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MESSAGE_PAGE_SIZE = 30;
+const MAX_MESSAGE_LENGTH = 4000;
 const QUICK_REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏"];
 const EMOJI_PICKER_THEME = "dark";
 const getAuthToken = () => localStorage.getItem("token");
@@ -134,6 +140,14 @@ const normalizeMessages = (data) => {
 const normalizeMembers = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.members)) return data.members;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const normalizeServerBans = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.bans)) return data.bans;
+  if (Array.isArray(data?.data?.bans)) return data.data.bans;
   if (Array.isArray(data?.data)) return data.data;
   return [];
 };
@@ -975,6 +989,16 @@ const MainPage = () => {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
+  const [isAccountSecurityModalOpen, setIsAccountSecurityModalOpen] = useState(false);
+  const [passwordFormData, setPasswordFormData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
+  const [accountSecurityError, setAccountSecurityError] = useState("");
+  const [accountSecuritySuccess, setAccountSecuritySuccess] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [removeFriendError, setRemoveFriendError] = useState("");
   const [removingFriendId, setRemovingFriendId] = useState(null);
   const [hoveredChannelId, setHoveredChannelId] = useState(null);
@@ -997,10 +1021,25 @@ const MainPage = () => {
   const [addFriendSuccess, setAddFriendSuccess] = useState("");
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [servers, setServers] = useState([]);
+  const [isEditServerModalOpen, setIsEditServerModalOpen] = useState(false);
+  const [editServerFormData, setEditServerFormData] = useState({
+    server_name: "",
+    description: ""
+  });
+  const [editServerError, setEditServerError] = useState("");
+  const [isUpdatingServer, setIsUpdatingServer] = useState(false);
   const [friends, setFriends] = useState([]);
   const [directConversations, setDirectConversations] = useState([]);
   const [channels, setChannels] = useState([]);
+  const [isEditChannelModalOpen, setIsEditChannelModalOpen] = useState(false);
+  const [editChannelTarget, setEditChannelTarget] = useState(null);
+  const [editChannelName, setEditChannelName] = useState("");
+  const [editChannelError, setEditChannelError] = useState("");
+  const [isUpdatingChannel, setIsUpdatingChannel] = useState(false);
   const [members, setMembers] = useState([]);
+  const [serverBans, setServerBans] = useState([]);
+  const [serverBanError, setServerBanError] = useState("");
+  const [serverBanActionKey, setServerBanActionKey] = useState(null);
   const [channelMessages, setChannelMessages] = useState([]);
   const [directMessages, setDirectMessages] = useState([]);
   const [hasOlderChannelMessages, setHasOlderChannelMessages] = useState(false);
@@ -1855,6 +1894,18 @@ const MainPage = () => {
     return normalizedMembers;
   }, []);
 
+  const loadServerBannedUsers = useCallback(async (token, serverId) => {
+    if (!serverId) {
+      setServerBans([]);
+      return [];
+    }
+
+    const banData = await getServerBans(serverId, token);
+    const normalizedBans = normalizeServerBans(banData);
+    setServerBans(normalizedBans);
+    return normalizedBans;
+  }, []);
+
   const loadChannelMessageList = useCallback(
     async (token, channelId, options = {}) => {
       if (!channelId) {
@@ -2157,31 +2208,38 @@ const MainPage = () => {
         const userData = await getMe(token);
         setUser(userData);
 
-        await Promise.all([
+        const secondaryResults = await Promise.allSettled([
           loadServers(token),
           loadFriends(token),
           loadDirectConversationList(token),
           loadFriendRequests(token),
           loadNotificationSettings(token),
-          loadBlockedUsers(token)
+          loadBlockedUsers(token),
+          loadUnreadCounts(token)
         ]);
 
-        try {
-          await loadUnreadCounts(token);
-        } catch (unreadError) {
-          console.error("Failed to load unread counts:", unreadError);
+        const failedSecondaryLoads = secondaryResults.filter(
+          (result) => result.status === "rejected"
+        );
 
-          setUnreadChannelCounts({});
-          setUnreadServerCounts({});
-          setUnreadDirectCounts({});
-          setMentionChannelCounts({});
-          setMentionServerCounts({});
+        if (failedSecondaryLoads.length > 0) {
+          console.error(
+            "Some app data failed to load:",
+            failedSecondaryLoads.map((result) => result.reason)
+          );
+          setError("Some app data could not be loaded. You can keep using the app and refresh to retry.");
         }
       } catch (error) {
-        disconnectSocket();
-        localStorage.removeItem("token");
-        setError(error.message || "Failed to load the app. Please log in again.");
-        navigate("/login");
+        if (error?.response?.status === 401) {
+          disconnectSocket();
+          localStorage.removeItem("token");
+          navigate("/login");
+        } else {
+          setError(
+            error.message ||
+              "The app could not finish loading. Check the server connection and refresh to retry."
+          );
+        }
       } finally {
         setIsLoading(false);
       }
@@ -2358,6 +2416,25 @@ const MainPage = () => {
   useEffect(() => {
     const token = getAuthToken();
 
+    if (!token || !activeServerId || !currentUserCanManageServer) {
+      setServerBans([]);
+      setServerBanError("");
+      return;
+    }
+
+    loadServerBannedUsers(token, activeServerId).catch((error) => {
+      setServerBans([]);
+      setServerBanError(error.message || "Failed to load banned users.");
+    });
+  }, [
+    activeServerId,
+    currentUserCanManageServer,
+    loadServerBannedUsers
+  ]);
+
+  useEffect(() => {
+    const token = getAuthToken();
+
     if (!token) {
       navigate("/login");
       return;
@@ -2370,6 +2447,7 @@ const MainPage = () => {
 
     const loadSelectedChannelMessages = async () => {
       try {
+        setIsMessagesLoading(true);
         setMessageError("");
         shouldAutoScrollRef.current = true;
         await loadChannelMessageList(token, activeChannelId);
@@ -3153,6 +3231,129 @@ const MainPage = () => {
       }
     };
 
+    const handleServerUpdated = (updatedServer) => {
+      const updatedServerId = getServerId(updatedServer);
+
+      if (!updatedServerId) {
+        return;
+      }
+
+      setServers((prevServers) =>
+        prevServers.map((server) =>
+          String(getServerId(server)) === String(updatedServerId)
+            ? { ...server, ...updatedServer }
+            : server
+        )
+      );
+    };
+
+    const handleChannelUpdated = (updatedChannel) => {
+      const updatedChannelId = getChannelId(updatedChannel);
+
+      if (!updatedChannelId) {
+        return;
+      }
+
+      setChannels((prevChannels) =>
+        prevChannels.map((channel) =>
+          String(getChannelId(channel)) === String(updatedChannelId)
+            ? { ...channel, ...updatedChannel }
+            : channel
+        )
+      );
+    };
+
+    const handleServerAccessRevoked = async (payload) => {
+      const revokedServerId = payload?.server_id || payload?.serverId;
+      const token = getAuthToken();
+
+      if (token) {
+        try {
+          await loadServers(token);
+        } catch {
+          setServers((prevServers) =>
+            prevServers.filter(
+              (server) => String(getServerId(server)) !== String(revokedServerId)
+            )
+          );
+        }
+      }
+
+      if (String(activeServerId) === String(revokedServerId)) {
+        navigate("/dashboard");
+      }
+    };
+
+    const handleServerDeleted = (payload) => {
+      const deletedServerId = payload?.server_id || payload?.serverId;
+
+      setServers((prevServers) =>
+        prevServers.filter(
+          (server) => String(getServerId(server)) !== String(deletedServerId)
+        )
+      );
+
+      if (String(activeServerId) === String(deletedServerId)) {
+        navigate("/dashboard");
+      }
+    };
+
+    const handleChannelDeleted = (payload) => {
+      const deletedChannelId = payload?.channel_id || payload?.channelId;
+
+      setChannels((prevChannels) =>
+        prevChannels.filter(
+          (channel) => String(getChannelId(channel)) !== String(deletedChannelId)
+        )
+      );
+
+      if (String(activeChannelId) === String(deletedChannelId)) {
+        const token = getAuthToken();
+
+        if (token && activeServerId) {
+          loadServerChannels(token, activeServerId).then((remainingChannels) => {
+            const nextChannelId = remainingChannels[0]
+              ? getChannelId(remainingChannels[0])
+              : null;
+
+            if (nextChannelId) {
+              navigate(`/server/${activeServerId}/channel/${nextChannelId}`);
+            } else {
+              navigate(`/server/${activeServerId}`);
+            }
+          }).catch(() => navigate(`/server/${activeServerId}`));
+        }
+      }
+    };
+
+    const handleServerMembersUpdated = (payload) => {
+      const serverId = payload?.server_id || payload?.serverId;
+      const token = getAuthToken();
+
+      if (token && String(serverId) === String(activeServerId)) {
+        loadServerMembers(token, activeServerId).catch(() => {});
+      }
+    };
+
+    const handleServerBansUpdated = (payload) => {
+      const serverId = payload?.server_id || payload?.serverId;
+      const token = getAuthToken();
+
+      if (
+        token &&
+        currentUserCanManageServer &&
+        String(serverId) === String(activeServerId)
+      ) {
+        loadServerBannedUsers(token, activeServerId).catch(() => {});
+      }
+    };
+
+    const handleAccountDeleted = () => {
+      disconnectSocket();
+      localStorage.removeItem("token");
+      navigate("/login");
+    };
+
     socket.on("presence_update", handlePresenceUpdate);
     socket.on("user_profile_updated", handleProfileUpdated);
     socket.on("new_message", handleNewMessage);
@@ -3174,6 +3375,14 @@ const MainPage = () => {
     socket.on("friend_request_received", handleFriendRequestReceived);
     socket.on("user_block_updated", handleUserBlockUpdated);
     socket.on("blocked_by_user_updated", handleBlockedByUserUpdated);
+    socket.on("server_updated", handleServerUpdated);
+    socket.on("server_deleted", handleServerDeleted);
+    socket.on("channel_updated", handleChannelUpdated);
+    socket.on("channel_deleted", handleChannelDeleted);
+    socket.on("server_access_revoked", handleServerAccessRevoked);
+    socket.on("server_members_updated", handleServerMembersUpdated);
+    socket.on("server_bans_updated", handleServerBansUpdated);
+    socket.on("account_deleted", handleAccountDeleted);
 
     return () => {
       socket.off("presence_update", handlePresenceUpdate);
@@ -3197,6 +3406,14 @@ const MainPage = () => {
       socket.off("friend_request_received", handleFriendRequestReceived);
       socket.off("user_block_updated", handleUserBlockUpdated);
       socket.off("blocked_by_user_updated", handleBlockedByUserUpdated);
+      socket.off("server_updated", handleServerUpdated);
+      socket.off("server_deleted", handleServerDeleted);
+      socket.off("channel_updated", handleChannelUpdated);
+      socket.off("channel_deleted", handleChannelDeleted);
+      socket.off("server_access_revoked", handleServerAccessRevoked);
+      socket.off("server_members_updated", handleServerMembersUpdated);
+      socket.off("server_bans_updated", handleServerBansUpdated);
+      socket.off("account_deleted", handleAccountDeleted);
     };
   }, [
     isSocketReady,
@@ -3204,11 +3421,16 @@ const MainPage = () => {
     activeChannelId,
     activeConversationId,
     loadDirectConversationList,
+    loadServers,
+    loadServerChannels,
+    loadServerMembers,
+    loadServerBannedUsers,
     loadBlockedUsers,
     loadFriends,
     loadFriendRequests,
     fetchFriendRequests,
     currentUserId,
+    currentUserCanManageServer,
     persistChannelReadState,
     persistDirectConversationReadState,
     applyUserProfileUpdate,
@@ -3449,9 +3671,9 @@ const MainPage = () => {
         return;
       }
 
-      if (!trimmedSearchTerm) {
+      if (trimmedSearchTerm.length < 2) {
         if (options.showRequiredError) {
-          setMessageSearchError("Search term is required.");
+          setMessageSearchError("Enter at least 2 characters to search.");
         }
 
         return;
@@ -3525,9 +3747,9 @@ const MainPage = () => {
   useEffect(() => {
     const trimmedSearchTerm = messageSearchTerm.trim();
 
-    if (!trimmedSearchTerm) {
+    if (trimmedSearchTerm.length < 2) {
       messageSearchRequestRef.current += 1;
-          setMessageSearchMatches([]);
+      setMessageSearchMatches([]);
       setActiveSearchIndex(0);
       setActiveSearchMessageId(null);
       setIsMessageSearchActive(false);
@@ -3760,6 +3982,109 @@ const MainPage = () => {
       setProfileError(error.message || "Failed to update profile.");
     } finally {
       setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleOpenAccountSecurity = () => {
+    setPasswordFormData({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: ""
+    });
+    setAccountSecurityError("");
+    setAccountSecuritySuccess("");
+    setIsAccountSecurityModalOpen(true);
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const { currentPassword, newPassword, confirmPassword } = passwordFormData;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setAccountSecurityError("Fill in all password fields.");
+      return;
+    }
+
+    try {
+      setIsChangingPassword(true);
+      setAccountSecurityError("");
+      setAccountSecuritySuccess("");
+
+      const response = await changePassword(
+        token,
+        currentPassword,
+        newPassword,
+        confirmPassword
+      );
+
+      if (response?.token) {
+        localStorage.setItem("token", response.token);
+
+        if (socketRef.current) {
+          socketRef.current.auth = { token: response.token };
+
+          if (socketRef.current.connected) {
+            socketRef.current.disconnect().connect();
+          }
+        }
+      }
+
+      setPasswordFormData({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: ""
+      });
+      setAccountSecuritySuccess(response?.message || "Password changed successfully.");
+    } catch (error) {
+      setAccountSecurityError(error.message || "Failed to change password.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const token = getAuthToken();
+    const password = passwordFormData.currentPassword;
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!password) {
+      setAccountSecurityError(
+        "Enter your current password above before deleting your account."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete your account permanently? Your account data and any servers you own will be deleted. This cannot be undone."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsDeletingAccount(true);
+      setAccountSecurityError("");
+      await deleteAccount(token, password);
+      disconnectSocket();
+      localStorage.removeItem("token");
+      navigate("/register");
+    } catch (error) {
+      setAccountSecurityError(error.message || "Failed to delete account.");
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -4112,6 +4437,74 @@ const MainPage = () => {
     }
   };
 
+  const handleBanServerMember = async (member) => {
+    const token = getAuthToken();
+    const memberId = getMemberId(member);
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!activeServerId || !memberId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Ban ${getMemberName(member)} from this server? They will be removed and unable to rejoin until unbanned.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setServerBanActionKey(`ban-${memberId}`);
+      setServerMemberActionError("");
+      setServerBanError("");
+
+      await banServerMember(activeServerId, memberId, token);
+      await Promise.all([
+        loadServerMembers(token, activeServerId),
+        loadServerBannedUsers(token, activeServerId)
+      ]);
+    } catch (error) {
+      setServerMemberActionError(error.message || "Failed to ban member.");
+    } finally {
+      setServerBanActionKey(null);
+    }
+  };
+
+  const handleUnbanServerUser = async (ban) => {
+    const token = getAuthToken();
+    const bannedUserId = ban?.user_id;
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!activeServerId || !bannedUserId) {
+      return;
+    }
+
+    try {
+      setServerBanActionKey(`unban-${bannedUserId}`);
+      setServerBanError("");
+
+      await unbanServerUser(activeServerId, bannedUserId, token);
+      setServerBans((prevBans) =>
+        prevBans.filter(
+          (existingBan) => String(existingBan.user_id) !== String(bannedUserId)
+        )
+      );
+    } catch (error) {
+      setServerBanError(error.message || "Failed to unban user.");
+    } finally {
+      setServerBanActionKey(null);
+    }
+  };
+
   const handleUpdateServerMemberRole = async (member, role) => {
     const token = getAuthToken();
     const memberId = getMemberId(member);
@@ -4152,6 +4545,111 @@ const MainPage = () => {
       setServerMemberActionError(error.message || "Failed to update member role.");
     } finally {
       setUpdatingMemberRoleId(null);
+    }
+  };
+
+  const handleOpenEditServer = () => {
+    if (!activeServer) {
+      return;
+    }
+
+    setEditServerFormData({
+      server_name: getServerName(activeServer),
+      description: getServerDescription(activeServer)
+    });
+    setEditServerError("");
+    setIsEditServerModalOpen(true);
+  };
+
+  const handleUpdateServer = async (e) => {
+    e.preventDefault();
+
+    const token = getAuthToken();
+    const serverName = editServerFormData.server_name.trim();
+    const description = editServerFormData.description.trim();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!activeServerId || !serverName) {
+      setEditServerError("Server name is required.");
+      return;
+    }
+
+    try {
+      setIsUpdatingServer(true);
+      setEditServerError("");
+
+      const response = await updateServer(token, activeServerId, {
+        server_name: serverName,
+        description
+      });
+      const updatedServer = response?.server || response?.data || response;
+
+      setServers((prevServers) =>
+        prevServers.map((server) =>
+          String(getServerId(server)) === String(activeServerId)
+            ? { ...server, ...updatedServer }
+            : server
+        )
+      );
+      setIsEditServerModalOpen(false);
+    } catch (error) {
+      setEditServerError(error.message || "Failed to update server.");
+    } finally {
+      setIsUpdatingServer(false);
+    }
+  };
+
+  const handleOpenEditChannel = (channel) => {
+    setEditChannelTarget(channel);
+    setEditChannelName(getChannelName(channel));
+    setEditChannelError("");
+    setOpenChannelMenuId(null);
+    setIsEditChannelModalOpen(true);
+  };
+
+  const handleUpdateChannel = async (e) => {
+    e.preventDefault();
+
+    const token = getAuthToken();
+    const channelId = getChannelId(editChannelTarget);
+    const channelName = editChannelName.trim();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!channelId || !channelName) {
+      setEditChannelError("Channel name is required.");
+      return;
+    }
+
+    try {
+      setIsUpdatingChannel(true);
+      setEditChannelError("");
+
+      const response = await updateChannel(token, channelId, {
+        channel_name: channelName
+      });
+      const updatedChannel = response?.channel || response?.data || response;
+
+      setChannels((prevChannels) =>
+        prevChannels.map((channel) =>
+          String(getChannelId(channel)) === String(channelId)
+            ? { ...channel, ...updatedChannel }
+            : channel
+        )
+      );
+      setIsEditChannelModalOpen(false);
+      setEditChannelTarget(null);
+    } catch (error) {
+      setEditChannelError(error.message || "Failed to update channel.");
+    } finally {
+      setIsUpdatingChannel(false);
     }
   };
 
@@ -5358,6 +5856,7 @@ const MainPage = () => {
     const nextRole = memberRole === "admin" ? "member" : "admin";
     const isRemovingMember = String(removingServerMemberId) === String(memberId);
     const isUpdatingRole = String(updatingMemberRoleId) === String(memberId);
+    const isBanningMember = serverBanActionKey === `ban-${memberId}`;
 
     return (
       <div key={memberId} className="server-member-item discord-member-item">
@@ -5400,14 +5899,25 @@ const MainPage = () => {
             ) : null}
 
             {canRemoveMember ? (
-              <button
-                type="button"
-                className="auth-button auth-button-danger compact-button discord-member-action-button"
-                onClick={() => handleRemoveServerMember(member)}
-                disabled={isRemovingMember}
-              >
-                {isRemovingMember ? "Removing..." : "Remove"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button discord-member-action-button"
+                  onClick={() => handleBanServerMember(member)}
+                  disabled={isBanningMember || isRemovingMember}
+                >
+                  {isBanningMember ? "Banning..." : "Ban"}
+                </button>
+
+                <button
+                  type="button"
+                  className="auth-button auth-button-danger compact-button discord-member-action-button"
+                  onClick={() => handleRemoveServerMember(member)}
+                  disabled={isRemovingMember || isBanningMember}
+                >
+                  {isRemovingMember ? "Removing..." : "Remove"}
+                </button>
+              </>
             ) : null}
           </div>
         ) : null}
@@ -5579,10 +6089,27 @@ const MainPage = () => {
             ) : (
               <div className="discord-sidebar-pane-top">
                 <div className="discord-pane-header">
-                  <p className="discord-pane-label">Server</p>
-                  <h1 className="discord-pane-title">
-                    {getServerName(activeServer)}
-                  </h1>
+                  <div className="discord-pane-header-row">
+                    <div className="discord-pane-header-copy">
+                      <p className="discord-pane-label">Server</p>
+                      <h1 className="discord-pane-title">
+                        {getServerName(activeServer)}
+                      </h1>
+                    </div>
+
+                    {currentUserCanManageServer ? (
+                      <button
+                        type="button"
+                        className="discord-pane-header-action"
+                        onClick={handleOpenEditServer}
+                        title="Edit server"
+                        aria-label="Edit server"
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                  </div>
+
                   <p className="discord-pane-subtitle">
                     {getServerDescription(activeServer) || "No description provided."}
                   </p>
@@ -5861,18 +6388,31 @@ const MainPage = () => {
                                       </button>
 
                                       {currentUserCanManageServer && !isGeneralChannel ? (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setOpenChannelMenuId(null);
-                                            handleDeleteChannel(channel);
-                                          }}
-                                          className="auth-button auth-button-danger compact-button discord-menu-button-danger"
-                                          disabled={isDeletingChannel}
-                                        >
-                                          {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
-                                        </button>
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenEditChannel(channel);
+                                            }}
+                                            className="auth-button compact-button"
+                                          >
+                                            {`Rename #${getChannelName(channel)}`}
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenChannelMenuId(null);
+                                              handleDeleteChannel(channel);
+                                            }}
+                                            className="auth-button auth-button-danger compact-button discord-menu-button-danger"
+                                            disabled={isDeletingChannel}
+                                          >
+                                            {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
+                                          </button>
+                                        </>
                                       ) : null}
                                     </div>
                                   ) : null}
@@ -5906,6 +6446,7 @@ const MainPage = () => {
                             setCreateChannelError("");
                           }}
                           placeholder="Enter channel name"
+                          maxLength={100}
                         />
 
                         <button
@@ -6092,7 +6633,7 @@ const MainPage = () => {
                 <button
                   type="submit"
                   className="discord-message-search-button"
-                  disabled={isSearchingMessages || !messageSearchTerm.trim()}
+                  disabled={isSearchingMessages || messageSearchTerm.trim().length < 2}
                 >
                   {isSearchingMessages ? "Searching..." : "Search"}
                 </button>
@@ -6163,7 +6704,7 @@ const MainPage = () => {
               <div className="discord-ai-panel">
                 <div className="discord-ai-panel-header">
                   <div className="discord-ai-heading-block">
-                    <div className="discord-ai-eyebrow">Gemini-powered chat assistant</div>
+                    <div className="discord-ai-eyebrow">AI chat assistant</div>
                     <h3>Ask naturally about this chat</h3>
                     <p>
                       Ask freely about {activeAiConversationTitle}. The assistant checks the most relevant messages first, then answers like a normal conversation.
@@ -7038,6 +7579,7 @@ const MainPage = () => {
                           <div className="discord-edit-form">
                             <textarea
                               value={editingMessageContent}
+                              maxLength={MAX_MESSAGE_LENGTH}
                               onChange={(e) => {
                                 setEditingMessageContent(e.target.value);
                                 setMessageError("");
@@ -7366,6 +7908,7 @@ const MainPage = () => {
                         : "Select a channel"
                   }
                   value={messageContent}
+                  maxLength={MAX_MESSAGE_LENGTH}
                   onChange={handleMessageInputChange}
                   onClick={handleMessageInputCursorChange}
                   onKeyUp={handleMessageInputKeyUp}
@@ -7526,6 +8069,14 @@ const MainPage = () => {
                     Edit profile
                   </button>
 
+                  <button
+                    type="button"
+                    className="auth-button auth-button-secondary discord-profile-action-button"
+                    onClick={handleOpenAccountSecurity}
+                  >
+                    Account security
+                  </button>
+
                   <div className="discord-blocked-users-panel">
                     <div className="discord-home-section-label">Blocked Users</div>
                     {blockedUsers.length === 0 ? (
@@ -7615,6 +8166,48 @@ const MainPage = () => {
                   )}
                 </div>
               </div>
+
+              {currentUserCanManageServer ? (
+                <div className="discord-banned-users-panel">
+                  <div className="discord-members-group-title">
+                    Banned — {serverBans.length}
+                  </div>
+
+                  {serverBanError ? (
+                    <p className="auth-error server-inline-error">{serverBanError}</p>
+                  ) : null}
+
+                  {serverBans.length === 0 ? (
+                    <p className="server-members-empty">No banned users.</p>
+                  ) : (
+                    <div className="discord-banned-users-list">
+                      {serverBans.map((ban) => (
+                        <div key={ban.ban_id || ban.user_id} className="discord-banned-user-row">
+                          <div className="discord-banned-user-copy">
+                            <span className="discord-banned-user-name">
+                              {ban.username || `User ${ban.user_id}`}
+                            </span>
+                            {ban.email ? (
+                              <span className="discord-banned-user-email">{ban.email}</span>
+                            ) : null}
+                          </div>
+
+                          <button
+                            type="button"
+                            className="auth-button discord-mini-action-button"
+                            onClick={() => handleUnbanServerUser(ban)}
+                            disabled={serverBanActionKey === `unban-${ban.user_id}`}
+                          >
+                            {serverBanActionKey === `unban-${ban.user_id}`
+                              ? "Unbanning..."
+                              : "Unban"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
               {deleteServerError && (
                 <p className="auth-error server-inline-error">
@@ -7709,6 +8302,268 @@ const MainPage = () => {
                   disabled={isUpdatingProfile}
                 >
                   {isUpdatingProfile ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isAccountSecurityModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={() => !isChangingPassword && !isDeletingAccount && setIsAccountSecurityModalOpen(false)}
+        >
+          <div
+            className="discord-create-server-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-security-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 id="account-security-title" className="discord-modal-title">Account Security</h2>
+              <p className="discord-modal-subtitle">
+                Change your password or permanently delete your account.
+              </p>
+            </div>
+
+            {accountSecurityError ? (
+              <p className="auth-error server-inline-error">{accountSecurityError}</p>
+            ) : null}
+
+            {accountSecuritySuccess ? (
+              <p className="auth-success discord-inline-success">{accountSecuritySuccess}</p>
+            ) : null}
+
+            <form onSubmit={handleChangePassword} className="discord-form-stack">
+              <label className="auth-label" htmlFor="security_current_password">
+                Current password
+              </label>
+              <input
+                id="security_current_password"
+                type="password"
+                className="auth-input compact-input"
+                value={passwordFormData.currentPassword}
+                onChange={(e) => {
+                  setPasswordFormData((current) => ({
+                    ...current,
+                    currentPassword: e.target.value
+                  }));
+                  setAccountSecurityError("");
+                  setAccountSecuritySuccess("");
+                }}
+                autoComplete="current-password"
+                maxLength={255}
+              />
+
+              <label className="auth-label" htmlFor="security_new_password">
+                New password
+              </label>
+              <input
+                id="security_new_password"
+                type="password"
+                className="auth-input compact-input"
+                value={passwordFormData.newPassword}
+                onChange={(e) => {
+                  setPasswordFormData((current) => ({
+                    ...current,
+                    newPassword: e.target.value
+                  }));
+                  setAccountSecurityError("");
+                  setAccountSecuritySuccess("");
+                }}
+                autoComplete="new-password"
+                maxLength={255}
+              />
+
+              <label className="auth-label" htmlFor="security_confirm_password">
+                Confirm new password
+              </label>
+              <input
+                id="security_confirm_password"
+                type="password"
+                className="auth-input compact-input"
+                value={passwordFormData.confirmPassword}
+                onChange={(e) => {
+                  setPasswordFormData((current) => ({
+                    ...current,
+                    confirmPassword: e.target.value
+                  }));
+                  setAccountSecurityError("");
+                  setAccountSecuritySuccess("");
+                }}
+                autoComplete="new-password"
+                maxLength={255}
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={() => setIsAccountSecurityModalOpen(false)}
+                  disabled={isChangingPassword || isDeletingAccount}
+                >
+                  Close
+                </button>
+
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isChangingPassword || isDeletingAccount}
+                >
+                  {isChangingPassword ? "Changing..." : "Change password"}
+                </button>
+              </div>
+            </form>
+
+            <div className="discord-modal-danger-zone">
+              <div>
+                <strong>Delete account</strong>
+                <p>Your current password above is required. This cannot be undone.</p>
+              </div>
+              <button
+                type="button"
+                className="auth-button auth-button-danger compact-button"
+                onClick={handleDeleteAccount}
+                disabled={isChangingPassword || isDeletingAccount}
+              >
+                {isDeletingAccount ? "Deleting..." : "Delete account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isEditServerModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={() => !isUpdatingServer && setIsEditServerModalOpen(false)}
+        >
+          <div
+            className="discord-create-server-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-server-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 id="edit-server-title" className="discord-modal-title">Edit Server</h2>
+              <p className="discord-modal-subtitle">Update this server's name and description.</p>
+            </div>
+
+            {editServerError ? (
+              <p className="auth-error server-inline-error">{editServerError}</p>
+            ) : null}
+
+            <form onSubmit={handleUpdateServer} className="discord-form-stack">
+              <label className="auth-label" htmlFor="edit_server_name">Server name</label>
+              <input
+                id="edit_server_name"
+                type="text"
+                className="auth-input compact-input"
+                value={editServerFormData.server_name}
+                onChange={(e) => {
+                  setEditServerFormData((current) => ({
+                    ...current,
+                    server_name: e.target.value
+                  }));
+                  setEditServerError("");
+                }}
+                maxLength={100}
+              />
+
+              <label className="auth-label" htmlFor="edit_server_description">Description</label>
+              <textarea
+                id="edit_server_description"
+                className="auth-input compact-input compact-textarea"
+                value={editServerFormData.description}
+                onChange={(e) => {
+                  setEditServerFormData((current) => ({
+                    ...current,
+                    description: e.target.value
+                  }));
+                  setEditServerError("");
+                }}
+                rows="3"
+                maxLength={500}
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={() => setIsEditServerModalOpen(false)}
+                  disabled={isUpdatingServer}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isUpdatingServer}
+                >
+                  {isUpdatingServer ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isEditChannelModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={() => !isUpdatingChannel && setIsEditChannelModalOpen(false)}
+        >
+          <div
+            className="discord-create-server-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-channel-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header">
+              <h2 id="edit-channel-title" className="discord-modal-title">Rename Channel</h2>
+              <p className="discord-modal-subtitle">Choose a clear name for this channel.</p>
+            </div>
+
+            {editChannelError ? (
+              <p className="auth-error server-inline-error">{editChannelError}</p>
+            ) : null}
+
+            <form onSubmit={handleUpdateChannel} className="discord-form-stack">
+              <label className="auth-label" htmlFor="edit_channel_name">Channel name</label>
+              <input
+                id="edit_channel_name"
+                type="text"
+                className="auth-input compact-input"
+                value={editChannelName}
+                onChange={(e) => {
+                  setEditChannelName(e.target.value);
+                  setEditChannelError("");
+                }}
+                maxLength={100}
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={() => {
+                    setIsEditChannelModalOpen(false);
+                    setEditChannelTarget(null);
+                  }}
+                  disabled={isUpdatingChannel}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="auth-button compact-button"
+                  disabled={isUpdatingChannel}
+                >
+                  {isUpdatingChannel ? "Saving..." : "Save channel"}
                 </button>
               </div>
             </form>
@@ -7882,6 +8737,7 @@ const MainPage = () => {
                   setCreateServerError("");
                 }}
                 placeholder="Server name"
+                maxLength={100}
               />
 
               <textarea
@@ -7901,6 +8757,7 @@ const MainPage = () => {
                 }}
                 placeholder="Server description"
                 rows="3"
+                maxLength={500}
               />
 
               <div className="discord-modal-actions">

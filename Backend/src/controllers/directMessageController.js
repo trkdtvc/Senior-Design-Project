@@ -9,6 +9,7 @@ const {
   getDirectMessageById,
   createDirectMessage,
   createDirectMessageAttachment,
+  getDirectMessageAttachmentsByMessageId,
   updateDirectMessageById,
   deleteDirectMessageAttachmentsByMessageId,
   deleteDirectMessageById,
@@ -21,6 +22,9 @@ const {
   getUnreadDirectConversationCountsByUserId
 } = require("../models/directMessageModel");
 const userSafetyModel = require("../models/userSafetyModel");
+const { deleteStoredFiles } = require("../services/attachmentFileService");
+
+const MAX_MESSAGE_LENGTH = 4000;
 
 const createAttachmentPayload = (file) => {
   if (!file) {
@@ -266,12 +270,17 @@ const sendDirectMessageToConversation = async (req, res, next) => {
       req.body.reply_to_direct_message_id ||
       req.body.replyToDirectMessageId ||
       null;
-    const trimmedContent = content.trim();
+    const trimmedContent = String(content || "").trim();
     const attachmentPayload = createAttachmentPayload(req.file);
 
     if (!conversationId) {
       res.status(400);
       throw new Error("Conversation ID is required");
+    }
+
+    if (trimmedContent.length > MAX_MESSAGE_LENGTH) {
+      res.status(400);
+      throw new Error(`Messages cannot exceed ${MAX_MESSAGE_LENGTH} characters`);
     }
 
     if (!trimmedContent && !attachmentPayload) {
@@ -373,7 +382,7 @@ const updateDirectMessage = async (req, res, next) => {
     const currentUserId = req.user.user_id;
     const { directMessageId } = req.params;
     const content = req.body.content || "";
-    const trimmedContent = content.trim();
+    const trimmedContent = String(content || "").trim();
 
     if (!directMessageId) {
       res.status(400);
@@ -383,6 +392,11 @@ const updateDirectMessage = async (req, res, next) => {
     if (!trimmedContent) {
       res.status(400);
       throw new Error("Message content is required");
+    }
+
+    if (trimmedContent.length > MAX_MESSAGE_LENGTH) {
+      res.status(400);
+      throw new Error(`Messages cannot exceed ${MAX_MESSAGE_LENGTH} characters`);
     }
 
     const directMessage = await getDirectMessageById(directMessageId);
@@ -477,8 +491,11 @@ const deleteDirectMessage = async (req, res, next) => {
       throw new Error("You can only delete your own direct messages");
     }
 
+    const attachments = await getDirectMessageAttachmentsByMessageId(directMessageId);
+
     await deleteDirectMessageAttachmentsByMessageId(directMessageId);
     await deleteDirectMessageById(directMessageId);
+    await deleteStoredFiles(attachments);
 
     const otherUserId =
       Number(directMessage.user_one_id) === Number(currentUserId)

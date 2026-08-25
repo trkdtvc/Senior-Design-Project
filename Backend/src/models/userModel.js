@@ -38,6 +38,18 @@ const findUserById = async (userId) => {
   return rows[0];
 };
 
+const findUserCredentialsById = async (userId) => {
+  const [rows] = await pool.execute(
+    `SELECT user_id, username, email, password_hash, is_verified
+     FROM users
+     WHERE user_id = ?
+     LIMIT 1`,
+    [userId]
+  );
+
+  return rows[0] || null;
+};
+
 const createUser = async (username, email, passwordHash) => {
   const [result] = await pool.execute(
     "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
@@ -128,6 +140,37 @@ const invalidateEmailVerificationTokens = async (userId) => {
   return result;
 };
 
+const getAttachmentUrlsAffectedByUserDeletion = async (userId) => {
+  const [rows] = await pool.execute(
+    `SELECT DISTINCT ma.file_url
+     FROM message_attachments ma
+     JOIN messages m ON ma.message_id = m.message_id
+     JOIN channels c ON m.channel_id = c.channel_id
+     JOIN servers s ON c.server_id = s.server_id
+     WHERE m.user_id = ? OR s.owner_id = ?
+
+     UNION
+
+     SELECT DISTINCT dma.file_url
+     FROM direct_message_attachments dma
+     JOIN direct_messages dm ON dma.direct_message_id = dm.direct_message_id
+     JOIN direct_conversations dc ON dm.conversation_id = dc.conversation_id
+     WHERE dc.user_one_id = ? OR dc.user_two_id = ?`,
+    [userId, userId, userId, userId]
+  );
+
+  return rows;
+};
+
+const deleteUserById = async (userId) => {
+  const [result] = await pool.execute(
+    "DELETE FROM users WHERE user_id = ?",
+    [userId]
+  );
+
+  return result;
+};
+
 const updateUserPresenceStatus = async (userId, status) => {
   const [result] = await pool.execute(
     `UPDATE users
@@ -197,6 +240,7 @@ module.exports = {
   findUserByEmail,
   findUserByUsername,
   findUserById,
+  findUserCredentialsById,
   createUser,
   markUserAsVerified,
   setPasswordResetToken,
@@ -204,6 +248,8 @@ module.exports = {
   updateUserPassword,
   updateUserProfile,
   invalidateEmailVerificationTokens,
+  getAttachmentUrlsAffectedByUserDeletion,
+  deleteUserById,
   updateUserPresenceStatus,
   setUserOnlineState,
   createEmailVerificationToken,

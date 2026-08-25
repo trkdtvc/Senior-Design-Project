@@ -15,6 +15,16 @@ export const createServer = async (token, serverData) =>
     }
   });
 
+export const updateServer = async (token, serverId, serverData) =>
+  apiRequest(`/servers/${serverId}`, {
+    method: "PATCH",
+    token,
+    body: {
+      server_name: serverData.server_name?.trim() || "",
+      description: serverData.description?.trim() || ""
+    }
+  });
+
 export const deleteServer = async (token, serverId) =>
   apiRequest(`/servers/${serverId}`, {
     method: "DELETE",

@@ -188,6 +188,10 @@ const getDirectAttachmentsByMessageIds = async (messageIds) => {
   return rows;
 };
 
+const getDirectMessageAttachmentsByMessageId = async (directMessageId) => {
+  return getDirectAttachmentsByMessageIds([directMessageId]);
+};
+
 const getDirectReactionsByMessageIds = async (
   directMessageIds,
   currentUserId = null
@@ -250,11 +254,31 @@ const attachDirectMessageMetadata = async (messages, currentUserId = null) => {
     getDirectPinsByMessageIds(messageIds)
   ]);
 
+  const attachmentsByMessageId = new Map();
+  const reactionsByMessageId = new Map();
+  const pinsByMessageId = new Map();
+
+  attachments.forEach((attachment) => {
+    const messageId = String(attachment.direct_message_id);
+    const existing = attachmentsByMessageId.get(messageId) || [];
+    existing.push(attachment);
+    attachmentsByMessageId.set(messageId, existing);
+  });
+
+  reactions.forEach((reaction) => {
+    const messageId = String(reaction.direct_message_id);
+    const existing = reactionsByMessageId.get(messageId) || [];
+    existing.push(reaction);
+    reactionsByMessageId.set(messageId, existing);
+  });
+
+  pins.forEach((pin) => {
+    pinsByMessageId.set(String(pin.direct_message_id), pin);
+  });
+
   return messages.map((message) => {
     const messageId = String(message.direct_message_id);
-    const pin = pins.find(
-      (pinRow) => String(pinRow.direct_message_id) === messageId
-    );
+    const pin = pinsByMessageId.get(messageId);
 
     return {
       ...message,
@@ -263,13 +287,8 @@ const attachDirectMessageMetadata = async (messages, currentUserId = null) => {
       pinned_by_username:
         message.pinned_by_username || pin?.pinned_by_username || null,
       pinned_at: message.pinned_at || pin?.pinned_at || null,
-      attachments: attachments.filter(
-        (attachment) =>
-          String(attachment.direct_message_id) === messageId
-      ),
-      reactions: reactions.filter(
-        (reaction) => String(reaction.direct_message_id) === messageId
-      )
+      attachments: attachmentsByMessageId.get(messageId) || [],
+      reactions: reactionsByMessageId.get(messageId) || []
     };
   });
 };
@@ -851,12 +870,13 @@ const searchDirectMessagesByConversationId = async (
           dcd.deletion_id IS NULL
           OR dm.direct_message_id > dcd.deleted_after_message_id
         )
-      ORDER BY dm.direct_message_id ASC
+      ORDER BY dm.direct_message_id DESC
+      LIMIT 100
     `,
     [userId, conversationId, safeSearchTerm]
   );
 
-  return rows.map((row) => ({
+  return rows.reverse().map((row) => ({
     direct_message_id: Number(row.direct_message_id),
     conversation_id: Number(row.conversation_id),
     content: row.content,
@@ -924,6 +944,7 @@ module.exports = {
   getDirectMessageById,
   createDirectMessage,
   createDirectMessageAttachment,
+  getDirectMessageAttachmentsByMessageId,
   updateDirectMessageById,
   deleteDirectMessageAttachmentsByMessageId,
   deleteDirectMessageById,

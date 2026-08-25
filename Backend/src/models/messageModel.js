@@ -88,6 +88,10 @@ const getAttachmentsByMessageIds = async (messageIds) => {
   return rows;
 };
 
+const getMessageAttachmentsByMessageId = async (messageId) => {
+  return getAttachmentsByMessageIds([messageId]);
+};
+
 const getReactionsByMessageIds = async (messageIds, currentUserId = null) => {
   if (!messageIds.length) {
     return [];
@@ -147,9 +151,31 @@ const attachMessageMetadata = async (messages, currentUserId = null) => {
     getPinsByMessageIds(messageIds)
   ]);
 
+  const attachmentsByMessageId = new Map();
+  const reactionsByMessageId = new Map();
+  const pinsByMessageId = new Map();
+
+  attachments.forEach((attachment) => {
+    const messageId = String(attachment.message_id);
+    const existing = attachmentsByMessageId.get(messageId) || [];
+    existing.push(attachment);
+    attachmentsByMessageId.set(messageId, existing);
+  });
+
+  reactions.forEach((reaction) => {
+    const messageId = String(reaction.message_id);
+    const existing = reactionsByMessageId.get(messageId) || [];
+    existing.push(reaction);
+    reactionsByMessageId.set(messageId, existing);
+  });
+
+  pins.forEach((pin) => {
+    pinsByMessageId.set(String(pin.message_id), pin);
+  });
+
   return messages.map((message) => {
     const messageId = String(message.message_id);
-    const pin = pins.find((pinRow) => String(pinRow.message_id) === messageId);
+    const pin = pinsByMessageId.get(messageId);
 
     return {
       ...message,
@@ -158,12 +184,8 @@ const attachMessageMetadata = async (messages, currentUserId = null) => {
       pinned_by_username:
         message.pinned_by_username || pin?.pinned_by_username || null,
       pinned_at: message.pinned_at || pin?.pinned_at || null,
-      attachments: attachments.filter(
-        (attachment) => String(attachment.message_id) === messageId
-      ),
-      reactions: reactions.filter(
-        (reaction) => String(reaction.message_id) === messageId
-      )
+      attachments: attachmentsByMessageId.get(messageId) || [],
+      reactions: reactionsByMessageId.get(messageId) || []
     };
   });
 };
@@ -343,11 +365,12 @@ const searchMessagesByChannelId = async (channelId, searchTerm) => {
      JOIN users u ON m.user_id = u.user_id
      WHERE m.channel_id = ?
        AND m.message_content LIKE ?
-     ORDER BY m.message_id ASC`,
+     ORDER BY m.message_id DESC
+     LIMIT 100`,
     [channelId, searchValue]
   );
 
-  return rows.map((row) => ({
+  return rows.reverse().map((row) => ({
     message_id: Number(row.message_id),
     channel_id: Number(row.channel_id),
     content: row.content,
@@ -718,6 +741,7 @@ const getUnreadMentionCountsByUserId = async (userId) => {
 module.exports = {
   createMessage,
   createMessageAttachment,
+  getMessageAttachmentsByMessageId,
   createMessageMentions,
   getMessagesByChannelId,
   searchMessagesByChannelId,

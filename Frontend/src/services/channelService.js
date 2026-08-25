@@ -15,6 +15,15 @@ export const createChannel = async (token, channelData) =>
     }
   });
 
+export const updateChannel = async (token, channelId, channelData) =>
+  apiRequest(`/channels/${channelId}`, {
+    method: "PATCH",
+    token,
+    body: {
+      channel_name: channelData.channel_name?.trim() || ""
+    }
+  });
+
 export const deleteChannel = async (token, channelId) =>
   apiRequest(`/channels/${channelId}`, {
     method: "DELETE",

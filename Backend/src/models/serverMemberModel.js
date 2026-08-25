@@ -176,6 +176,107 @@ const removeServerMemberByMemberId = async (memberId) => {
   return result;
 };
 
+const getServerBans = async (serverId) => {
+  const [rows] = await pool.execute(
+    `SELECT
+       sb.ban_id,
+       sb.server_id,
+       sb.user_id,
+       sb.banned_by,
+       sb.reason,
+       sb.created_at,
+       u.username,
+       u.email,
+       moderator.username AS banned_by_username
+     FROM server_bans sb
+     JOIN users u ON sb.user_id = u.user_id
+     LEFT JOIN users moderator ON sb.banned_by = moderator.user_id
+     WHERE sb.server_id = ?
+     ORDER BY sb.created_at DESC`,
+    [serverId]
+  );
+
+  return rows;
+};
+
+const isUserBannedFromServer = async (serverId, userId) => {
+  const [rows] = await pool.execute(
+    `SELECT ban_id
+     FROM server_bans
+     WHERE server_id = ? AND user_id = ?
+     LIMIT 1`,
+    [serverId, userId]
+  );
+
+  return Boolean(rows[0]);
+};
+
+const banServerMember = async (
+  serverId,
+  memberId,
+  bannedBy,
+  reason = null
+) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [targetRows] = await connection.execute(
+      `SELECT sm.member_id, sm.server_id, sm.user_id
+       FROM server_members sm
+       WHERE sm.server_id = ? AND sm.member_id = ?
+       LIMIT 1`,
+      [serverId, memberId]
+    );
+
+    const targetMember = targetRows[0];
+
+    if (!targetMember) {
+      const error = new Error("Server member not found.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await connection.execute(
+      `INSERT INTO server_bans (server_id, user_id, banned_by, reason)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         banned_by = VALUES(banned_by),
+         reason = VALUES(reason),
+         created_at = CURRENT_TIMESTAMP`,
+      [serverId, targetMember.user_id, bannedBy, reason]
+    );
+
+    await connection.execute(
+      "DELETE FROM server_members WHERE member_id = ?",
+      [memberId]
+    );
+
+    await connection.commit();
+
+    return {
+      server_id: Number(serverId),
+      user_id: Number(targetMember.user_id)
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+const unbanServerUser = async (serverId, userId) => {
+  const [result] = await pool.execute(
+    `DELETE FROM server_bans
+     WHERE server_id = ? AND user_id = ?`,
+    [serverId, userId]
+  );
+
+  return result;
+};
+
 const getOrCreateServerRole = async (serverId, roleName, connection = pool) => {
   const normalizedRoleName = normalizeRoleName(roleName);
 
@@ -274,6 +375,10 @@ module.exports = {
   isUserMemberOfServer,
   removeServerMember,
   removeServerMemberByMemberId,
+  getServerBans,
+  isUserBannedFromServer,
+  banServerMember,
+  unbanServerUser,
   getOrCreateServerRole,
   setServerMemberRole
 };

@@ -4,6 +4,8 @@ const {
   loginUser,
   getMe,
   updateProfile,
+  changePassword,
+  deleteAccount,
   verifyEmail,
   resendVerificationEmail,
   forgotPassword,
@@ -154,6 +156,8 @@ router.get("/me", protect, getMe);
  *         description: Not authorized, token failed or missing
  */
 router.patch("/profile", protect, updateProfile);
+router.patch("/password", protect, changePassword);
+router.delete("/account", protect, deleteAccount);
 
 /**
  * @swagger
