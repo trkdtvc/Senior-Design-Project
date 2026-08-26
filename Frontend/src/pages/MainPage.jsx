@@ -1007,7 +1007,7 @@ const renderAttachmentPreview = (attachment, onPreviewAttachment) => {
       href={attachmentUrl}
       target="_blank"
       rel="noreferrer"
-      className="discord-attachment-file"
+      className="discord-attachment-file discord-attachment-file-generic"
       download
     >
       <span className="discord-attachment-icon">📎</span>
@@ -1035,6 +1035,7 @@ const MainPage = () => {
   const messagesContainerRef = useRef(null);
   const messageInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const accountMenuRef = useRef(null);
   const fileInputRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
   const socketRef = useRef(null);
@@ -1052,6 +1053,7 @@ const MainPage = () => {
 
   const [user, setUser] = useState(null);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [profileFormData, setProfileFormData] = useState({
     username: "",
     email: ""
@@ -1210,6 +1212,33 @@ const MainPage = () => {
   const [aiError, setAiError] = useState("");
 
   const isDmView = !activeServerId;
+  const showContextRightPane = !isDmView || Boolean(activeConversationId);
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) {
+        setIsAccountMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setIsAccountMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isAccountMenuOpen]);
 
   const activeServer = useMemo(
     () =>
@@ -4025,6 +4054,7 @@ const MainPage = () => {
   };
 
   const handleOpenEditProfile = () => {
+    setIsAccountMenuOpen(false);
     setProfileFormData({
       username: user?.username || "",
       email: user?.email || ""
@@ -4169,6 +4199,7 @@ const MainPage = () => {
   };
 
   const handleOpenAccountSecurity = () => {
+    setIsAccountMenuOpen(false);
     setPasswordFormData({
       currentPassword: "",
       newPassword: "",
@@ -5770,28 +5801,80 @@ const MainPage = () => {
     updateMentionMenuFromInput(e.target.value, e.target.selectionStart);
   };
 
-  const handleAttachmentChange = (e) => {
-    const file = e.target.files?.[0];
-
+  const selectAttachmentFile = (file) => {
     setMessageError("");
 
     if (!file) {
-      setSelectedAttachment(null);
-      return;
+      return false;
+    }
+
+    const allowedTypes = ATTACHMENT_ACCEPT_TYPES.split(",");
+
+    if (!allowedTypes.includes(file.type)) {
+      setMessageError("That file type is not supported.");
+      return false;
     }
 
     if (file.size > MAX_ATTACHMENT_SIZE) {
-      setSelectedAttachment(null);
       setMessageError("Attachment must be 25 MB or smaller.");
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-
-      return;
+      return false;
     }
 
     setSelectedAttachment(file);
+    return true;
+  };
+
+  const handleAttachmentChange = (e) => {
+    const file = e.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const wasSelected = selectAttachmentFile(file);
+
+    if (!wasSelected && fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleMessagePaste = (e) => {
+    const clipboardItems = Array.from(e.clipboardData?.items || []);
+    const imageItem = clipboardItems.find(
+      (item) => item.kind === "file" && item.type.startsWith("image/")
+    );
+
+    if (!imageItem) {
+      return;
+    }
+
+    const pastedImage = imageItem.getAsFile();
+
+    if (!pastedImage) {
+      return;
+    }
+
+    e.preventDefault();
+
+    const extensionByType = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif"
+    };
+    const extension = extensionByType[pastedImage.type] || "png";
+    const clipboardFile = new File(
+      [pastedImage],
+      `pasted-image-${Date.now()}.${extension}`,
+      {
+        type: pastedImage.type,
+        lastModified: Date.now()
+      }
+    );
+
+    if (selectAttachmentFile(clipboardFile) && fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleRemoveSelectedAttachment = () => {
@@ -6069,7 +6152,7 @@ const MainPage = () => {
             {canChangeMemberRole ? (
               <button
                 type="button"
-                className="auth-button compact-button discord-member-action-button"
+                className="auth-button compact-button discord-member-action-button discord-member-action-role"
                 onClick={() => handleUpdateServerMemberRole(member, nextRole)}
                 disabled={isUpdatingRole}
               >
@@ -6085,7 +6168,7 @@ const MainPage = () => {
               <>
                 <button
                   type="button"
-                  className="auth-button auth-button-secondary compact-button discord-member-action-button"
+                  className="auth-button auth-button-secondary compact-button discord-member-action-button discord-member-action-ban"
                   onClick={() => handleBanServerMember(member)}
                   disabled={isBanningMember || isRemovingMember}
                 >
@@ -6094,7 +6177,7 @@ const MainPage = () => {
 
                 <button
                   type="button"
-                  className="auth-button auth-button-danger compact-button discord-member-action-button"
+                  className="auth-button auth-button-danger compact-button discord-member-action-button discord-member-action-remove"
                   onClick={() => handleRemoveServerMember(member)}
                   disabled={isRemovingMember || isBanningMember}
                 >
@@ -6121,7 +6204,11 @@ const MainPage = () => {
 
   return (
     <div className="server-page main-page-shell">
-      <div className="server-layout main-layout-grid">
+      <div
+        className={`server-layout main-layout-grid${
+          showContextRightPane ? "" : " main-layout-grid-without-right-pane"
+        }`}
+      >
         <aside className="server-sidebar discord-sidebar-shell">
           <div className="discord-guilds-bar">
             <button
@@ -6443,7 +6530,7 @@ const MainPage = () => {
                                         );
                                         setOpenConversationMenuId(null);
                                       }}
-                                      className="auth-button compact-button"
+                                      className="discord-popover-menu-item"
                                       disabled={settingsActionKey === `direct-${conversationId}`}
                                     >
                                       {mutedDirectConversationIds.includes(String(conversationId))
@@ -6458,7 +6545,7 @@ const MainPage = () => {
                                         e.stopPropagation();
                                         handleDeleteDirectConversation(conversation);
                                       }}
-                                      className="auth-button auth-button-danger compact-button discord-menu-button-danger"
+                                      className="discord-popover-menu-item discord-popover-menu-item-danger"
                                       disabled={isDeletingConversation}
                                     >
                                       {isDeletingConversation ? "Deleting..." : "Delete DM"}
@@ -6565,7 +6652,7 @@ const MainPage = () => {
                                           );
                                           setOpenChannelMenuId(null);
                                         }}
-                                        className="auth-button compact-button"
+                                        className="discord-popover-menu-item"
                                         disabled={settingsActionKey === `channel-${channelId}`}
                                       >
                                         {mutedChannelIds.includes(String(channelId))
@@ -6581,7 +6668,7 @@ const MainPage = () => {
                                               e.stopPropagation();
                                               handleOpenEditChannel(channel);
                                             }}
-                                            className="auth-button compact-button"
+                                            className="discord-popover-menu-item"
                                           >
                                             {`Rename #${getChannelName(channel)}`}
                                           </button>
@@ -6593,7 +6680,7 @@ const MainPage = () => {
                                               setOpenChannelMenuId(null);
                                               handleDeleteChannel(channel);
                                             }}
-                                            className="auth-button auth-button-danger compact-button discord-menu-button-danger"
+                                            className="discord-popover-menu-item discord-popover-menu-item-danger"
                                             disabled={isDeletingChannel}
                                           >
                                             {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
@@ -6692,13 +6779,125 @@ const MainPage = () => {
               )}
             </div>
 
-            <div className="discord-account-panel">
+            <div className="discord-account-panel" ref={accountMenuRef}>
+              {isAccountMenuOpen ? (
+                <div className="discord-account-popover">
+                  <div className="discord-account-popover-header">
+                    <div className="discord-profile-avatar large-avatar discord-account-popover-avatar">
+                      {renderAvatarContent(getEntityAvatarPath(user), user?.username)}
+                      <span
+                        className={`discord-status-dot discord-profile-status ${getPresenceColorClass(
+                          currentUserPresence
+                        )}`}
+                      />
+                    </div>
+
+                    <div className="discord-account-popover-copy">
+                      <div className="discord-profile-name">{user?.username}</div>
+                      <div className="discord-profile-meta">{user?.email}</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="discord-account-popover-close"
+                      onClick={() => setIsAccountMenuOpen(false)}
+                      aria-label="Close account panel"
+                      title="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="discord-account-popover-stats">
+                    <div>
+                      <span>Status</span>
+                      <strong>{currentUserPresence === "online" ? "Online" : "Offline"}</strong>
+                    </div>
+                    <div>
+                      <span>Friends</span>
+                      <strong>{friends.length}</strong>
+                    </div>
+                    <div>
+                      <span>Chats</span>
+                      <strong>{directConversations.length}</strong>
+                    </div>
+                  </div>
+
+                  {profileSuccess ? (
+                    <p className="auth-success discord-profile-action-success">
+                      {profileSuccess}
+                    </p>
+                  ) : null}
+
+                  <div className="discord-account-popover-actions">
+                    <button
+                      type="button"
+                      className="auth-button discord-profile-action-button"
+                      onClick={handleOpenEditProfile}
+                    >
+                      Edit profile
+                    </button>
+
+                    <button
+                      type="button"
+                      className="auth-button auth-button-secondary discord-profile-action-button"
+                      onClick={handleOpenAccountSecurity}
+                    >
+                      Account security
+                    </button>
+                  </div>
+
+                  <div className="discord-account-popover-blocked">
+                    <div className="discord-home-section-label">Blocked Users</div>
+                    {blockedUsers.length === 0 ? (
+                      <p className="discord-profile-meta">No blocked users.</p>
+                    ) : (
+                      <div className="discord-blocked-users-list">
+                        {blockedUsers.map((blockedUser) => {
+                          const blockedUserId = getBlockedUserId(blockedUser);
+
+                          return (
+                            <div
+                              key={blockedUserId}
+                              className="discord-blocked-user-row"
+                            >
+                              <span
+                                className="discord-blocked-user-name"
+                                title={getBlockedUsername(blockedUser)}
+                              >
+                                {getBlockedUsername(blockedUser)}
+                              </span>
+                              <button
+                                type="button"
+                                className="auth-button discord-mini-action-button"
+                                onClick={() =>
+                                  handleUnblockUser({
+                                    user_id: blockedUserId,
+                                    username: getBlockedUsername(blockedUser)
+                                  })
+                                }
+                                disabled={safetyActionKey === `unblock-${blockedUserId}`}
+                              >
+                                {safetyActionKey === `unblock-${blockedUserId}`
+                                  ? "Unblocking..."
+                                  : "Unblock"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               <button
                 type="button"
                 className="discord-account-panel-user"
-                onClick={handleOpenEditProfile}
-                title="Edit profile"
-                aria-label="Edit profile"
+                onClick={() => setIsAccountMenuOpen((isOpen) => !isOpen)}
+                title="Account"
+                aria-label="Open account panel"
+                aria-expanded={isAccountMenuOpen}
               >
                 <div className="discord-account-avatar">
                   {renderAvatarContent(getEntityAvatarPath(user), user?.username)}
@@ -6711,8 +6910,8 @@ const MainPage = () => {
 
                 <div className="discord-account-meta">
                   <div className="discord-account-name">{user?.username}</div>
-                  <div className="discord-account-status">
-                    {currentUserPresence === "online" ? "Online" : "Offline"}
+                  <div className="discord-account-status discord-account-email">
+                    {user?.email}
                   </div>
                 </div>
               </button>
@@ -6737,12 +6936,18 @@ const MainPage = () => {
               {isDmView ? (
                 activeConversationUser ? (
                   <>
-                    <span
-                      className={`discord-status-dot discord-header-status ${getPresenceColorClass(
-                        activeConversationUser.presence_status
-                      )}`}
-                    />
-                    <div>
+                    <div className="discord-chat-header-avatar">
+                      {renderAvatarContent(
+                        getEntityAvatarPath(activeConversationUser),
+                        activeConversationUser.username
+                      )}
+                      <span
+                        className={`discord-status-dot ${getPresenceColorClass(
+                          activeConversationUser.presence_status
+                        )}`}
+                      />
+                    </div>
+                    <div className="discord-chat-header-copy">
                       <h2 className="server-main-title discord-chat-title">
                         {activeConversationUser.username}
                       </h2>
@@ -6754,7 +6959,7 @@ const MainPage = () => {
                     </div>
                   </>
                 ) : (
-                  <div>
+                  <div className="discord-chat-header-copy">
                     <h2 className="server-main-title discord-chat-title">
                       {activeDmSection === "requests"
                         ? "Friend Requests"
@@ -6775,7 +6980,7 @@ const MainPage = () => {
               ) : (
                 <>
                   <span className="discord-channel-symbol">#</span>
-                  <div>
+                  <div className="discord-chat-header-copy">
                     <h2 className="server-main-title discord-chat-title">
                       {activeChannel ? getChannelName(activeChannel) : "Select a channel"}
                     </h2>
@@ -8110,6 +8315,7 @@ const MainPage = () => {
                   onClick={handleMessageInputCursorChange}
                   onKeyUp={handleMessageInputKeyUp}
                   onKeyDown={handleMessageKeyDown}
+                  onPaste={handleMessagePaste}
                   onBlur={() => {
                     stopTyping();
                     window.setTimeout(() => closeMentionMenu(), 120);
@@ -8136,13 +8342,12 @@ const MainPage = () => {
           ) : null}
         </main>
 
-        <aside className="server-members-panel discord-right-pane">
+        {showContextRightPane ? (
+          <aside className="server-members-panel discord-right-pane">
           {isDmView ? (
             <>
               <div className="discord-right-pane-header">
-                <h2 className="server-members-title">
-                  {activeConversationUser ? "Profile" : "Account"}
-                </h2>
+                <h2 className="server-members-title">Profile</h2>
               </div>
 
               {activeConversationUser ? (
@@ -8243,83 +8448,7 @@ const MainPage = () => {
                     </>
                   ) : null}
                 </div>
-              ) : (
-                <div className="discord-profile-card compact-profile-card">
-                  <div className="discord-profile-name">{user?.username}</div>
-                  <div className="discord-profile-meta">{user?.email}</div>
-                  <div className="discord-profile-meta">
-                    Status: {currentUserPresence === "online" ? "Online" : "Offline"}
-                  </div>
-                  <div className="discord-profile-meta">Friends: {friends.length}</div>
-                  <div className="discord-profile-meta">
-                    Direct conversations: {directConversations.length}
-                  </div>
-
-                  {profileSuccess ? (
-                    <p className="auth-success discord-profile-action-success">
-                      {profileSuccess}
-                    </p>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    className="auth-button discord-profile-action-button"
-                    onClick={handleOpenEditProfile}
-                  >
-                    Edit profile
-                  </button>
-
-                  <button
-                    type="button"
-                    className="auth-button auth-button-secondary discord-profile-action-button"
-                    onClick={handleOpenAccountSecurity}
-                  >
-                    Account security
-                  </button>
-
-                  <div className="discord-blocked-users-panel">
-                    <div className="discord-home-section-label">Blocked Users</div>
-                    {blockedUsers.length === 0 ? (
-                      <p className="discord-profile-meta">No blocked users.</p>
-                    ) : (
-                      <div className="discord-blocked-users-list">
-                        {blockedUsers.map((blockedUser) => {
-                          const blockedUserId = getBlockedUserId(blockedUser);
-
-                          return (
-                            <div
-                              key={blockedUserId}
-                              className="discord-blocked-user-row"
-                            >
-                              <span
-                                className="discord-blocked-user-name"
-                                title={getBlockedUsername(blockedUser)}
-                              >
-                                {getBlockedUsername(blockedUser)}
-                              </span>
-                              <button
-                                type="button"
-                                className="auth-button discord-mini-action-button"
-                                onClick={() =>
-                                  handleUnblockUser({
-                                    user_id: blockedUserId,
-                                    username: getBlockedUsername(blockedUser)
-                                  })
-                                }
-                                disabled={safetyActionKey === `unblock-${blockedUserId}`}
-                              >
-                                {safetyActionKey === `unblock-${blockedUserId}`
-                                  ? "Unblocking..."
-                                  : "Unblock"}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              ) : null}
             </>
           ) : (
             <>
@@ -8433,7 +8562,8 @@ const MainPage = () => {
               )}
             </>
           )}
-        </aside>
+          </aside>
+        ) : null}
       </div>
 
 
@@ -8559,7 +8689,7 @@ const MainPage = () => {
           onClick={() => !isChangingPassword && !isDeletingAccount && setIsAccountSecurityModalOpen(false)}
         >
           <div
-            className="discord-create-server-modal"
+            className="discord-create-server-modal discord-account-security-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="account-security-title"
@@ -8580,7 +8710,7 @@ const MainPage = () => {
               <p className="auth-success discord-inline-success">{accountSecuritySuccess}</p>
             ) : null}
 
-            <form onSubmit={handleChangePassword} className="discord-form-stack">
+            <form onSubmit={handleChangePassword} className="discord-form-stack discord-account-security-form">
               <label className="auth-label" htmlFor="security_current_password">
                 Current password
               </label>
@@ -8641,7 +8771,7 @@ const MainPage = () => {
                 maxLength={255}
               />
 
-              <div className="discord-modal-actions">
+              <div className="discord-modal-actions discord-account-security-actions">
                 <button
                   type="button"
                   className="auth-button auth-button-secondary compact-button"
