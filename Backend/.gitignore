@@ -1,9 +1,10 @@
 node_modules
 .env
-Things to Fix
 
 uploads/*
 !uploads/.gitkeep
 !uploads/messages/
 uploads/messages/*
 !uploads/messages/.gitkeep
+
+/Things to Fix.txt
