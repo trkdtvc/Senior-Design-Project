@@ -19,7 +19,8 @@ const buildFriendRequestPayload = (requestId, senderId, receiverId, req) => ({
   status: "pending",
   created_at: new Date().toISOString(),
   sender_username: req.user.username,
-  sender_email: req.user.email || ""
+  sender_email: req.user.email || "",
+  sender_avatar_url: req.user.avatar_url || null
 });
 
 const sendFriendRequest = async (req, res, next) => {

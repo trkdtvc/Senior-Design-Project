@@ -72,6 +72,24 @@ export const updateProfile = async (token, profileData) =>
     }
   });
 
+export const uploadProfileAvatar = async (token, file) => {
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  return apiRequest("/auth/profile/avatar", {
+    method: "PUT",
+    token,
+    body: formData,
+    isFormData: true
+  });
+};
+
+export const deleteProfileAvatar = async (token) =>
+  apiRequest("/auth/profile/avatar", {
+    method: "DELETE",
+    token
+  });
+
 export const changePassword = async (
   token,
   currentPassword,

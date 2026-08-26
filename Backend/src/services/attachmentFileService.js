@@ -1,17 +1,24 @@
 const fs = require("fs/promises");
 const path = require("path");
 
-const uploadDirectory = path.resolve(__dirname, "..", "..", "uploads", "messages");
+const uploadsRoot = path.resolve(__dirname, "..", "..", "uploads");
+const storedUploadDirectories = {
+  "/uploads/messages/": path.resolve(uploadsRoot, "messages"),
+  "/uploads/avatars/": path.resolve(uploadsRoot, "avatars")
+};
 
 const getStoredFilePath = (fileUrl) => {
   const normalizedUrl = String(fileUrl || "").trim();
-  const prefix = "/uploads/messages/";
+  const matchingPrefix = Object.keys(storedUploadDirectories).find((prefix) =>
+    normalizedUrl.startsWith(prefix)
+  );
 
-  if (!normalizedUrl.startsWith(prefix)) {
+  if (!matchingPrefix) {
     return null;
   }
 
-  const filename = path.basename(normalizedUrl.slice(prefix.length));
+  const uploadDirectory = storedUploadDirectories[matchingPrefix];
+  const filename = path.basename(normalizedUrl.slice(matchingPrefix.length));
 
   if (!filename) {
     return null;
@@ -26,13 +33,13 @@ const getStoredFilePath = (fileUrl) => {
   return filePath;
 };
 
-const deleteStoredFiles = async (attachments = []) => {
+const deleteStoredFiles = async (files = []) => {
   const uniquePaths = [
     ...new Set(
-      attachments
-        .map((attachment) =>
+      files
+        .map((file) =>
           getStoredFilePath(
-            typeof attachment === "string" ? attachment : attachment?.file_url
+            typeof file === "string" ? file : file?.file_url || file?.avatar_url
           )
         )
         .filter(Boolean)
@@ -45,7 +52,7 @@ const deleteStoredFiles = async (attachments = []) => {
         await fs.unlink(filePath);
       } catch (error) {
         if (error.code !== "ENOENT") {
-          console.error(`Failed to delete attachment file ${filePath}:`, error.message);
+          console.error(`Failed to delete stored file ${filePath}:`, error.message);
         }
       }
     })

@@ -101,6 +101,7 @@ const getUserConversations = async (userId) => {
         u.user_id AS other_user_id,
         u.username AS other_username,
         u.email AS other_email,
+        u.avatar_url AS other_avatar_url,
         u.is_online AS other_is_online,
         EXISTS (
           SELECT 1
@@ -299,6 +300,7 @@ const directMessageSelect = `
     dm.conversation_id,
     dm.sender_id,
     u.username AS sender_username,
+    u.avatar_url AS sender_avatar_url,
     dm.content,
     dm.reply_to_direct_message_id,
     rdm.content AS reply_to_content,
@@ -508,6 +510,7 @@ const getDirectMessageById = async (directMessageId) => {
         dc.user_one_id,
         dc.user_two_id,
         u.username AS sender_username,
+        u.avatar_url AS sender_avatar_url,
         dmp.pinned_by,
         pu.username AS pinned_by_username,
         dmp.pinned_at
@@ -562,6 +565,7 @@ const createDirectMessage = async (
         dm.conversation_id,
         dm.sender_id,
         u.username AS sender_username,
+        u.avatar_url AS sender_avatar_url,
         dm.content,
         dm.reply_to_direct_message_id,
         rdm.content AS reply_to_content,
@@ -856,9 +860,11 @@ const searchDirectMessagesByConversationId = async (
       SELECT
         dm.direct_message_id,
         dm.conversation_id,
+        dm.sender_id,
         dm.content,
         dm.created_at,
-        u.username AS sender_username
+        u.username AS sender_username,
+        u.avatar_url AS sender_avatar_url
       FROM direct_messages dm
       JOIN users u ON dm.sender_id = u.user_id
       LEFT JOIN direct_conversation_deletions dcd
@@ -879,9 +885,11 @@ const searchDirectMessagesByConversationId = async (
   return rows.reverse().map((row) => ({
     direct_message_id: Number(row.direct_message_id),
     conversation_id: Number(row.conversation_id),
+    sender_id: Number(row.sender_id),
     content: row.content,
     created_at: row.created_at,
-    sender_username: row.sender_username
+    sender_username: row.sender_username,
+    sender_avatar_url: row.sender_avatar_url
   }));
 };
 

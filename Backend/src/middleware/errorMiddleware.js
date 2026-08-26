@@ -14,7 +14,9 @@ const getStatusCode = (err, res) => {
 
 const getErrorMessage = (err) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-    return "File size cannot exceed 25 MB.";
+    return err.field === "avatar"
+      ? "Profile pictures cannot exceed 5 MB."
+      : "File size cannot exceed 25 MB.";
   }
 
   return err.message || "Server Error";

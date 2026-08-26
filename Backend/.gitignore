@@ -1,5 +1,6 @@
 node_modules
 .env
+Things to Fix
 
 uploads/*
 !uploads/.gitkeep

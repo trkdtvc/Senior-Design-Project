@@ -1,6 +1,13 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { changePassword, deleteAccount, getMe, updateProfile } from "../services/authService";
+import {
+  changePassword,
+  deleteAccount,
+  deleteProfileAvatar,
+  getMe,
+  updateProfile,
+  uploadProfileAvatar
+} from "../services/authService";
 import {
   getUserServers,
   createServer,
@@ -86,11 +93,14 @@ const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
 const FILE_BASE_URL = getFileBaseUrl();
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 const MESSAGE_PAGE_SIZE = 30;
 const MAX_MESSAGE_LENGTH = 4000;
 const QUICK_REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏"];
 const EMOJI_PICKER_THEME = "dark";
 const getAuthToken = () => localStorage.getItem("token");
+
+const AVATAR_ACCEPT_TYPES = "image/jpeg,image/png,image/webp,image/gif";
 
 const ATTACHMENT_ACCEPT_TYPES = [
   "image/jpeg",
@@ -320,6 +330,15 @@ const getConversationOtherEmail = (conversation) =>
   conversation?.otherUser?.email ||
   "";
 
+const getConversationOtherAvatar = (conversation) =>
+  conversation?.other_user?.avatar_url ||
+  conversation?.other_user?.avatarUrl ||
+  conversation?.other_avatar_url ||
+  conversation?.otherAvatarUrl ||
+  conversation?.otherUser?.avatar_url ||
+  conversation?.otherUser?.avatarUrl ||
+  "";
+
 const getConversationPresenceStatus = (conversation) =>
   normalizePresenceStatus(
     conversation?.other_user?.is_online ??
@@ -357,6 +376,15 @@ const getDirectMessageAuthor = (message) =>
   message?.username ||
   message?.sender?.username ||
   "Unknown user";
+
+const getDirectMessageAvatar = (message) =>
+  message?.sender_avatar_url ||
+  message?.senderAvatarUrl ||
+  message?.avatar_url ||
+  message?.avatarUrl ||
+  message?.sender?.avatar_url ||
+  message?.sender?.avatarUrl ||
+  "";
 
 const getDirectMessageContent = (message) =>
   message?.content || "";
@@ -461,6 +489,12 @@ const getFriendRequestSenderEmail = (request) =>
   request?.from_email ||
   "";
 
+const getFriendRequestSenderAvatar = (request) =>
+  request?.sender?.avatar_url ||
+  request?.sender_avatar_url ||
+  request?.senderAvatarUrl ||
+  "";
+
 const getFriendRequestReceiverName = (request) =>
   request?.receiver?.username ||
   request?.recipient?.username ||
@@ -477,6 +511,12 @@ const getFriendRequestReceiverEmail = (request) =>
   request?.receiver_email ||
   request?.recipient_email ||
   request?.to_email ||
+  "";
+
+const getFriendRequestReceiverAvatar = (request) =>
+  request?.receiver?.avatar_url ||
+  request?.receiver_avatar_url ||
+  request?.receiverAvatarUrl ||
   "";
 
 const getFriendRequestTimestamp = (request) =>
@@ -584,22 +624,52 @@ const formatTypingUsers = (typingUsers) => {
   return `${names[0]}, ${names[1]}, and ${names.length - 2} more are typing...`;
 };
 
-const getAttachmentUrl = (attachment) => {
-  const fileUrl =
-    attachment?.file_url ||
-    attachment?.fileUrl ||
-    attachment?.url ||
-    "";
+const getStoredUploadUrl = (fileUrl) => {
+  const normalizedUrl = String(fileUrl || "").trim();
 
-  if (!fileUrl) {
+  if (!normalizedUrl) {
     return "";
   }
 
-  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
-    return fileUrl;
+  if (normalizedUrl.startsWith("http://") || normalizedUrl.startsWith("https://")) {
+    return normalizedUrl;
   }
 
-  return `${FILE_BASE_URL}${fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`}`;
+  return `${FILE_BASE_URL}${normalizedUrl.startsWith("/") ? normalizedUrl : `/${normalizedUrl}`}`;
+};
+
+const getAttachmentUrl = (attachment) =>
+  getStoredUploadUrl(
+    attachment?.file_url ||
+    attachment?.fileUrl ||
+    attachment?.url ||
+    ""
+  );
+
+const getEntityAvatarPath = (entity) =>
+  entity?.avatar_url ||
+  entity?.avatarUrl ||
+  entity?.sender_avatar_url ||
+  entity?.senderAvatarUrl ||
+  entity?.other_avatar_url ||
+  entity?.otherAvatarUrl ||
+  "";
+
+const renderAvatarContent = (avatarPath, fallbackName) => {
+  const avatarUrl = getStoredUploadUrl(avatarPath);
+
+  if (avatarUrl) {
+    return (
+      <img
+        className="discord-avatar-image"
+        src={avatarUrl}
+        alt={`${fallbackName || "User"} avatar`}
+        loading="lazy"
+      />
+    );
+  }
+
+  return getInitial(fallbackName);
 };
 
 const getAttachmentName = (attachment) =>
@@ -987,6 +1057,8 @@ const MainPage = () => {
     email: ""
   });
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
   const [isAccountSecurityModalOpen, setIsAccountSecurityModalOpen] = useState(false);
@@ -1171,6 +1243,7 @@ const MainPage = () => {
           user_id: getConversationOtherUserId(activeConversation),
           username: getConversationOtherUsername(activeConversation),
           email: getConversationOtherEmail(activeConversation),
+          avatar_url: getConversationOtherAvatar(activeConversation),
           presence_status: getConversationPresenceStatus(activeConversation)
         }
         : null,
@@ -1591,6 +1664,17 @@ const MainPage = () => {
     }
 
     const updatedUserId = String(updatedUser.user_id);
+    const publicPatch = {
+      ...(updatedUser.username !== undefined
+        ? { username: updatedUser.username }
+        : {}),
+      ...(updatedUser.email !== undefined
+        ? { email: updatedUser.email }
+        : {}),
+      ...(updatedUser.avatar_url !== undefined
+        ? { avatar_url: updatedUser.avatar_url }
+        : {})
+    };
 
     setUser((prevUser) => {
       if (!prevUser || String(prevUser.user_id || prevUser.id) !== updatedUserId) {
@@ -1599,36 +1683,57 @@ const MainPage = () => {
 
       return {
         ...prevUser,
+        ...publicPatch,
         ...updatedUser
       };
     });
 
     setMembers((prevMembers) =>
-      prevMembers.map((member) => {
-        if (String(getMemberUserId(member)) !== updatedUserId) {
-          return member;
-        }
-
-        return {
-          ...member,
-          username: updatedUser.username,
-          email: updatedUser.email
-        };
-      })
+      prevMembers.map((member) =>
+        String(getMemberUserId(member)) === updatedUserId
+          ? { ...member, ...publicPatch }
+          : member
+      )
     );
 
     setFriends((prevFriends) =>
-      prevFriends.map((friend) => {
-        if (String(getFriendId(friend)) !== updatedUserId) {
-          return friend;
-        }
+      prevFriends.map((friend) =>
+        String(getFriendId(friend)) === updatedUserId
+          ? { ...friend, ...publicPatch }
+          : friend
+      )
+    );
 
-        return {
-          ...friend,
-          username: updatedUser.username,
-          email: updatedUser.email
-        };
-      })
+    setIncomingFriendRequests((prevRequests) =>
+      prevRequests.map((request) =>
+        String(request?.sender_id) === updatedUserId
+          ? {
+            ...request,
+            ...(updatedUser.username !== undefined
+              ? { sender_username: updatedUser.username }
+              : {}),
+            ...(updatedUser.avatar_url !== undefined
+              ? { sender_avatar_url: updatedUser.avatar_url }
+              : {})
+          }
+          : request
+      )
+    );
+
+    setOutgoingFriendRequests((prevRequests) =>
+      prevRequests.map((request) =>
+        String(request?.receiver_id) === updatedUserId
+          ? {
+            ...request,
+            ...(updatedUser.username !== undefined
+              ? { receiver_username: updatedUser.username }
+              : {}),
+            ...(updatedUser.avatar_url !== undefined
+              ? { receiver_avatar_url: updatedUser.avatar_url }
+              : {})
+          }
+          : request
+      )
     );
 
     setDirectConversations((prevConversations) =>
@@ -1639,13 +1744,19 @@ const MainPage = () => {
 
         return {
           ...conversation,
-          other_username: updatedUser.username,
-          other_email: updatedUser.email,
+          ...(updatedUser.username !== undefined
+            ? { other_username: updatedUser.username }
+            : {}),
+          ...(updatedUser.email !== undefined
+            ? { other_email: updatedUser.email }
+            : {}),
+          ...(updatedUser.avatar_url !== undefined
+            ? { other_avatar_url: updatedUser.avatar_url }
+            : {}),
           other_user: conversation?.other_user
             ? {
               ...conversation.other_user,
-              username: updatedUser.username,
-              email: updatedUser.email
+              ...publicPatch
             }
             : conversation?.other_user
         };
@@ -1660,13 +1771,11 @@ const MainPage = () => {
 
         return {
           ...message,
-          username: updatedUser.username,
-          email: updatedUser.email,
+          ...publicPatch,
           user: message?.user
             ? {
               ...message.user,
-              username: updatedUser.username,
-              email: updatedUser.email
+              ...publicPatch
             }
             : message?.user
         };
@@ -1681,14 +1790,22 @@ const MainPage = () => {
 
         return {
           ...message,
-          sender_username: updatedUser.username,
-          sender_email: updatedUser.email,
-          username: updatedUser.username,
+          ...(updatedUser.username !== undefined
+            ? {
+              sender_username: updatedUser.username,
+              username: updatedUser.username
+            }
+            : {}),
+          ...(updatedUser.email !== undefined
+            ? { sender_email: updatedUser.email }
+            : {}),
+          ...(updatedUser.avatar_url !== undefined
+            ? { sender_avatar_url: updatedUser.avatar_url }
+            : {}),
           sender: message?.sender
             ? {
               ...message.sender,
-              username: updatedUser.username,
-              email: updatedUser.email
+              ...publicPatch
             }
             : message?.sender
         };
@@ -3914,11 +4031,12 @@ const MainPage = () => {
     });
     setProfileError("");
     setProfileSuccess("");
+    setAvatarError("");
     setIsEditProfileModalOpen(true);
   };
 
   const handleCloseEditProfile = () => {
-    if (isUpdatingProfile) {
+    if (isUpdatingProfile || isUpdatingAvatar) {
       return;
     }
 
@@ -3936,6 +4054,71 @@ const MainPage = () => {
 
     setProfileError("");
     setProfileSuccess("");
+  };
+
+  const handleProfileAvatarChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = AVATAR_ACCEPT_TYPES.split(",");
+
+    if (!allowedTypes.includes(file.type)) {
+      setAvatarError("Choose a JPEG, PNG, WebP, or GIF image.");
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_SIZE) {
+      setAvatarError("Profile pictures must be 5 MB or smaller.");
+      return;
+    }
+
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setIsUpdatingAvatar(true);
+      setAvatarError("");
+      setProfileSuccess("");
+
+      const response = await uploadProfileAvatar(token, file);
+      applyUserProfileUpdate(response?.user || response);
+      setProfileSuccess(response?.message || "Profile picture updated.");
+    } catch (error) {
+      setAvatarError(error.message || "Failed to update profile picture.");
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
+  };
+
+  const handleRemoveProfileAvatar = async () => {
+    const token = getAuthToken();
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setIsUpdatingAvatar(true);
+      setAvatarError("");
+      setProfileSuccess("");
+
+      const response = await deleteProfileAvatar(token);
+      applyUserProfileUpdate(response?.user || response);
+      setProfileSuccess(response?.message || "Profile picture removed.");
+    } catch (error) {
+      setAvatarError(error.message || "Failed to remove profile picture.");
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
   };
 
   const handleUpdateProfile = async (e) => {
@@ -5862,7 +6045,7 @@ const MainPage = () => {
       <div key={memberId} className="server-member-item discord-member-item">
         <div className="discord-member-row-top">
           <div className="discord-profile-avatar member-avatar">
-            {getInitial(getMemberName(member))}
+            {renderAvatarContent(getEntityAvatarPath(member), getMemberName(member))}
             <span
               className={`discord-status-dot discord-profile-status ${getPresenceColorClass(
                 getMemberPresenceStatus(member)
@@ -6189,7 +6372,10 @@ const MainPage = () => {
 
                             >
                               <div className="discord-dm-avatar">
-                                {getInitial(getConversationOtherUsername(conversation))}
+                                {renderAvatarContent(
+                                  getConversationOtherAvatar(conversation),
+                                  getConversationOtherUsername(conversation)
+                                )}
                                 <span
                                   className={`discord-status-dot ${getPresenceColorClass(
                                     presenceStatus
@@ -6515,7 +6701,7 @@ const MainPage = () => {
                 aria-label="Edit profile"
               >
                 <div className="discord-account-avatar">
-                  {getInitial(user?.username)}
+                  {renderAvatarContent(getEntityAvatarPath(user), user?.username)}
                   <span
                     className={`discord-status-dot ${getPresenceColorClass(
                       currentUserPresence
@@ -7025,7 +7211,7 @@ const MainPage = () => {
                             >
                               <div className="discord-friend-home-main">
                                 <div className="discord-dm-avatar">
-                                  {getInitial(getFriendName(friend))}
+                                  {renderAvatarContent(getEntityAvatarPath(friend), getFriendName(friend))}
                                   <span
                                     className={`discord-status-dot ${getPresenceColorClass(
                                       presenceStatus
@@ -7180,7 +7366,10 @@ const MainPage = () => {
                               >
                                 <div className="discord-friend-home-main">
                                   <div className="discord-dm-avatar">
-                                    {getInitial(getFriendRequestSenderName(request))}
+                                    {renderAvatarContent(
+                                      getFriendRequestSenderAvatar(request),
+                                      getFriendRequestSenderName(request)
+                                    )}
                                   </div>
 
                                   <div className="discord-friend-home-info">
@@ -7245,7 +7434,10 @@ const MainPage = () => {
                             >
                               <div className="discord-friend-home-main">
                                 <div className="discord-dm-avatar">
-                                  {getInitial(getFriendRequestReceiverName(request))}
+                                  {renderAvatarContent(
+                                    getFriendRequestReceiverAvatar(request),
+                                    getFriendRequestReceiverName(request)
+                                  )}
                                 </div>
 
                                 <div className="discord-friend-home-info">
@@ -7385,7 +7577,12 @@ const MainPage = () => {
                     >
                       {!isOwnMessage ? (
                         <div className="discord-message-avatar">
-                          {getInitial(author)}
+                          {renderAvatarContent(
+                            isDmView
+                              ? getDirectMessageAvatar(message)
+                              : getEntityAvatarPath(message),
+                            author
+                          )}
                         </div>
                       ) : null}
 
@@ -7861,7 +8058,7 @@ const MainPage = () => {
                             onMouseEnter={() => setActiveMentionIndex(index)}
                           >
                             <span className="discord-mention-avatar">
-                              {getInitial(memberName)}
+                              {renderAvatarContent(getEntityAvatarPath(member), memberName)}
                               <span
                                 className={`discord-status-dot ${getPresenceColorClass(
                                   presenceStatus
@@ -7952,7 +8149,10 @@ const MainPage = () => {
                 <div className="discord-profile-card">
                   <div className="discord-profile-banner" />
                   <div className="discord-profile-avatar large-avatar">
-                    {getInitial(activeConversationUser.username)}
+                    {renderAvatarContent(
+                      getEntityAvatarPath(activeConversationUser),
+                      activeConversationUser.username
+                    )}
                     <span
                       className={`discord-status-dot discord-profile-status ${getPresenceColorClass(
                         activeConversationUser.presence_status
@@ -8253,8 +8453,52 @@ const MainPage = () => {
               </p>
             </div>
 
+            <div className="discord-profile-avatar-editor">
+              <div className="discord-profile-avatar large-avatar discord-profile-avatar-edit-preview">
+                {renderAvatarContent(getEntityAvatarPath(user), user?.username)}
+              </div>
+
+              <div className="discord-profile-avatar-editor-actions">
+                <label
+                  className={`auth-button compact-button discord-avatar-upload-button${
+                    isUpdatingAvatar ? " discord-avatar-upload-button-disabled" : ""
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept={AVATAR_ACCEPT_TYPES}
+                    className="discord-avatar-file-input"
+                    onChange={handleProfileAvatarChange}
+                    disabled={isUpdatingAvatar || isUpdatingProfile}
+                  />
+                  {isUpdatingAvatar ? "Updating..." : "Choose picture"}
+                </label>
+
+                {getEntityAvatarPath(user) ? (
+                  <button
+                    type="button"
+                    className="auth-button auth-button-secondary compact-button"
+                    onClick={handleRemoveProfileAvatar}
+                    disabled={isUpdatingAvatar || isUpdatingProfile}
+                  >
+                    Remove picture
+                  </button>
+                ) : null}
+
+                <span className="discord-avatar-upload-hint">JPEG, PNG, WebP or GIF · max 5 MB</span>
+              </div>
+            </div>
+
+            {avatarError ? (
+              <p className="auth-error server-inline-error">{avatarError}</p>
+            ) : null}
+
             {profileError ? (
               <p className="auth-error server-inline-error">{profileError}</p>
+            ) : null}
+
+            {profileSuccess ? (
+              <p className="auth-success discord-inline-success">{profileSuccess}</p>
             ) : null}
 
             <form onSubmit={handleUpdateProfile} className="discord-form-stack">
@@ -8291,7 +8535,7 @@ const MainPage = () => {
                   type="button"
                   className="auth-button auth-button-secondary compact-button"
                   onClick={handleCloseEditProfile}
-                  disabled={isUpdatingProfile}
+                  disabled={isUpdatingProfile || isUpdatingAvatar}
                 >
                   Cancel
                 </button>
@@ -8299,7 +8543,7 @@ const MainPage = () => {
                 <button
                   type="submit"
                   className="auth-button compact-button"
-                  disabled={isUpdatingProfile}
+                  disabled={isUpdatingProfile || isUpdatingAvatar}
                 >
                   {isUpdatingProfile ? "Saving..." : "Save changes"}
                 </button>

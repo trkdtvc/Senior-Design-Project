@@ -15,7 +15,7 @@ const hasBlockBetweenUsers = async (userAId, userBId) => {
 
 const findUserByUsernameOrEmail = async (value) => {
   const [rows] = await pool.execute(
-    `SELECT user_id, username, email
+    `SELECT user_id, username, email, avatar_url
      FROM users
      WHERE username = ? OR email = ?
      LIMIT 1`,
@@ -92,7 +92,8 @@ const getIncomingPendingRequestsByUserId = async (userId) => {
       fr.status,
       fr.created_at,
       u.username AS sender_username,
-      u.email AS sender_email
+      u.email AS sender_email,
+      u.avatar_url AS sender_avatar_url
      FROM friend_requests fr
      JOIN users u ON fr.sender_id = u.user_id
      WHERE fr.receiver_id = ?
@@ -119,7 +120,8 @@ const getOutgoingPendingRequestsByUserId = async (userId) => {
       fr.status,
       fr.created_at,
       u.username AS receiver_username,
-      u.email AS receiver_email
+      u.email AS receiver_email,
+      u.avatar_url AS receiver_avatar_url
      FROM friend_requests fr
      JOIN users u ON fr.receiver_id = u.user_id
      WHERE fr.sender_id = ?
@@ -212,6 +214,7 @@ const getFriendsByUserId = async (userId) => {
       u.user_id,
       u.username,
       u.email,
+      u.avatar_url,
       CASE
         WHEN u.is_online = 1 THEN 'online'
         ELSE 'offline'

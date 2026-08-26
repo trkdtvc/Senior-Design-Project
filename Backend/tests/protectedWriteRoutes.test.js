@@ -25,29 +25,6 @@ describe("Protected write routes without token", () => {
     expect(res.body.message).toBeTruthy();
   });
 
-  test("POST /api/roles returns 401 without token", async () => {
-    const res = await request(app)
-      .post("/api/roles")
-      .send({
-        server_id: 1,
-        role_name: "Moderator"
-      });
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBeTruthy();
-  });
-
-  test("POST /api/member-roles returns 401 without token", async () => {
-    const res = await request(app)
-      .post("/api/member-roles")
-      .send({
-        member_id: 1,
-        role_id: 1
-      });
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBeTruthy();
-  });
 
   test("POST /api/messages returns 401 without token", async () => {
     const res = await request(app)
@@ -74,6 +51,20 @@ describe("Protected write routes without token", () => {
     const res = await request(app)
       .patch("/api/channels/1")
       .send({ channel_name: "renamed-channel" });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body.message).toBeTruthy();
+  });
+
+  test("PUT /api/auth/profile/avatar returns 401 without token", async () => {
+    const res = await request(app).put("/api/auth/profile/avatar");
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body.message).toBeTruthy();
+  });
+
+  test("DELETE /api/auth/profile/avatar returns 401 without token", async () => {
+    const res = await request(app).delete("/api/auth/profile/avatar");
 
     expect(res.statusCode).toBe(401);
     expect(res.body.message).toBeTruthy();

@@ -24,6 +24,7 @@ const findUserById = async (userId) => {
       user_id,
       username,
       email,
+      avatar_url,
       is_verified,
       status,
       is_online,
@@ -40,7 +41,7 @@ const findUserById = async (userId) => {
 
 const findUserCredentialsById = async (userId) => {
   const [rows] = await pool.execute(
-    `SELECT user_id, username, email, password_hash, is_verified
+    `SELECT user_id, username, email, avatar_url, password_hash, is_verified
      FROM users
      WHERE user_id = ?
      LIMIT 1`,
@@ -123,6 +124,17 @@ const updateUserProfile = async (userId, username, email, emailChanged = false) 
          is_verified = CASE WHEN ? THEN 0 ELSE is_verified END
      WHERE user_id = ?`,
     [username, email, emailChanged ? 1 : 0, userId]
+  );
+
+  return result;
+};
+
+const updateUserAvatar = async (userId, avatarUrl) => {
+  const [result] = await pool.execute(
+    `UPDATE users
+     SET avatar_url = ?
+     WHERE user_id = ?`,
+    [avatarUrl || null, userId]
   );
 
   return result;
@@ -247,6 +259,7 @@ module.exports = {
   findUserByPasswordResetToken,
   updateUserPassword,
   updateUserProfile,
+  updateUserAvatar,
   invalidateEmailVerificationTokens,
   getAttachmentUrlsAffectedByUserDeletion,
   deleteUserById,

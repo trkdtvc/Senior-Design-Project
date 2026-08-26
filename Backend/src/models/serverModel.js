@@ -1,7 +1,5 @@
 const { pool } = require("../config/db");
 
-const DEFAULT_SERVER_ROLES = ["owner", "admin", "member"];
-
 const createServer = async (ownerId, serverName, serverDescription) => {
   const [result] = await pool.query(
     "INSERT INTO servers (owner_id, server_name, server_description) VALUES (?, ?, ?)",
@@ -39,7 +37,7 @@ const createServerWithDefaults = async (ownerId, serverName, serverDescription) 
     const serverId = serverResult.insertId;
 
     const [memberResult] = await connection.query(
-      "INSERT INTO server_members (server_id, user_id) VALUES (?, ?)",
+      "INSERT INTO server_members (server_id, user_id, server_role) VALUES (?, ?, 'member')",
       [serverId, ownerId]
     );
     const ownerMemberId = memberResult.insertId;
@@ -47,22 +45,6 @@ const createServerWithDefaults = async (ownerId, serverName, serverDescription) 
     await connection.query(
       "INSERT INTO channels (server_id, channel_name) VALUES (?, ?)",
       [serverId, "general"]
-    );
-
-    const roleIds = {};
-
-    for (const roleName of DEFAULT_SERVER_ROLES) {
-      const [roleResult] = await connection.query(
-        "INSERT INTO roles (server_id, role_name) VALUES (?, ?)",
-        [serverId, roleName]
-      );
-
-      roleIds[roleName] = roleResult.insertId;
-    }
-
-    await connection.query(
-      "INSERT INTO member_roles (member_id, role_id) VALUES (?, ?)",
-      [ownerMemberId, roleIds.owner]
     );
 
     await connection.commit();
@@ -134,16 +116,6 @@ const deleteServer = async (serverId) => {
        FROM messages m
        INNER JOIN channels c ON m.channel_id = c.channel_id
        WHERE c.server_id = ?`,
-      [serverId]
-    );
-
-    await connection.query(
-      "DELETE FROM member_roles WHERE member_id IN (SELECT member_id FROM server_members WHERE server_id = ?)",
-      [serverId]
-    );
-
-    await connection.query(
-      "DELETE FROM roles WHERE server_id = ?",
       [serverId]
     );
 

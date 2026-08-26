@@ -13,6 +13,7 @@ const {
   findUserByPasswordResetToken,
   updateUserPassword,
   updateUserProfile,
+  updateUserAvatar,
   invalidateEmailVerificationTokens,
   getAttachmentUrlsAffectedByUserDeletion,
   deleteUserById,
@@ -49,10 +50,17 @@ const getSafeUserResponse = (user) => ({
   user_id: user.user_id,
   username: user.username,
   email: user.email,
+  avatar_url: user.avatar_url || null,
   is_verified: user.is_verified,
   status: user.status || "online",
   is_online: Boolean(user.is_online),
   last_seen_at: user.last_seen_at
+});
+
+const getPublicUserProfileResponse = (user) => ({
+  user_id: user.user_id,
+  username: user.username,
+  avatar_url: user.avatar_url || null
 });
 
 const getPasswordChecks = (password) => ({
@@ -651,9 +659,13 @@ const deleteAccount = async (req, res, next) => {
     }
 
     const attachmentUrls = await getAttachmentUrlsAffectedByUserDeletion(userId);
+    const storedFilesToDelete = [
+      ...attachmentUrls,
+      ...(user.avatar_url ? [user.avatar_url] : [])
+    ];
 
     await deleteUserById(userId);
-    await deleteStoredFiles(attachmentUrls);
+    await deleteStoredFiles(storedFilesToDelete);
 
     const io = req.app.get("io");
 
@@ -772,7 +784,7 @@ const updateProfile = async (req, res, next) => {
     const io = req.app.get("io");
 
     if (io) {
-      io.emit("user_profile_updated", safeUser);
+      io.emit("user_profile_updated", getPublicUserProfileResponse(updatedUser));
     }
 
     return res.status(200).json({
@@ -780,6 +792,85 @@ const updateProfile = async (req, res, next) => {
         ? "Profile updated. Please verify your new email address"
         : "Profile updated successfully",
       token,
+      user: safeUser
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateProfileAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      res.status(400);
+      throw new Error("Choose an image to use as your avatar");
+    }
+
+    const userId = req.user.user_id;
+    const currentUser = await findUserById(userId);
+
+    if (!currentUser) {
+      await deleteStoredFiles([`/uploads/avatars/${req.file.filename}`]);
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+    try {
+      await updateUserAvatar(userId, avatarUrl);
+    } catch (error) {
+      await deleteStoredFiles([avatarUrl]);
+      throw error;
+    }
+
+    if (currentUser.avatar_url) {
+      await deleteStoredFiles([currentUser.avatar_url]);
+    }
+
+    const updatedUser = await findUserById(userId);
+    const safeUser = getSafeUserResponse(updatedUser);
+    const io = req.app.get("io");
+
+    if (io) {
+      io.emit("user_profile_updated", getPublicUserProfileResponse(updatedUser));
+    }
+
+    res.status(200).json({
+      message: "Profile picture updated successfully",
+      user: safeUser
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteProfileAvatar = async (req, res, next) => {
+  try {
+    const userId = req.user.user_id;
+    const currentUser = await findUserById(userId);
+
+    if (!currentUser) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    await updateUserAvatar(userId, null);
+
+    if (currentUser.avatar_url) {
+      await deleteStoredFiles([currentUser.avatar_url]);
+    }
+
+    const updatedUser = await findUserById(userId);
+    const safeUser = getSafeUserResponse(updatedUser);
+    const io = req.app.get("io");
+
+    if (io) {
+      io.emit("user_profile_updated", getPublicUserProfileResponse(updatedUser));
+    }
+
+    res.status(200).json({
+      message: "Profile picture removed",
       user: safeUser
     });
   } catch (error) {
@@ -807,6 +898,8 @@ module.exports = {
   loginUser,
   getMe,
   updateProfile,
+  updateProfileAvatar,
+  deleteProfileAvatar,
   changePassword,
   deleteAccount,
   verifyEmail,

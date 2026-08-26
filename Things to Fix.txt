@@ -1,0 +1,6 @@
+
+1. crooked UI
+2. can't paste image after screenshotted
+3. only keep the 3 rows, the leftest, the middle one, and the one before the rightest when it comes to my profile information, move all of the information to the bottom left area where the log out is
+4. implement a super-unique feature
+5. 

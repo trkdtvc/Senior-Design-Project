@@ -4,13 +4,18 @@ const crypto = require("crypto");
 const multer = require("multer");
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
-const uploadDirectory = path.join(__dirname, "..", "..", "uploads", "messages");
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+const uploadsRoot = path.join(__dirname, "..", "..", "uploads");
+const messageUploadDirectory = path.join(uploadsRoot, "messages");
+const avatarUploadDirectory = path.join(uploadsRoot, "avatars");
 
-if (!fs.existsSync(uploadDirectory)) {
-  fs.mkdirSync(uploadDirectory, { recursive: true });
-}
+[messageUploadDirectory, avatarUploadDirectory].forEach((directory) => {
+  if (!fs.existsSync(directory)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+});
 
-const allowedMimeTypes = [
+const allowedAttachmentMimeTypes = [
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -34,45 +39,70 @@ const allowedMimeTypes = [
   "application/x-zip-compressed"
 ];
 
-const sanitizeOriginalFilename = (originalName = "attachment") => {
+const allowedAvatarMimeTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif"
+];
+
+const sanitizeOriginalFilename = (originalName = "file") => {
   const baseName = path.basename(originalName);
   const sanitizedName = baseName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const compactName = sanitizedName.replace(/_+/g, "_").slice(0, 120);
 
-  return compactName || "attachment";
+  return compactName || "file";
 };
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDirectory);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${crypto.randomUUID()}-${sanitizeOriginalFilename(
-      file.originalname
-    )}`;
+const createStorage = (destination) =>
+  multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, destination);
+    },
+    filename: (req, file, cb) => {
+      const uniqueName = `${Date.now()}-${crypto.randomUUID()}-${sanitizeOriginalFilename(
+        file.originalname
+      )}`;
 
-    cb(null, uniqueName);
-  }
-});
+      cb(null, uniqueName);
+    }
+  });
 
-const fileFilter = (req, file, cb) => {
-  if (!allowedMimeTypes.includes(file.mimetype)) {
-    cb(new Error("This file type is not allowed."), false);
-    return;
-  }
+const createFileFilter = (allowedMimeTypes, errorMessage) =>
+  (req, file, cb) => {
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      cb(new Error(errorMessage), false);
+      return;
+    }
 
-  cb(null, true);
-};
+    cb(null, true);
+  };
 
 const uploadMessageAttachment = multer({
-  storage,
-  fileFilter,
+  storage: createStorage(messageUploadDirectory),
+  fileFilter: createFileFilter(
+    allowedAttachmentMimeTypes,
+    "This file type is not allowed."
+  ),
   limits: {
     fileSize: MAX_ATTACHMENT_SIZE
   }
 });
 
+const uploadProfileAvatar = multer({
+  storage: createStorage(avatarUploadDirectory),
+  fileFilter: createFileFilter(
+    allowedAvatarMimeTypes,
+    "Avatar must be a JPEG, PNG, WebP, or GIF image."
+  ),
+  limits: {
+    fileSize: MAX_AVATAR_SIZE
+  }
+});
+
 module.exports = {
   MAX_ATTACHMENT_SIZE,
-  uploadMessageAttachment
+  MAX_AVATAR_SIZE,
+  uploadMessageAttachment,
+  uploadProfileAvatar
 };

@@ -203,6 +203,7 @@ const baseMessageSelect = `
     m.created_at,
     m.updated_at,
     u.username,
+    u.avatar_url,
     mp.pinned_by,
     pu.username AS pinned_by_username,
     mp.pinned_at
@@ -358,9 +359,11 @@ const searchMessagesByChannelId = async (channelId, searchTerm) => {
     `SELECT
         m.message_id,
         m.channel_id,
+        m.user_id,
         m.message_content AS content,
         m.created_at,
-        u.username
+        u.username,
+        u.avatar_url
      FROM messages m
      JOIN users u ON m.user_id = u.user_id
      WHERE m.channel_id = ?
@@ -373,9 +376,11 @@ const searchMessagesByChannelId = async (channelId, searchTerm) => {
   return rows.reverse().map((row) => ({
     message_id: Number(row.message_id),
     channel_id: Number(row.channel_id),
+    user_id: Number(row.user_id),
     content: row.content,
     created_at: row.created_at,
-    username: row.username
+    username: row.username,
+    avatar_url: row.avatar_url
   }));
 };
 
@@ -394,6 +399,7 @@ const getMessageById = async (messageId) => {
         m.created_at,
         m.updated_at,
         u.username,
+        u.avatar_url,
         mp.pinned_by,
         pu.username AS pinned_by_username,
         mp.pinned_at
