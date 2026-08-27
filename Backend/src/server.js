@@ -8,10 +8,7 @@ const { findUserById, setUserOnlineState } = require("./models/userModel");
 const { isUserMemberOfServer } = require("./models/serverMemberModel");
 const userSafetyModel = require("./models/userSafetyModel");
 const { isUserMemberOfChannelServer } = require("./models/messageModel");
-const {
-  getConversationById,
-  isUserInConversation
-} = require("./models/directMessageModel");
+const { getConversationById } = require("./models/directMessageModel");
 
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === "production";
@@ -103,6 +100,13 @@ const emitPresenceUpdate = (userId, username, isOnline, lastSeenAt = null) => {
   io.emit("presence_update", payload);
 };
 
+const isConversationParticipant = (conversation, userId) =>
+  Boolean(
+    conversation &&
+      (Number(conversation.user_one_id) === Number(userId) ||
+        Number(conversation.user_two_id) === Number(userId))
+  );
+
 io.use(async (socket, next) => {
   try {
     const token = getSocketToken(socket);
@@ -142,17 +146,20 @@ io.on("connection", async (socket) => {
 
   debugLog(`Socket connected: ${socket.id} (user ${userId})`);
 
+  const previousSocketCount = getActiveSocketCount(userId);
   addActiveSocket(userId, socket.id);
   debugLog(
     `Active sockets after connect for user ${userId}: ${getActiveSocketCount(userId)}`
   );
   socket.join(`user_${userId}`);
 
-  try {
-    await setUserOnlineState(userId, true, null);
-    emitPresenceUpdate(userId, username, true, null);
-  } catch (error) {
-    console.error("Failed to mark user online:", error.message);
+  if (previousSocketCount === 0) {
+    try {
+      await setUserOnlineState(userId, true, null);
+      emitPresenceUpdate(userId, username, true, null);
+    } catch (error) {
+      console.error("Failed to mark user online:", error.message);
+    }
   }
 
   socket.on("join_server", async (serverId) => {
@@ -239,12 +246,9 @@ io.on("connection", async (socket) => {
 
       if (!conversationId) return;
 
-      const [conversation, hasAccess] = await Promise.all([
-        getConversationById(conversationId),
-        isUserInConversation(conversationId, userId)
-      ]);
+      const conversation = await getConversationById(conversationId);
 
-      if (!conversation || !hasAccess) return;
+      if (!isConversationParticipant(conversation, userId)) return;
 
       const recipientUserId =
         Number(conversation.user_one_id) === Number(userId)
@@ -274,12 +278,9 @@ io.on("connection", async (socket) => {
 
       if (!conversationId) return;
 
-      const [conversation, hasAccess] = await Promise.all([
-        getConversationById(conversationId),
-        isUserInConversation(conversationId, userId)
-      ]);
+      const conversation = await getConversationById(conversationId);
 
-      if (!conversation || !hasAccess) return;
+      if (!isConversationParticipant(conversation, userId)) return;
 
       const recipientUserId =
         Number(conversation.user_one_id) === Number(userId)

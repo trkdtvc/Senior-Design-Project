@@ -11,6 +11,14 @@ const MAX_SOURCE_MESSAGES = 6;
 const MAX_HISTORY_MESSAGES = 8;
 const MAX_GEMINI_OUTPUT_TOKENS = 900;
 const MAX_OPENAI_OUTPUT_TOKENS = 900;
+const parsedProviderTimeoutMs = Number.parseInt(
+  process.env.AI_PROVIDER_TIMEOUT_MS || "45000",
+  10
+);
+const AI_PROVIDER_TIMEOUT_MS =
+  Number.isFinite(parsedProviderTimeoutMs) && parsedProviderTimeoutMs > 0
+    ? parsedProviderTimeoutMs
+    : 45000;
 
 const STOP_WORDS = new Set([
   "about",
@@ -594,6 +602,28 @@ const extractGeminiText = (data) => {
   return "";
 };
 
+const fetchAiProvider = async (url, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AI_PROVIDER_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(
+        `The AI provider timed out after ${Math.round(AI_PROVIDER_TIMEOUT_MS / 1000)} seconds. Please try again.`
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 const getConfiguredProvider = () => {
   const requestedProvider = String(process.env.AI_PROVIDER || "local")
     .trim()
@@ -629,7 +659,7 @@ const getConfiguredProvider = () => {
 };
 
 const callOpenAi = async ({ systemPrompt, userPrompt, jsonMode = false }) => {
-  const response = await fetch(OPENAI_API_URL, {
+  const response = await fetchAiProvider(OPENAI_API_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -670,7 +700,7 @@ const normalizeGeminiModelName = (model = DEFAULT_GEMINI_MODEL) =>
 
 const callGemini = async ({ systemPrompt, userPrompt, jsonMode = false }) => {
   const model = normalizeGeminiModelName(process.env.GEMINI_MODEL || process.env.AI_MODEL || DEFAULT_GEMINI_MODEL);
-  const response = await fetch(
+  const response = await fetchAiProvider(
     `${GEMINI_API_BASE_URL.replace(/\/$/, "")}/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: "POST",

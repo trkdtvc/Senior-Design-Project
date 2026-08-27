@@ -1048,8 +1048,19 @@ const MainPage = () => {
   const pinnedHighlightTimeoutRef = useRef(null);
   const channelMessagesRef = useRef([]);
   const directMessagesRef = useRef([]);
+  const isSendingMessageRef = useRef(false);
+  const loadingOlderMessagesKeyRef = useRef(null);
   const typingStopTimeoutRef = useRef(null);
+  const localTypingActiveRef = useRef(false);
   const remoteTypingTimeoutsRef = useRef({});
+  const channelReadTimeoutRef = useRef(null);
+  const directReadTimeoutRef = useRef(null);
+  const serverChannelsLoadRequestRef = useRef(0);
+  const serverMembersLoadRequestRef = useRef(0);
+  const serverBansLoadRequestRef = useRef(0);
+  const channelMessagesLoadRequestRef = useRef(0);
+  const directMessagesLoadRequestRef = useRef(0);
+  const pinnedMessagesLoadRequestRef = useRef(0);
 
   const [user, setUser] = useState(null);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
@@ -1984,6 +1995,8 @@ const MainPage = () => {
   );
 
   const loadServerChannels = useCallback(async (token, serverId) => {
+    const requestId = ++serverChannelsLoadRequestRef.current;
+
     if (!serverId) {
       setChannels([]);
       setActiveChannelId(null);
@@ -1992,6 +2005,10 @@ const MainPage = () => {
 
     const channelData = await getServerChannels(token, serverId);
     const normalizedChannels = normalizeChannels(channelData);
+
+    if (requestId !== serverChannelsLoadRequestRef.current) {
+      return normalizedChannels;
+    }
 
     setChannels(normalizedChannels);
 
@@ -2029,6 +2046,8 @@ const MainPage = () => {
   }, [routeChannelId]);
 
   const loadServerMembers = useCallback(async (token, serverId) => {
+    const requestId = ++serverMembersLoadRequestRef.current;
+
     if (!serverId) {
       setMembers([]);
       return [];
@@ -2036,11 +2055,18 @@ const MainPage = () => {
 
     const memberData = await getServerMembers(serverId, token);
     const normalizedMembers = normalizeMembers(memberData);
+
+    if (requestId !== serverMembersLoadRequestRef.current) {
+      return normalizedMembers;
+    }
+
     setMembers(normalizedMembers);
     return normalizedMembers;
   }, []);
 
   const loadServerBannedUsers = useCallback(async (token, serverId) => {
+    const requestId = ++serverBansLoadRequestRef.current;
+
     if (!serverId) {
       setServerBans([]);
       return [];
@@ -2048,12 +2074,19 @@ const MainPage = () => {
 
     const banData = await getServerBans(serverId, token);
     const normalizedBans = normalizeServerBans(banData);
+
+    if (requestId !== serverBansLoadRequestRef.current) {
+      return normalizedBans;
+    }
+
     setServerBans(normalizedBans);
     return normalizedBans;
   }, []);
 
   const loadChannelMessageList = useCallback(
     async (token, channelId, options = {}) => {
+      const requestId = ++channelMessagesLoadRequestRef.current;
+
       if (!channelId) {
         setChannelMessages([]);
         setHasOlderChannelMessages(false);
@@ -2068,15 +2101,20 @@ const MainPage = () => {
       const normalizedMessageData = normalizeMessages(messageData);
       const pagination = messageData?.pagination || messageData?.data?.pagination || {};
 
+      if (requestId !== channelMessagesLoadRequestRef.current) {
+        return normalizedMessageData;
+      }
+
       if (options.beforeMessageId) {
+        const incomingMessageIds = new Set(
+          normalizedMessageData.map((message) => String(getMessageId(message)))
+        );
+
         setChannelMessages((prevMessages) => [
           ...normalizedMessageData,
           ...prevMessages.filter(
             (existingMessage) =>
-              !normalizedMessageData.some(
-                (newMessage) =>
-                  String(getMessageId(newMessage)) === String(getMessageId(existingMessage))
-              )
+              !incomingMessageIds.has(String(getMessageId(existingMessage)))
           )
         ]);
       } else {
@@ -2091,6 +2129,8 @@ const MainPage = () => {
 
   const loadDirectMessageList = useCallback(
     async (token, conversationId, options = {}) => {
+      const requestId = ++directMessagesLoadRequestRef.current;
+
       if (!conversationId) {
         setDirectMessages([]);
         setHasOlderDirectMessages(false);
@@ -2105,15 +2145,20 @@ const MainPage = () => {
       const normalizedMessageData = normalizeMessages(messageData);
       const pagination = messageData?.pagination || messageData?.data?.pagination || {};
 
+      if (requestId !== directMessagesLoadRequestRef.current) {
+        return normalizedMessageData;
+      }
+
       if (options.beforeDirectMessageId) {
+        const incomingMessageIds = new Set(
+          normalizedMessageData.map((message) => String(getDirectMessageId(message)))
+        );
+
         setDirectMessages((prevMessages) => [
           ...normalizedMessageData,
           ...prevMessages.filter(
             (existingMessage) =>
-              !normalizedMessageData.some(
-                (newMessage) =>
-                  String(getDirectMessageId(newMessage)) === String(getDirectMessageId(existingMessage))
-              )
+              !incomingMessageIds.has(String(getDirectMessageId(existingMessage)))
           )
         ]);
       } else {
@@ -2129,6 +2174,7 @@ const MainPage = () => {
 
   const loadPinnedMessageList = useCallback(
     async (token, options = {}) => {
+      const requestId = ++pinnedMessagesLoadRequestRef.current;
       const directView = options.isDirect ?? isDmView;
       const channelId = options.channelId ?? activeChannelId;
       const conversationId = options.conversationId ?? activeConversationId;
@@ -2141,6 +2187,11 @@ const MainPage = () => {
 
         const response = await getPinnedDirectMessages(token, conversationId);
         const normalizedPinnedMessages = normalizeMessages(response);
+
+        if (requestId !== pinnedMessagesLoadRequestRef.current) {
+          return normalizedPinnedMessages;
+        }
+
         setPinnedMessages(normalizedPinnedMessages);
         return normalizedPinnedMessages;
       }
@@ -2152,6 +2203,11 @@ const MainPage = () => {
 
       const response = await getPinnedChannelMessages(token, channelId);
       const normalizedPinnedMessages = normalizeMessages(response);
+
+      if (requestId !== pinnedMessagesLoadRequestRef.current) {
+        return normalizedPinnedMessages;
+      }
+
       setPinnedMessages(normalizedPinnedMessages);
       return normalizedPinnedMessages;
     },
@@ -2286,19 +2342,31 @@ const MainPage = () => {
       typingStopTimeoutRef.current = null;
     }
 
+    if (!localTypingActiveRef.current) {
+      return;
+    }
+
+    localTypingActiveRef.current = false;
     emitTypingStatus(false);
   }, [emitTypingStatus]);
 
   const startTyping = useCallback(() => {
-    emitTypingStatus(true);
+    if (!localTypingActiveRef.current) {
+      localTypingActiveRef.current = true;
+      emitTypingStatus(true);
+    }
 
     if (typingStopTimeoutRef.current) {
       window.clearTimeout(typingStopTimeoutRef.current);
     }
 
     typingStopTimeoutRef.current = window.setTimeout(() => {
-      emitTypingStatus(false);
       typingStopTimeoutRef.current = null;
+
+      if (localTypingActiveRef.current) {
+        localTypingActiveRef.current = false;
+        emitTypingStatus(false);
+      }
     }, 1800);
   }, [emitTypingStatus]);
 
@@ -2329,6 +2397,42 @@ const MainPage = () => {
       console.error("Failed to mark direct conversation as read:", error);
     }
   }, []);
+
+  const scheduleChannelReadState = useCallback(
+    (channelId) => {
+      if (!channelId) {
+        return;
+      }
+
+      if (channelReadTimeoutRef.current) {
+        window.clearTimeout(channelReadTimeoutRef.current);
+      }
+
+      channelReadTimeoutRef.current = window.setTimeout(() => {
+        channelReadTimeoutRef.current = null;
+        persistChannelReadState(channelId);
+      }, 300);
+    },
+    [persistChannelReadState]
+  );
+
+  const scheduleDirectConversationReadState = useCallback(
+    (conversationId) => {
+      if (!conversationId) {
+        return;
+      }
+
+      if (directReadTimeoutRef.current) {
+        window.clearTimeout(directReadTimeoutRef.current);
+      }
+
+      directReadTimeoutRef.current = window.setTimeout(() => {
+        directReadTimeoutRef.current = null;
+        persistDirectConversationReadState(conversationId);
+      }, 300);
+    },
+    [persistDirectConversationReadState]
+  );
 
   useEffect(() => {
     const loadMainPageData = async () => {
@@ -2467,6 +2571,29 @@ const MainPage = () => {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (typingStopTimeoutRef.current) {
+        window.clearTimeout(typingStopTimeoutRef.current);
+      }
+
+      if (channelReadTimeoutRef.current) {
+        window.clearTimeout(channelReadTimeoutRef.current);
+      }
+
+      if (directReadTimeoutRef.current) {
+        window.clearTimeout(directReadTimeoutRef.current);
+      }
+
+      Object.values(remoteTypingTimeoutsRef.current).forEach((timeoutId) => {
+        window.clearTimeout(timeoutId);
+      });
+
+      remoteTypingTimeoutsRef.current = {};
+      localTypingActiveRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     setActivePinnedJumpMessageId(null);
     pinnedJumpPendingRef.current = null;
   }, [activeChannelId, activeConversationId, isDmView]);
@@ -2494,6 +2621,12 @@ const MainPage = () => {
     }
 
     if (!routeServerId) {
+      serverChannelsLoadRequestRef.current += 1;
+      serverMembersLoadRequestRef.current += 1;
+      serverBansLoadRequestRef.current += 1;
+      channelMessagesLoadRequestRef.current += 1;
+      directMessagesLoadRequestRef.current += 1;
+      pinnedMessagesLoadRequestRef.current += 1;
       setActiveServerId(null);
       setActiveConversationId(null);
       setChannels([]);
@@ -2527,6 +2660,9 @@ const MainPage = () => {
     }
 
     if (!activeServerId) {
+      serverChannelsLoadRequestRef.current += 1;
+      serverMembersLoadRequestRef.current += 1;
+      channelMessagesLoadRequestRef.current += 1;
       setServerError("");
       setChannelError("");
       setMembersError("");
@@ -2536,6 +2672,9 @@ const MainPage = () => {
       setChannelMessages([]);
       return;
     }
+
+    const expectedChannelsRequestId = serverChannelsLoadRequestRef.current + 1;
+    const expectedMembersRequestId = serverMembersLoadRequestRef.current + 1;
 
     const loadSelectedServerData = async () => {
       try {
@@ -2548,6 +2687,14 @@ const MainPage = () => {
           loadServerMembers(token, activeServerId)
         ]);
       } catch (error) {
+        const isCurrentRequest =
+          serverChannelsLoadRequestRef.current === expectedChannelsRequestId &&
+          serverMembersLoadRequestRef.current === expectedMembersRequestId;
+
+        if (!isCurrentRequest) {
+          return;
+        }
+
         setChannels([]);
         setMembers([]);
         setActiveChannelId(null);
@@ -2563,12 +2710,19 @@ const MainPage = () => {
     const token = getAuthToken();
 
     if (!token || !activeServerId || !currentUserCanManageServer) {
+      serverBansLoadRequestRef.current += 1;
       setServerBans([]);
       setServerBanError("");
       return;
     }
 
+    const expectedRequestId = serverBansLoadRequestRef.current + 1;
+
     loadServerBannedUsers(token, activeServerId).catch((error) => {
+      if (serverBansLoadRequestRef.current !== expectedRequestId) {
+        return;
+      }
+
       setServerBans([]);
       setServerBanError(error.message || "Failed to load banned users.");
     });
@@ -2587,9 +2741,12 @@ const MainPage = () => {
     }
 
     if (!activeServerId || !activeChannelId) {
+      channelMessagesLoadRequestRef.current += 1;
       setChannelMessages([]);
       return;
     }
+
+    const expectedRequestId = channelMessagesLoadRequestRef.current + 1;
 
     const loadSelectedChannelMessages = async () => {
       try {
@@ -2598,10 +2755,16 @@ const MainPage = () => {
         shouldAutoScrollRef.current = true;
         await loadChannelMessageList(token, activeChannelId);
       } catch (error) {
+        if (channelMessagesLoadRequestRef.current !== expectedRequestId) {
+          return;
+        }
+
         setChannelMessages([]);
         setMessageError(error.message || "Failed to load channel messages.");
       } finally {
-        setIsMessagesLoading(false);
+        if (channelMessagesLoadRequestRef.current === expectedRequestId) {
+          setIsMessagesLoading(false);
+        }
       }
     };
 
@@ -2617,11 +2780,15 @@ const MainPage = () => {
     }
 
     if (!isDmView || !activeConversationId) {
+      directMessagesLoadRequestRef.current += 1;
+
       if (isDmView) {
         setDirectMessages([]);
       }
       return;
     }
+
+    const expectedRequestId = directMessagesLoadRequestRef.current + 1;
 
     const loadSelectedDirectMessages = async () => {
       try {
@@ -2630,10 +2797,16 @@ const MainPage = () => {
         shouldAutoScrollRef.current = true;
         await loadDirectMessageList(token, activeConversationId);
       } catch (error) {
+        if (directMessagesLoadRequestRef.current !== expectedRequestId) {
+          return;
+        }
+
         setDirectMessages([]);
         setMessageError(error.message || "Failed to load direct messages.");
       } finally {
-        setIsMessagesLoading(false);
+        if (directMessagesLoadRequestRef.current === expectedRequestId) {
+          setIsMessagesLoading(false);
+        }
       }
     };
 
@@ -2645,6 +2818,7 @@ const MainPage = () => {
     const token = getAuthToken();
 
     if (!token) {
+      pinnedMessagesLoadRequestRef.current += 1;
       return;
     }
 
@@ -2652,15 +2826,22 @@ const MainPage = () => {
       setChannelTypingUsers([]);
 
       if (!activeConversationId) {
+        pinnedMessagesLoadRequestRef.current += 1;
         setPinnedMessages([]);
         setDirectTypingUsers([]);
         return;
       }
 
+      const expectedRequestId = pinnedMessagesLoadRequestRef.current + 1;
+
       loadPinnedMessageList(token, {
         isDirect: true,
         conversationId: activeConversationId
       }).catch((error) => {
+        if (pinnedMessagesLoadRequestRef.current !== expectedRequestId) {
+          return;
+        }
+
         console.error("Failed to load pinned direct messages:", error);
         setPinnedMessages([]);
       });
@@ -2670,19 +2851,31 @@ const MainPage = () => {
     setDirectTypingUsers([]);
 
     if (!activeChannelId) {
+      pinnedMessagesLoadRequestRef.current += 1;
       setPinnedMessages([]);
       setChannelTypingUsers([]);
       return;
     }
 
+    const expectedRequestId = pinnedMessagesLoadRequestRef.current + 1;
+
     loadPinnedMessageList(token, {
       isDirect: false,
       channelId: activeChannelId
     }).catch((error) => {
+      if (pinnedMessagesLoadRequestRef.current !== expectedRequestId) {
+        return;
+      }
+
       console.error("Failed to load pinned channel messages:", error);
       setPinnedMessages([]);
     });
   }, [activeChannelId, activeConversationId, isDmView, loadPinnedMessageList]);
+
+  useEffect(() => {
+    loadingOlderMessagesKeyRef.current = null;
+    setIsLoadingOlderMessages(false);
+  }, [activeChannelId, activeConversationId, isDmView]);
 
   useEffect(() => {
     return () => {
@@ -2706,6 +2899,13 @@ const MainPage = () => {
     };
 
     const handleDisconnect = () => {
+      localTypingActiveRef.current = false;
+
+      if (typingStopTimeoutRef.current) {
+        window.clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = null;
+      }
+
       setIsSocketReady(false);
     };
 
@@ -2908,7 +3108,7 @@ const MainPage = () => {
 
         return [...prevMessages, incomingMessage];
       });
-      persistChannelReadState(activeChannelId);
+      scheduleChannelReadState(activeChannelId);
     };
 
     const handleMessageDeleted = (deletedMessage) => {
@@ -2992,7 +3192,7 @@ const MainPage = () => {
 
           return [...prevMessages, payload.directMessage];
         });
-        persistDirectConversationReadState(conversationId);
+        scheduleDirectConversationReadState(conversationId);
       } else if (
         !isOwnMessage &&
         !mutedDirectConversationIds.includes(String(conversationId))
@@ -3577,8 +3777,8 @@ const MainPage = () => {
     fetchFriendRequests,
     currentUserId,
     currentUserCanManageServer,
-    persistChannelReadState,
-    persistDirectConversationReadState,
+    scheduleChannelReadState,
+    scheduleDirectConversationReadState,
     applyUserProfileUpdate,
     updateMessageReactionsInState,
     updatePinnedMessageInState,
@@ -3973,12 +4173,18 @@ const MainPage = () => {
       return;
     }
 
-    if (!container || isLoadingOlderMessages) {
+    if (!container) {
       return;
     }
 
     if (isDmView) {
       if (!activeConversationId || !hasOlderDirectMessages || !directMessages.length) {
+        return;
+      }
+
+      const loadKey = `direct:${activeConversationId}`;
+
+      if (loadingOlderMessagesKeyRef.current === loadKey) {
         return;
       }
 
@@ -3994,6 +4200,7 @@ const MainPage = () => {
       };
 
       try {
+        loadingOlderMessagesKeyRef.current = loadKey;
         setIsLoadingOlderMessages(true);
         await loadDirectMessageList(token, activeConversationId, {
           beforeDirectMessageId: oldestDirectMessageId
@@ -4002,13 +4209,22 @@ const MainPage = () => {
         setMessageError(error.message || "Failed to load older direct messages.");
         scrollRestoreRef.current = null;
       } finally {
-        setIsLoadingOlderMessages(false);
+        if (loadingOlderMessagesKeyRef.current === loadKey) {
+          loadingOlderMessagesKeyRef.current = null;
+          setIsLoadingOlderMessages(false);
+        }
       }
 
       return;
     }
 
     if (!activeChannelId || !hasOlderChannelMessages || !channelMessages.length) {
+      return;
+    }
+
+    const loadKey = `channel:${activeChannelId}`;
+
+    if (loadingOlderMessagesKeyRef.current === loadKey) {
       return;
     }
 
@@ -4024,6 +4240,7 @@ const MainPage = () => {
     };
 
     try {
+      loadingOlderMessagesKeyRef.current = loadKey;
       setIsLoadingOlderMessages(true);
       await loadChannelMessageList(token, activeChannelId, {
         beforeMessageId: oldestMessageId
@@ -4032,7 +4249,10 @@ const MainPage = () => {
       setMessageError(error.message || "Failed to load older channel messages.");
       scrollRestoreRef.current = null;
     } finally {
-      setIsLoadingOlderMessages(false);
+      if (loadingOlderMessagesKeyRef.current === loadKey) {
+        loadingOlderMessagesKeyRef.current = null;
+        setIsLoadingOlderMessages(false);
+      }
     }
   };
 
@@ -5643,6 +5863,10 @@ const MainPage = () => {
       e.preventDefault();
     }
 
+    if (isSendingMessageRef.current) {
+      return;
+    }
+
     const token = getAuthToken();
 
     if (!token) {
@@ -5664,6 +5888,7 @@ const MainPage = () => {
       : null;
 
     try {
+      isSendingMessageRef.current = true;
       setIsSendingMessage(true);
       setMessageError("");
       shouldAutoScrollRef.current = true;
@@ -5729,6 +5954,7 @@ const MainPage = () => {
     } catch (error) {
       setMessageError(error.message || "Failed to send message.");
     } finally {
+      isSendingMessageRef.current = false;
       setIsSendingMessage(false);
     }
   };
