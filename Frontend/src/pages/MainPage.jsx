@@ -1089,6 +1089,7 @@ const MainPage = () => {
   const [hoveredChannelId, setHoveredChannelId] = useState(null);
   const [inviteError, setInviteError] = useState("");
   const [openChannelMenuId, setOpenChannelMenuId] = useState(null);
+  const [openMemberMenuId, setOpenMemberMenuId] = useState(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [isInviteCopied, setIsInviteCopied] = useState(false);
@@ -3851,6 +3852,7 @@ const MainPage = () => {
   useEffect(() => {
     const handleGlobalClick = (event) => {
       setOpenChannelMenuId(null);
+      setOpenMemberMenuId(null);
       setOpenConversationMenuId(null);
       setOpenMessageMenuKey(null);
 
@@ -6377,6 +6379,9 @@ const MainPage = () => {
     const isUpdatingRole = String(updatingMemberRoleId) === String(memberId);
     const isBanningMember = serverBanActionKey === `ban-${memberId}`;
 
+    const hasMemberActions = canChangeMemberRole || canRemoveMember;
+    const isMemberMenuOpen = String(openMemberMenuId) === String(memberId);
+
     return (
       <div key={memberId} className="server-member-item discord-member-item">
         <div className="discord-member-row-top">
@@ -6391,55 +6396,86 @@ const MainPage = () => {
 
           <div className="discord-member-text">
             <div className="server-member-name">
-              {getMemberName(member)}
+              <span className="discord-member-name-text">{getMemberName(member)}</span>
               <span className={`discord-member-role-badge discord-member-role-${memberRole}`}>
                 {formatMemberRole(member)}
               </span>
             </div>
             <div className="server-member-email">{getMemberEmail(member)}</div>
           </div>
-        </div>
 
-        {(canChangeMemberRole || canRemoveMember) ? (
-          <div className="discord-member-actions">
-            {canChangeMemberRole ? (
+          {hasMemberActions ? (
+            <div
+              className="discord-menu-anchor discord-member-menu-anchor"
+              onClick={(event) => event.stopPropagation()}
+            >
               <button
                 type="button"
-                className="auth-button compact-button discord-member-action-button discord-member-action-role"
-                onClick={() => handleUpdateServerMemberRole(member, nextRole)}
-                disabled={isUpdatingRole}
+                className="discord-account-action discord-member-menu-trigger"
+                onClick={() =>
+                  setOpenMemberMenuId((current) =>
+                    String(current) === String(memberId) ? null : memberId
+                  )
+                }
+                aria-label={`Manage ${getMemberName(member)}`}
+                title={`Manage ${getMemberName(member)}`}
+                aria-expanded={isMemberMenuOpen}
               >
-                {isUpdatingRole
-                  ? "Updating..."
-                  : memberRole === "admin"
-                    ? "Make member"
-                    : "Make admin"}
+                ⋯
               </button>
-            ) : null}
 
-            {canRemoveMember ? (
-              <>
-                <button
-                  type="button"
-                  className="auth-button auth-button-secondary compact-button discord-member-action-button discord-member-action-ban"
-                  onClick={() => handleBanServerMember(member)}
-                  disabled={isBanningMember || isRemovingMember}
-                >
-                  {isBanningMember ? "Banning..." : "Ban"}
-                </button>
+              {isMemberMenuOpen ? (
+                <div className="discord-popover-menu discord-member-actions-menu">
+                  {canChangeMemberRole ? (
+                    <button
+                      type="button"
+                      className="discord-popover-menu-item"
+                      onClick={() => {
+                        setOpenMemberMenuId(null);
+                        handleUpdateServerMemberRole(member, nextRole);
+                      }}
+                      disabled={isUpdatingRole}
+                    >
+                      {isUpdatingRole
+                        ? "Updating..."
+                        : memberRole === "admin"
+                          ? "Make member"
+                          : "Make admin"}
+                    </button>
+                  ) : null}
 
-                <button
-                  type="button"
-                  className="auth-button auth-button-danger compact-button discord-member-action-button discord-member-action-remove"
-                  onClick={() => handleRemoveServerMember(member)}
-                  disabled={isRemovingMember || isBanningMember}
-                >
-                  {isRemovingMember ? "Removing..." : "Remove"}
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
+                  {canRemoveMember ? (
+                    <>
+                      <button
+                        type="button"
+                        className="discord-popover-menu-item"
+                        onClick={() => {
+                          setOpenMemberMenuId(null);
+                          handleBanServerMember(member);
+                        }}
+                        disabled={isBanningMember || isRemovingMember}
+                      >
+                        {isBanningMember ? "Banning..." : "Ban member"}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="discord-popover-menu-item discord-popover-menu-item-danger"
+                        onClick={() => {
+                          setOpenMemberMenuId(null);
+                          handleRemoveServerMember(member);
+                        }}
+                        disabled={isRemovingMember || isBanningMember}
+                      >
+                        {isRemovingMember ? "Removing..." : "Remove member"}
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   };
@@ -8291,19 +8327,13 @@ const MainPage = () => {
                               </span>
                             ) : null}
                           </p>
-                        ) : isOwnMessage && timestamp ? (
-                          <p className="discord-message-text">
-                            <span className="discord-own-message-time">
-                              {timestamp}
-                              {messageWasEdited ? " · edited" : ""}
-                            </span>
-                          </p>
                         ) : null}
 
                         {attachments.length > 0 ? (
                           <div className="discord-attachments">
                             {attachments.map((attachment) => (
                               <div
+                                className="discord-attachment-item"
                                 key={
                                   attachment.attachment_id ||
                                   attachment.direct_message_id ||
@@ -8313,6 +8343,13 @@ const MainPage = () => {
                                 {renderAttachmentPreview(attachment, setPreviewAttachment)}
                               </div>
                             ))}
+                          </div>
+                        ) : null}
+
+                        {isOwnMessage && !content && attachments.length > 0 && timestamp ? (
+                          <div className="discord-own-attachment-time">
+                            {timestamp}
+                            {messageWasEdited ? " · edited" : ""}
                           </div>
                         ) : null}
 
@@ -9291,7 +9328,11 @@ const MainPage = () => {
             ) : null}
 
             <form onSubmit={handleJoinInvite} className="discord-form-stack">
+              <label className="auth-label" htmlFor="join_server_invite_code">
+                Invite code
+              </label>
               <input
+                id="join_server_invite_code"
                 type="text"
                 className="auth-input compact-input"
                 value={joinInviteCode}
@@ -9347,6 +9388,9 @@ const MainPage = () => {
             ) : null}
 
             <form onSubmit={handleCreateServer} className="discord-form-stack">
+              <label className="auth-label" htmlFor="server_name">
+                Server name
+              </label>
               <input
                 id="server_name"
                 name="server_name"
@@ -9367,6 +9411,9 @@ const MainPage = () => {
                 maxLength={100}
               />
 
+              <label className="auth-label" htmlFor="description">
+                Description
+              </label>
               <textarea
                 id="description"
                 name="description"
