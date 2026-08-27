@@ -6,7 +6,9 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest --runInBand",
-    "test:unit": "jest --runInBand"
+    "test:unit": "jest --runInBand tests/aiService.test.js tests/unit",
+    "test:integration": "jest --runInBand tests/authRoutes.test.js tests/authValidation.test.js tests/notFound.test.js tests/protectedWriteRoutes.test.js tests/serverRoutes.test.js tests/aiRoutes.test.js tests/integration",
+    "test:coverage": "jest --runInBand --coverage"
   },
   "keywords": [],
   "author": "",
