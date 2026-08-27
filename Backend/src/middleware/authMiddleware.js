@@ -17,6 +17,12 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ message: "Not authorized, account not found" });
     }
 
+    if (!user.is_verified) {
+      return res.status(403).json({
+        message: "Please verify your email before logging in",
+        email: user.email
+      });
+    }
 
     req.user = {
       ...decoded,

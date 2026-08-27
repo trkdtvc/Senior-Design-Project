@@ -4,6 +4,7 @@ CREATE TABLE `users` (
   `user_id` int NOT NULL AUTO_INCREMENT,
   `username` varchar(50) NOT NULL,
   `email` varchar(100) NOT NULL,
+  `avatar_url` varchar(500) DEFAULT NULL,
   `password_hash` varchar(255) NOT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -36,6 +37,7 @@ CREATE TABLE `server_members` (
   `member_id` int NOT NULL AUTO_INCREMENT,
   `server_id` int NOT NULL,
   `user_id` int NOT NULL,
+  `server_role` enum('admin','member') NOT NULL DEFAULT 'member',
   `joined_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`member_id`),
   UNIQUE KEY `server_id` (`server_id`,`user_id`),
@@ -153,27 +155,6 @@ CREATE TABLE `channel_read_states` (
   CONSTRAINT `channel_read_states_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `roles` (
-  `role_id` int NOT NULL AUTO_INCREMENT,
-  `server_id` int NOT NULL,
-  `role_name` varchar(50) NOT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`role_id`),
-  UNIQUE KEY `server_id` (`server_id`,`role_name`),
-  CONSTRAINT `roles_ibfk_1` FOREIGN KEY (`server_id`) REFERENCES `servers` (`server_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-CREATE TABLE `member_roles` (
-  `member_role_id` int NOT NULL AUTO_INCREMENT,
-  `member_id` int NOT NULL,
-  `role_id` int NOT NULL,
-  `assigned_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`member_role_id`),
-  UNIQUE KEY `member_id` (`member_id`,`role_id`),
-  KEY `role_id` (`role_id`),
-  CONSTRAINT `member_roles_ibfk_1` FOREIGN KEY (`member_id`) REFERENCES `server_members` (`member_id`) ON DELETE CASCADE,
-  CONSTRAINT `member_roles_ibfk_2` FOREIGN KEY (`role_id`) REFERENCES `roles` (`role_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `server_invites` (
   `invite_id` int NOT NULL AUTO_INCREMENT,

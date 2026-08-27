@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { loginUser, resendVerificationEmail } from "../services/authService";
 import "../styles/auth.css";
 
@@ -24,7 +24,16 @@ const getFriendlyLoginError = (rawError, typedLogin) => {
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialVerificationMessage =
+    location.state?.requiresEmailVerification &&
+    typeof location.state?.verificationMessage === "string"
+      ? location.state.verificationMessage
+      : "";
 
+  const [verificationMessage, setVerificationMessage] = useState(
+    initialVerificationMessage
+  );
   const [formData, setFormData] = useState({
     login: "",
     password: ""
@@ -78,6 +87,7 @@ const LoginPage = () => {
   const clearFeedback = () => {
     setError("");
     setSuccess("");
+    setVerificationMessage("");
     setResendMessage("");
     setResendError("");
   };
@@ -172,10 +182,10 @@ const LoginPage = () => {
         <h1 className="auth-logo">YFNC</h1>
         <p className="auth-subtitle">Welcome back. Sign in to continue.</p>
 
-        {isUnverifiedError ? (
+        {(isUnverifiedError || verificationMessage) ? (
           <div className="auth-status-stack">
             <p className="auth-feedback auth-feedback-warning">
-              Please verify your email before logging in
+              {verificationMessage || "Please verify your email before logging in"}
             </p>
 
             <div className="auth-resend-block">

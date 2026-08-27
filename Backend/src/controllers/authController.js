@@ -355,11 +355,8 @@ const verifyEmail = async (req, res, next) => {
       throw new Error("User not found");
     }
 
-    const authToken = generateToken(freshUser);
-
     return res.status(200).json({
-      message: "Email verified successfully. Redirecting you into the app...",
-      token: authToken,
+      message: "Email verified successfully. You can now log in.",
       user: {
         user_id: freshUser.user_id,
         username: freshUser.username,
@@ -395,6 +392,8 @@ const resendVerificationEmail = async (req, res, next) => {
       res.status(400);
       throw new Error("This email is already verified");
     }
+
+    await invalidateEmailVerificationTokens(user.user_id);
 
     const verificationToken = crypto.randomBytes(32).toString("hex");
     const verificationTokenExpires = new Date(
@@ -779,7 +778,7 @@ const updateProfile = async (req, res, next) => {
       );
     }
 
-    const token = generateToken(updatedUser);
+    const token = emailChanged ? null : generateToken(updatedUser);
     const safeUser = getSafeUserResponse(updatedUser);
     const io = req.app.get("io");
 
@@ -791,7 +790,8 @@ const updateProfile = async (req, res, next) => {
       message: emailChanged
         ? "Profile updated. Please verify your new email address"
         : "Profile updated successfully",
-      token,
+      ...(token ? { token } : {}),
+      requires_email_verification: emailChanged,
       user: safeUser
     });
   } catch (error) {

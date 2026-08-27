@@ -6,7 +6,8 @@ import "../styles/auth.css";
 const AUTH_STATUS = {
   CHECKING: "checking",
   AUTHORIZED: "authorized",
-  UNAUTHORIZED: "unauthorized"
+  UNAUTHORIZED: "unauthorized",
+  VERIFICATION_REQUIRED: "verification_required"
 };
 
 const ProtectedRoute = () => {
@@ -32,11 +33,23 @@ const ProtectedRoute = () => {
         if (isMounted) {
           setAuthStatus(AUTH_STATUS.AUTHORIZED);
         }
-      } catch {
+      } catch (error) {
         localStorage.removeItem("token");
 
+        const verificationEmail = error?.response?.data?.email;
+        const requiresVerification =
+          error?.response?.status === 403 && Boolean(verificationEmail);
+
+        if (requiresVerification) {
+          localStorage.setItem("pendingVerificationEmail", verificationEmail);
+        }
+
         if (isMounted) {
-          setAuthStatus(AUTH_STATUS.UNAUTHORIZED);
+          setAuthStatus(
+            requiresVerification
+              ? AUTH_STATUS.VERIFICATION_REQUIRED
+              : AUTH_STATUS.UNAUTHORIZED
+          );
         }
       }
     };
@@ -58,6 +71,19 @@ const ProtectedRoute = () => {
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (authStatus === AUTH_STATUS.VERIFICATION_REQUIRED) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{
+          requiresEmailVerification: true,
+          verificationMessage: "Please verify your email before logging in"
+        }}
+      />
     );
   }
 

@@ -27,8 +27,6 @@ const SOCKET_CORS_ORIGINS = process.env.CORS_ORIGINS
       .filter(Boolean)
   : [FRONTEND_URL, "http://127.0.0.1:5173"];
 
-connectDB();
-
 const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
@@ -118,6 +116,10 @@ io.use(async (socket, next) => {
 
     if (!user) {
       return next(new Error("Not authorized, account unavailable"));
+    }
+
+    if (!user.is_verified) {
+      return next(new Error("Please verify your email before logging in"));
     }
 
     socket.user = {
@@ -324,6 +326,12 @@ io.on("connection", async (socket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+const startServer = async () => {
+  await connectDB();
+
+  httpServer.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+};
+
+startServer();

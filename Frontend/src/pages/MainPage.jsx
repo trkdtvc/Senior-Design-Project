@@ -4176,6 +4176,33 @@ const MainPage = () => {
       const data = await updateProfile(token, { username, email });
       const updatedUser = data?.user || data;
 
+      if (data?.requires_email_verification) {
+        const pendingEmail = String(updatedUser?.email || email)
+          .trim()
+          .toLowerCase();
+
+        if (pendingEmail) {
+          localStorage.setItem("pendingVerificationEmail", pendingEmail);
+        }
+
+        localStorage.removeItem("token");
+
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+        }
+
+        setIsEditProfileModalOpen(false);
+        navigate("/login", {
+          replace: true,
+          state: {
+            requiresEmailVerification: true,
+            verificationMessage:
+              data?.message || "Please verify your new email address"
+          }
+        });
+        return;
+      }
+
       if (data?.token) {
         localStorage.setItem("token", data.token);
 
