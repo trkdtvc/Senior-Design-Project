@@ -8470,6 +8470,12 @@ const MainPage = () => {
                           </div>
                         ) : null}
                       </div>
+
+                      {isOwnMessage ? (
+                        <div className="discord-message-avatar discord-message-avatar-own">
+                          {renderAvatarContent(getEntityAvatarPath(user), user?.username)}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}

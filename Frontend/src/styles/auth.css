@@ -5852,6 +5852,34 @@ select:focus-visible,
   top: 50%;
 }
 
+/* Outgoing messages mirror incoming-message identity placement without changing
+   the bubble layout: the current user's avatar sits on the right and shares the
+   visual centerline with the message content. */
+.discord-message-row-own {
+  align-items: center;
+  gap: 10px;
+  padding-right: 16px;
+}
+
+.discord-message-row-own .discord-message-body {
+  flex: 0 1 auto;
+}
+
+.discord-message-avatar-own {
+  align-self: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+}
+
+@media (max-width: 560px) {
+  .discord-message-avatar-own {
+    flex-basis: 36px;
+    width: 36px;
+    height: 36px;
+  }
+}
+
 /* Composer: every control and the textarea text share the same centerline. */
 .discord-composer-shell {
   align-items: center;
