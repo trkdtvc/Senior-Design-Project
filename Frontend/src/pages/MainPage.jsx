@@ -6749,26 +6749,29 @@ const MainPage = () => {
                     {getServerDescription(activeServer) || "No description provided."}
                   </p>
 
-                  {isServerContextMenuOpen ? (
-                    <div
-                      className="discord-context-menu-anchor discord-server-context-anchor"
-                      onClick={(event) => event.stopPropagation()}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                    >
-                      <div className="discord-popover-menu discord-server-context-menu">
-                        <button
-                          type="button"
-                          className="discord-popover-menu-item"
-                          onClick={handleOpenEditServer}
+                  {isServerContextMenuOpen
+                    ? createPortal(
+                        <div
+                          className="discord-server-context-portal"
+                          onClick={(event) => event.stopPropagation()}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
                         >
-                          Edit server
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
+                          <div className="discord-popover-menu discord-server-context-menu">
+                            <button
+                              type="button"
+                              className="discord-popover-menu-item"
+                              onClick={handleOpenEditServer}
+                            >
+                              Edit server
+                            </button>
+                          </div>
+                        </div>,
+                        document.body
+                      )
+                    : null}
                 </div>
 
                 <div className="discord-search-wrap">
@@ -6898,51 +6901,52 @@ const MainPage = () => {
                               </div>
                             </button>
 
-                            {String(openConversationMenuId) === String(conversationId) ? (
-                              <div
-                                className="discord-context-menu-anchor discord-list-context-anchor"
-                                onClick={(event) => event.stopPropagation()}
-                                onContextMenu={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                }}
-                              >
-                                <div className={`discord-popover-menu discord-context-menu-${conversationMenuDirection}`}>
+                            {String(openConversationMenuId) === String(conversationId)
+                              ? createPortal(
+                                  <div
+                                    className={`discord-list-context-portal discord-context-menu-${conversationMenuDirection}`}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onContextMenu={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
+                                  >
+                                    <div className="discord-popover-menu">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleMute(
+                                            "direct",
+                                            conversationId,
+                                            mutedDirectConversationIds.includes(String(conversationId))
+                                          );
+                                          setOpenConversationMenuId(null);
+                                        }}
+                                        className="discord-popover-menu-item"
+                                        disabled={settingsActionKey === `direct-${conversationId}`}
+                                      >
+                                        {mutedDirectConversationIds.includes(String(conversationId))
+                                          ? "Unmute DM"
+                                          : "Mute DM"}
+                                      </button>
 
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleToggleMute(
-                                          "direct",
-                                          conversationId,
-                                          mutedDirectConversationIds.includes(String(conversationId))
-                                        );
-                                        setOpenConversationMenuId(null);
-                                      }}
-                                      className="discord-popover-menu-item"
-                                      disabled={settingsActionKey === `direct-${conversationId}`}
-                                    >
-                                      {mutedDirectConversationIds.includes(String(conversationId))
-                                        ? "Unmute DM"
-                                        : "Mute DM"}
-                                    </button>
-
-
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteDirectConversation(conversation);
-                                      }}
-                                      className="discord-popover-menu-item discord-popover-menu-item-danger"
-                                      disabled={isDeletingConversation}
-                                    >
-                                      {isDeletingConversation ? "Deleting..." : "Delete DM"}
-                                    </button>
-                                                                  </div>
-                              </div>
-                            ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteDirectConversation(conversation);
+                                        }}
+                                        className="discord-popover-menu-item discord-popover-menu-item-danger"
+                                        disabled={isDeletingConversation}
+                                      >
+                                        {isDeletingConversation ? "Deleting..." : "Delete DM"}
+                                      </button>
+                                    </div>
+                                  </div>,
+                                  document.body
+                                )
+                              : null}
                           </div>
                         );
                       })}
@@ -7032,66 +7036,68 @@ const MainPage = () => {
                                 ) : null}
                               </button>
 
-                              {String(openChannelMenuId) === String(channelId) ? (
-                                <div
-                                  className="discord-context-menu-anchor discord-list-context-anchor"
-                                  onClick={(event) => event.stopPropagation()}
-                                  onContextMenu={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                  }}
-                                >
-                                  <div className={`discord-popover-menu discord-context-menu-${channelMenuDirection}`}>
+                              {String(openChannelMenuId) === String(channelId)
+                                ? createPortal(
+                                    <div
+                                      className={`discord-list-context-portal discord-context-menu-${channelMenuDirection}`}
+                                      onClick={(event) => event.stopPropagation()}
+                                      onContextMenu={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                      }}
+                                    >
+                                      <div className="discord-popover-menu">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleMute(
+                                              "channel",
+                                              channelId,
+                                              mutedChannelIds.includes(String(channelId))
+                                            );
+                                            setOpenChannelMenuId(null);
+                                          }}
+                                          className="discord-popover-menu-item"
+                                          disabled={settingsActionKey === `channel-${channelId}`}
+                                        >
+                                          {mutedChannelIds.includes(String(channelId))
+                                            ? `Unmute #${getChannelName(channel)}`
+                                            : `Mute #${getChannelName(channel)}`}
+                                        </button>
 
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleToggleMute(
-                                            "channel",
-                                            channelId,
-                                            mutedChannelIds.includes(String(channelId))
-                                          );
-                                          setOpenChannelMenuId(null);
-                                        }}
-                                        className="discord-popover-menu-item"
-                                        disabled={settingsActionKey === `channel-${channelId}`}
-                                      >
-                                        {mutedChannelIds.includes(String(channelId))
-                                          ? `Unmute #${getChannelName(channel)}`
-                                          : `Mute #${getChannelName(channel)}`}
-                                      </button>
+                                        {currentUserCanManageServer && !isGeneralChannel ? (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenEditChannel(channel);
+                                              }}
+                                              className="discord-popover-menu-item"
+                                            >
+                                              {`Rename #${getChannelName(channel)}`}
+                                            </button>
 
-                                      {currentUserCanManageServer && !isGeneralChannel ? (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleOpenEditChannel(channel);
-                                            }}
-                                            className="discord-popover-menu-item"
-                                          >
-                                            {`Rename #${getChannelName(channel)}`}
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setOpenChannelMenuId(null);
-                                              handleDeleteChannel(channel);
-                                            }}
-                                            className="discord-popover-menu-item discord-popover-menu-item-danger"
-                                            disabled={isDeletingChannel}
-                                          >
-                                            {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
-                                          </button>
-                                        </>
-                                      ) : null}
-                                                                      </div>
-                                </div>
-                              ) : null}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setOpenChannelMenuId(null);
+                                                handleDeleteChannel(channel);
+                                              }}
+                                              className="discord-popover-menu-item discord-popover-menu-item-danger"
+                                              disabled={isDeletingChannel}
+                                            >
+                                              {isDeletingChannel ? "Deleting..." : `Delete #${getChannelName(channel)}`}
+                                            </button>
+                                          </>
+                                        ) : null}
+                                      </div>
+                                    </div>,
+                                    document.body
+                                  )
+                                : null}
                             </div>
                           );
                         })}
@@ -8172,9 +8178,10 @@ const MainPage = () => {
                       ) : null}
 
                       <div className="discord-message-body">
-                        {!isThisMessageEditing && openMessageMenuKey === messageDeleteKey ? (
+                        {!isThisMessageEditing && openMessageMenuKey === messageDeleteKey
+                          ? createPortal(
                           <div
-                            className={`discord-message-menu discord-message-menu-open discord-message-context-${messageMenuDirection}${reactions.length > 0 ? " discord-message-menu-has-reactions" : ""}`}
+                            className={`discord-message-menu discord-message-menu-open discord-message-context-portal discord-message-context-${messageMenuDirection}${reactions.length > 0 ? " discord-message-menu-has-reactions" : ""}`}
                             onClick={(event) => event.stopPropagation()}
                             onContextMenu={(event) => {
                               event.preventDefault();
@@ -8308,8 +8315,10 @@ const MainPage = () => {
                                   </div>
                                 ) : null}
                             </div>
-                          </div>
-                        ) : null}
+                          </div>,
+                          document.body
+                        )
+                          : null}
 
                         {replyPreview ? (
                           <div className="discord-reply-preview">
@@ -8941,11 +8950,29 @@ const MainPage = () => {
             className="discord-create-server-modal"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="discord-modal-header">
-              <h2 className="discord-modal-title">Edit Profile</h2>
-              <p className="discord-modal-subtitle">
-                Manage your profile, password, and account settings.
-              </p>
+            <div className="discord-modal-header discord-modal-header-with-close">
+              <div className="discord-modal-header-copy">
+                <h2 className="discord-modal-title">Edit Profile</h2>
+                <p className="discord-modal-subtitle">
+                  Manage your profile, password, and account settings.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="discord-modal-close-button"
+                onClick={handleCloseEditProfile}
+                disabled={
+                  isUpdatingProfile ||
+                  isUpdatingAvatar ||
+                  isChangingPassword ||
+                  isDeletingAccount
+                }
+                aria-label="Close edit profile"
+                title="Close"
+              >
+                ×
+              </button>
             </div>
 
             <div className="discord-profile-avatar-editor">

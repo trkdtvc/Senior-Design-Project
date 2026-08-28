@@ -1604,6 +1604,52 @@ textarea.auth-input {
   padding: 20px 20px 12px;
 }
 
+.discord-modal-header-with-close {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.discord-modal-header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.discord-modal-close-button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  margin: -4px -4px 0 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text-muted);
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--app-transition),
+    border-color var(--app-transition),
+    color var(--app-transition);
+}
+
+.discord-modal-close-button:hover:not(:disabled),
+.discord-modal-close-button:focus-visible {
+  background: var(--app-bg-elevated-2);
+  border-color: var(--app-border);
+  color: var(--app-text);
+  outline: none;
+}
+
+.discord-modal-close-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .discord-modal-title {
   margin: 0;
   font-size: 1.3rem;
@@ -4645,17 +4691,14 @@ select:focus-visible,
   border-radius: 7px;
 }
 
-.discord-message-row:hover {
-  background: rgba(255, 255, 255, 0.025);
+.discord-message-row:hover,
+.discord-message-row-own:hover {
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .discord-message-row-own {
   padding-left: 64px;
   padding-right: 44px;
-}
-
-.discord-message-row-own:hover {
-  background: transparent;
 }
 
 .discord-message-body {
@@ -6134,3 +6177,106 @@ select:focus-visible,
   max-height: none;
   overflow: visible;
 }
+
+/* Floating context-menu overlays.
+   Keep action menus out of scrollable panes so they behave like desktop context menus. */
+.discord-server-context-target.discord-context-target-open {
+  anchor-name: --active-server-context-anchor;
+}
+
+.discord-server-context-portal {
+  position: fixed;
+  position-anchor: --active-server-context-anchor;
+  z-index: 1000;
+  width: max-content;
+  height: max-content;
+  pointer-events: auto;
+  top: anchor(bottom);
+  left: anchor(left);
+  margin-top: 6px;
+}
+
+.discord-server-context-portal .discord-server-context-menu {
+  position: relative;
+  inset: auto;
+  min-width: 164px;
+  margin: 0;
+}
+
+.discord-list-row.discord-context-target-open {
+  anchor-name: --active-list-context-anchor;
+}
+
+.discord-list-context-portal {
+  position: fixed;
+  position-anchor: --active-list-context-anchor;
+  z-index: 1000;
+  width: max-content;
+  height: max-content;
+  pointer-events: auto;
+}
+
+.discord-list-context-portal.discord-context-menu-down {
+  top: anchor(top);
+  left: anchor(right);
+  margin-left: 6px;
+}
+
+.discord-list-context-portal.discord-context-menu-up {
+  bottom: calc(100vh - anchor(bottom));
+  left: anchor(right);
+  margin-left: 6px;
+}
+
+.discord-list-context-portal .discord-popover-menu {
+  position: relative;
+  inset: auto;
+  min-width: 176px;
+  max-height: none;
+  overflow: visible;
+  margin: 0;
+}
+
+.discord-message-row.discord-context-target-open .discord-message-body {
+  anchor-name: --active-message-context-anchor;
+}
+
+.discord-message-menu.discord-message-context-portal {
+  position: fixed;
+  position-anchor: --active-message-context-anchor;
+  z-index: 1000;
+  width: max-content;
+  height: max-content;
+  inset: auto;
+  margin: 0;
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.discord-message-menu.discord-message-context-portal.discord-message-context-down {
+  top: anchor(bottom);
+  left: anchor(left);
+  margin-top: 6px;
+}
+
+.discord-message-menu.discord-message-context-portal.discord-message-context-up {
+  bottom: calc(100vh - anchor(top));
+  left: anchor(left);
+  margin-bottom: 6px;
+}
+
+.discord-message-menu.discord-message-context-portal .discord-message-options-menu {
+  position: relative;
+  inset: auto;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  min-width: 190px;
+  max-height: min(420px, calc(100vh - 32px));
+  overflow-y: auto;
+  margin: 0;
+  transform: none;
+}
+
