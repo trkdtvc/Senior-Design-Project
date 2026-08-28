@@ -5637,3 +5637,281 @@ select:focus-visible,
   background: #31405a;
   color: #ffffff;
 }
+
+/* AGREED UI/UX PATCH SET — profile, people, messages, member actions and sidebar forms */
+
+/* Account popover: identity first, with a compact and scroll-safe blocked list. */
+.discord-account-popover-copy {
+  display: flex;
+  align-items: center;
+}
+
+.discord-account-popover-copy .discord-profile-name {
+  margin: 0;
+}
+
+.discord-account-popover-actions {
+  margin-top: 12px;
+}
+
+.discord-account-popover-blocked {
+  margin-top: 12px;
+}
+
+.discord-account-popover-blocked > .discord-home-section-label {
+  margin: 0;
+  padding: 0;
+}
+
+.discord-account-popover-blocked > .discord-profile-meta {
+  margin: 8px 0 0;
+  padding: 0;
+  color: var(--app-text-muted);
+  line-height: 1.35;
+}
+
+.discord-blocked-users-list {
+  max-height: 176px;
+  margin-top: 8px;
+  padding-right: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.discord-blocked-users-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.discord-blocked-users-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.discord-blocked-user-row {
+  min-height: 36px;
+}
+
+/* Bottom-left account strip: avatar, username and logout only. */
+.discord-account-panel-user {
+  align-self: stretch;
+}
+
+.discord-account-meta {
+  display: flex;
+  align-items: center;
+}
+
+.discord-account-name {
+  line-height: 1.2;
+}
+
+/* Friends and requests stay visually compact after removing email/date metadata. */
+.discord-friend-home-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.discord-friend-home-status {
+  margin: 0;
+}
+
+/* Server members: no email, restrained role treatment, and fully visible action menu. */
+.server-member-name {
+  gap: 7px;
+}
+
+.discord-member-role-badge {
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: 0.58rem;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: 0.025em;
+  text-transform: none;
+}
+
+.discord-member-role-owner {
+  border-color: rgba(207, 178, 116, 0.28);
+  background: transparent;
+  color: #cdbb94;
+}
+
+.discord-member-role-admin {
+  border-color: rgba(157, 169, 205, 0.24);
+  background: transparent;
+  color: #aeb8d2;
+}
+
+.discord-member-role-member {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--app-text-muted);
+}
+
+.discord-member-menu-anchor {
+  position: relative;
+}
+
+.discord-member-actions-menu {
+  right: 0;
+  min-width: 148px;
+  max-height: none;
+  overflow: visible;
+  grid-auto-rows: minmax(34px, auto);
+}
+
+.discord-member-actions-menu-down {
+  top: calc(100% + 6px);
+  bottom: auto;
+}
+
+.discord-member-actions-menu-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.discord-member-actions-menu .discord-popover-menu-item {
+  min-height: 34px;
+}
+
+/* Message rows: keep actions immediately beside and vertically centered with content. */
+.discord-message-row:not(.discord-message-row-own) .discord-message-body {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(76%, 760px);
+}
+
+.discord-message-menu,
+.discord-message-menu-has-reactions {
+  top: 50%;
+  right: -38px;
+  transform: translateY(-50%);
+}
+
+.discord-message-row-own .discord-message-menu {
+  right: auto;
+  left: -38px;
+  transform: translateY(-50%);
+}
+
+.discord-message-row-with-attachments:not(.discord-message-row-own) .discord-message-menu {
+  top: calc(50% + 10px);
+}
+
+.discord-message-row-own.discord-message-row-with-attachments .discord-message-menu {
+  top: 50%;
+}
+
+/* Composer: every control and the textarea text share the same centerline. */
+.discord-composer-shell {
+  align-items: center;
+}
+
+.discord-composer-input,
+.message-input {
+  min-height: 38px;
+  height: 38px;
+  margin: 0;
+  padding: 8px 9px;
+  line-height: 22px;
+  overflow-y: hidden;
+  resize: none;
+  vertical-align: middle;
+}
+
+.discord-send-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1;
+}
+
+/* Utility forms use the full available sidebar content width. */
+.discord-utility-section {
+  padding: 10px 12px 0;
+}
+
+.discord-utility-section .discord-section-heading {
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+.discord-utility-section .discord-form-stack {
+  width: 100%;
+  padding: 0;
+}
+
+.discord-utility-section .auth-input,
+.discord-utility-section .auth-button,
+.discord-utility-section .discord-invite-code-button {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Edit Profile now owns password/account controls as one settings surface. */
+.discord-profile-settings-section {
+  margin: 0 20px;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--app-border);
+}
+
+.discord-profile-settings-heading {
+  margin-bottom: 12px;
+}
+
+.discord-profile-settings-heading h3 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.discord-profile-settings-heading p {
+  margin: 4px 0 0;
+  color: var(--app-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.discord-profile-password-form {
+  padding: 0 0 18px;
+}
+
+.discord-profile-password-button {
+  width: 100%;
+  min-height: 42px;
+  margin: 8px 0 0;
+}
+
+.discord-profile-settings-section .server-inline-error,
+.discord-profile-settings-section .discord-inline-success {
+  margin: 0 0 12px;
+}
+
+.discord-profile-danger-zone {
+  margin-top: 0;
+}
+
+@media (max-width: 560px) {
+  .discord-message-row:not(.discord-message-row-own) .discord-message-body {
+    max-width: 82%;
+  }
+
+  .discord-member-actions-menu {
+    min-width: 140px;
+  }
+}
+

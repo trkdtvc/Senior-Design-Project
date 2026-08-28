@@ -480,15 +480,6 @@ const getFriendRequestSenderName = (request) =>
   request?.from_username ||
   "Unknown user";
 
-const getFriendRequestSenderEmail = (request) =>
-  request?.sender?.email ||
-  request?.requester?.email ||
-  request?.from_user?.email ||
-  request?.sender_email ||
-  request?.requester_email ||
-  request?.from_email ||
-  "";
-
 const getFriendRequestSenderAvatar = (request) =>
   request?.sender?.avatar_url ||
   request?.sender_avatar_url ||
@@ -504,23 +495,11 @@ const getFriendRequestReceiverName = (request) =>
   request?.to_username ||
   "Unknown user";
 
-const getFriendRequestReceiverEmail = (request) =>
-  request?.receiver?.email ||
-  request?.recipient?.email ||
-  request?.to_user?.email ||
-  request?.receiver_email ||
-  request?.recipient_email ||
-  request?.to_email ||
-  "";
-
 const getFriendRequestReceiverAvatar = (request) =>
   request?.receiver?.avatar_url ||
   request?.receiver_avatar_url ||
   request?.receiverAvatarUrl ||
   "";
-
-const getFriendRequestTimestamp = (request) =>
-  request?.created_at || request?.createdAt || null;
 
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return "";
@@ -1074,7 +1053,6 @@ const MainPage = () => {
   const [avatarError, setAvatarError] = useState("");
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
-  const [isAccountSecurityModalOpen, setIsAccountSecurityModalOpen] = useState(false);
   const [passwordFormData, setPasswordFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -1090,6 +1068,7 @@ const MainPage = () => {
   const [inviteError, setInviteError] = useState("");
   const [openChannelMenuId, setOpenChannelMenuId] = useState(null);
   const [openMemberMenuId, setOpenMemberMenuId] = useState(null);
+  const [memberMenuDirection, setMemberMenuDirection] = useState("down");
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [isInviteCopied, setIsInviteCopied] = useState(false);
@@ -4281,19 +4260,33 @@ const MainPage = () => {
       username: user?.username || "",
       email: user?.email || ""
     });
+    setPasswordFormData({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: ""
+    });
     setProfileError("");
     setProfileSuccess("");
     setAvatarError("");
+    setAccountSecurityError("");
+    setAccountSecuritySuccess("");
     setIsEditProfileModalOpen(true);
   };
 
   const handleCloseEditProfile = () => {
-    if (isUpdatingProfile || isUpdatingAvatar) {
+    if (
+      isUpdatingProfile ||
+      isUpdatingAvatar ||
+      isChangingPassword ||
+      isDeletingAccount
+    ) {
       return;
     }
 
     setIsEditProfileModalOpen(false);
     setProfileError("");
+    setAccountSecurityError("");
+    setAccountSecuritySuccess("");
   };
 
   const handleProfileFormChange = (e) => {
@@ -4445,18 +4438,6 @@ const MainPage = () => {
     } finally {
       setIsUpdatingProfile(false);
     }
-  };
-
-  const handleOpenAccountSecurity = () => {
-    setIsAccountMenuOpen(false);
-    setPasswordFormData({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: ""
-    });
-    setAccountSecurityError("");
-    setAccountSecuritySuccess("");
-    setIsAccountSecurityModalOpen(true);
   };
 
   const handleChangePassword = async (e) => {
@@ -6401,7 +6382,6 @@ const MainPage = () => {
                 {formatMemberRole(member)}
               </span>
             </div>
-            <div className="server-member-email">{getMemberEmail(member)}</div>
           </div>
 
           {hasMemberActions ? (
@@ -6412,11 +6392,24 @@ const MainPage = () => {
               <button
                 type="button"
                 className="discord-account-action discord-member-menu-trigger"
-                onClick={() =>
-                  setOpenMemberMenuId((current) =>
-                    String(current) === String(memberId) ? null : memberId
-                  )
-                }
+                onClick={(event) => {
+                  const isAlreadyOpen =
+                    String(openMemberMenuId) === String(memberId);
+
+                  if (isAlreadyOpen) {
+                    setOpenMemberMenuId(null);
+                    return;
+                  }
+
+                  const buttonRect = event.currentTarget.getBoundingClientRect();
+                  const estimatedMenuHeight = 124;
+                  const roomBelow = window.innerHeight - buttonRect.bottom;
+
+                  setMemberMenuDirection(
+                    roomBelow < estimatedMenuHeight + 16 ? "up" : "down"
+                  );
+                  setOpenMemberMenuId(memberId);
+                }}
                 aria-label={`Manage ${getMemberName(member)}`}
                 title={`Manage ${getMemberName(member)}`}
                 aria-expanded={isMemberMenuOpen}
@@ -6425,7 +6418,9 @@ const MainPage = () => {
               </button>
 
               {isMemberMenuOpen ? (
-                <div className="discord-popover-menu discord-member-actions-menu">
+                <div
+                  className={`discord-popover-menu discord-member-actions-menu discord-member-actions-menu-${memberMenuDirection}`}
+                >
                   {canChangeMemberRole ? (
                     <button
                       type="button"
@@ -6451,11 +6446,11 @@ const MainPage = () => {
                         className="discord-popover-menu-item"
                         onClick={() => {
                           setOpenMemberMenuId(null);
-                          handleBanServerMember(member);
+                          handleRemoveServerMember(member);
                         }}
-                        disabled={isBanningMember || isRemovingMember}
+                        disabled={isRemovingMember || isBanningMember}
                       >
-                        {isBanningMember ? "Banning..." : "Ban member"}
+                        {isRemovingMember ? "Removing..." : "Remove"}
                       </button>
 
                       <button
@@ -6463,11 +6458,11 @@ const MainPage = () => {
                         className="discord-popover-menu-item discord-popover-menu-item-danger"
                         onClick={() => {
                           setOpenMemberMenuId(null);
-                          handleRemoveServerMember(member);
+                          handleBanServerMember(member);
                         }}
-                        disabled={isRemovingMember || isBanningMember}
+                        disabled={isBanningMember || isRemovingMember}
                       >
-                        {isRemovingMember ? "Removing..." : "Remove member"}
+                        {isBanningMember ? "Banning..." : "Ban"}
                       </button>
                     </>
                   ) : null}
@@ -7083,7 +7078,6 @@ const MainPage = () => {
 
                     <div className="discord-account-popover-copy">
                       <div className="discord-profile-name">{user?.username}</div>
-                      <div className="discord-profile-meta">{user?.email}</div>
                     </div>
 
                     <button
@@ -7095,21 +7089,6 @@ const MainPage = () => {
                     >
                       ×
                     </button>
-                  </div>
-
-                  <div className="discord-account-popover-stats">
-                    <div>
-                      <span>Status</span>
-                      <strong>{currentUserPresence === "online" ? "Online" : "Offline"}</strong>
-                    </div>
-                    <div>
-                      <span>Friends</span>
-                      <strong>{friends.length}</strong>
-                    </div>
-                    <div>
-                      <span>Chats</span>
-                      <strong>{directConversations.length}</strong>
-                    </div>
                   </div>
 
                   {profileSuccess ? (
@@ -7127,19 +7106,12 @@ const MainPage = () => {
                       Edit profile
                     </button>
 
-                    <button
-                      type="button"
-                      className="auth-button auth-button-secondary discord-profile-action-button"
-                      onClick={handleOpenAccountSecurity}
-                    >
-                      Account security
-                    </button>
                   </div>
 
                   <div className="discord-account-popover-blocked">
                     <div className="discord-home-section-label">Blocked Users</div>
                     {blockedUsers.length === 0 ? (
-                      <p className="discord-profile-meta">No blocked users.</p>
+                      <p className="discord-profile-meta">No blocked users</p>
                     ) : (
                       <div className="discord-blocked-users-list">
                         {blockedUsers.map((blockedUser) => {
@@ -7199,9 +7171,6 @@ const MainPage = () => {
 
                 <div className="discord-account-meta">
                   <div className="discord-account-name">{user?.username}</div>
-                  <div className="discord-account-status discord-account-email">
-                    {user?.email}
-                  </div>
                 </div>
               </button>
 
@@ -7717,9 +7686,6 @@ const MainPage = () => {
                                   <div className="discord-friend-home-name">
                                     {getFriendName(friend)}
                                   </div>
-                                  <div className="discord-friend-home-email">
-                                    {getFriendEmail(friend)}
-                                  </div>
                                   <div className="discord-friend-home-status">
                                     {presenceStatus === "online"
                                       ? "Online"
@@ -7870,15 +7836,6 @@ const MainPage = () => {
                                     <div className="discord-friend-home-name">
                                       {getFriendRequestSenderName(request)}
                                     </div>
-                                    <div className="discord-friend-home-email">
-                                      {getFriendRequestSenderEmail(request)}
-                                    </div>
-                                    <div className="discord-friend-home-status">
-                                      Received{" "}
-                                      {formatTimestamp(
-                                        getFriendRequestTimestamp(request)
-                                      ) || "recently"}
-                                    </div>
                                   </div>
                                 </div>
 
@@ -7938,14 +7895,8 @@ const MainPage = () => {
                                   <div className="discord-friend-home-name">
                                     {getFriendRequestReceiverName(request)}
                                   </div>
-                                  <div className="discord-friend-home-email">
-                                    {getFriendRequestReceiverEmail(request)}
-                                  </div>
                                   <div className="discord-friend-home-status">
-                                    Pending{" "}
-                                    {formatTimestamp(
-                                      getFriendRequestTimestamp(request)
-                                    ) || ""}
+                                    Pending
                                   </div>
                                 </div>
                               </div>
@@ -8067,7 +8018,7 @@ const MainPage = () => {
                     <div
                       key={key}
                       data-message-key={String(messageIdForDelete || key)}
-                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}${shouldShowMentionEmphasis ? " discord-message-row-mentioned" : ""}${activePinnedJumpMessageId && messageIdForDelete && String(activePinnedJumpMessageId) === String(messageIdForDelete) ? " discord-message-row-pinned-jump" : ""}`}
+                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${attachments.length > 0 ? " discord-message-row-with-attachments" : ""}${attachments.length > 0 && !content ? " discord-message-row-attachment-only" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}${shouldShowMentionEmphasis ? " discord-message-row-mentioned" : ""}${activePinnedJumpMessageId && messageIdForDelete && String(activePinnedJumpMessageId) === String(messageIdForDelete) ? " discord-message-row-pinned-jump" : ""}`}
                     >
                       {!isOwnMessage ? (
                         <div className="discord-message-avatar">
@@ -8657,9 +8608,6 @@ const MainPage = () => {
                   <div className="discord-profile-name">
                     {activeConversationUser.username}
                   </div>
-                  <div className="discord-profile-meta">
-                    {activeConversationUser.email}
-                  </div>
                   <div className="discord-profile-meta discord-profile-presence">
                     {activeConversationUser.presence_status === "online"
                       ? "Online"
@@ -8869,7 +8817,7 @@ const MainPage = () => {
             <div className="discord-modal-header">
               <h2 className="discord-modal-title">Edit Profile</h2>
               <p className="discord-modal-subtitle">
-                Update the username and email shown across your account.
+                Manage your profile, password, and account settings.
               </p>
             </div>
 
@@ -8955,118 +8903,12 @@ const MainPage = () => {
                   type="button"
                   className="auth-button auth-button-secondary compact-button"
                   onClick={handleCloseEditProfile}
-                  disabled={isUpdatingProfile || isUpdatingAvatar}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="auth-button compact-button"
-                  disabled={isUpdatingProfile || isUpdatingAvatar}
-                >
-                  {isUpdatingProfile ? "Saving..." : "Save changes"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {isAccountSecurityModalOpen ? (
-        <div
-          className="discord-create-server-backdrop"
-          onClick={() => !isChangingPassword && !isDeletingAccount && setIsAccountSecurityModalOpen(false)}
-        >
-          <div
-            className="discord-create-server-modal discord-account-security-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="account-security-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="discord-modal-header">
-              <h2 id="account-security-title" className="discord-modal-title">Account Security</h2>
-              <p className="discord-modal-subtitle">
-                Change your password or permanently delete your account.
-              </p>
-            </div>
-
-            {accountSecurityError ? (
-              <p className="auth-error server-inline-error">{accountSecurityError}</p>
-            ) : null}
-
-            {accountSecuritySuccess ? (
-              <p className="auth-success discord-inline-success">{accountSecuritySuccess}</p>
-            ) : null}
-
-            <form onSubmit={handleChangePassword} className="discord-form-stack discord-account-security-form">
-              <label className="auth-label" htmlFor="security_current_password">
-                Current password
-              </label>
-              <input
-                id="security_current_password"
-                type="password"
-                className="auth-input compact-input"
-                value={passwordFormData.currentPassword}
-                onChange={(e) => {
-                  setPasswordFormData((current) => ({
-                    ...current,
-                    currentPassword: e.target.value
-                  }));
-                  setAccountSecurityError("");
-                  setAccountSecuritySuccess("");
-                }}
-                autoComplete="current-password"
-                maxLength={255}
-              />
-
-              <label className="auth-label" htmlFor="security_new_password">
-                New password
-              </label>
-              <input
-                id="security_new_password"
-                type="password"
-                className="auth-input compact-input"
-                value={passwordFormData.newPassword}
-                onChange={(e) => {
-                  setPasswordFormData((current) => ({
-                    ...current,
-                    newPassword: e.target.value
-                  }));
-                  setAccountSecurityError("");
-                  setAccountSecuritySuccess("");
-                }}
-                autoComplete="new-password"
-                maxLength={255}
-              />
-
-              <label className="auth-label" htmlFor="security_confirm_password">
-                Confirm new password
-              </label>
-              <input
-                id="security_confirm_password"
-                type="password"
-                className="auth-input compact-input"
-                value={passwordFormData.confirmPassword}
-                onChange={(e) => {
-                  setPasswordFormData((current) => ({
-                    ...current,
-                    confirmPassword: e.target.value
-                  }));
-                  setAccountSecurityError("");
-                  setAccountSecuritySuccess("");
-                }}
-                autoComplete="new-password"
-                maxLength={255}
-              />
-
-              <div className="discord-modal-actions discord-account-security-actions">
-                <button
-                  type="button"
-                  className="auth-button auth-button-secondary compact-button"
-                  onClick={() => setIsAccountSecurityModalOpen(false)}
-                  disabled={isChangingPassword || isDeletingAccount}
+                  disabled={
+                    isUpdatingProfile ||
+                    isUpdatingAvatar ||
+                    isChangingPassword ||
+                    isDeletingAccount
+                  }
                 >
                   Close
                 </button>
@@ -9074,23 +8916,126 @@ const MainPage = () => {
                 <button
                   type="submit"
                   className="auth-button compact-button"
-                  disabled={isChangingPassword || isDeletingAccount}
+                  disabled={
+                    isUpdatingProfile ||
+                    isUpdatingAvatar ||
+                    isChangingPassword ||
+                    isDeletingAccount
+                  }
                 >
-                  {isChangingPassword ? "Changing..." : "Change password"}
+                  {isUpdatingProfile ? "Saving..." : "Save profile"}
                 </button>
               </div>
             </form>
 
-            <div className="discord-modal-danger-zone">
+            <section className="discord-profile-settings-section">
+              <div className="discord-profile-settings-heading">
+                <h3>Change password</h3>
+                <p>Update your password without leaving profile settings.</p>
+              </div>
+
+              {accountSecurityError ? (
+                <p className="auth-error server-inline-error">{accountSecurityError}</p>
+              ) : null}
+
+              {accountSecuritySuccess ? (
+                <p className="auth-success discord-inline-success">{accountSecuritySuccess}</p>
+              ) : null}
+
+              <form
+                onSubmit={handleChangePassword}
+                className="discord-form-stack discord-profile-password-form"
+              >
+                <label className="auth-label" htmlFor="security_current_password">
+                  Current password
+                </label>
+                <input
+                  id="security_current_password"
+                  type="password"
+                  className="auth-input compact-input"
+                  value={passwordFormData.currentPassword}
+                  onChange={(e) => {
+                    setPasswordFormData((current) => ({
+                      ...current,
+                      currentPassword: e.target.value
+                    }));
+                    setAccountSecurityError("");
+                    setAccountSecuritySuccess("");
+                  }}
+                  autoComplete="current-password"
+                  maxLength={255}
+                />
+
+                <label className="auth-label" htmlFor="security_new_password">
+                  New password
+                </label>
+                <input
+                  id="security_new_password"
+                  type="password"
+                  className="auth-input compact-input"
+                  value={passwordFormData.newPassword}
+                  onChange={(e) => {
+                    setPasswordFormData((current) => ({
+                      ...current,
+                      newPassword: e.target.value
+                    }));
+                    setAccountSecurityError("");
+                    setAccountSecuritySuccess("");
+                  }}
+                  autoComplete="new-password"
+                  maxLength={255}
+                />
+
+                <label className="auth-label" htmlFor="security_confirm_password">
+                  Confirm new password
+                </label>
+                <input
+                  id="security_confirm_password"
+                  type="password"
+                  className="auth-input compact-input"
+                  value={passwordFormData.confirmPassword}
+                  onChange={(e) => {
+                    setPasswordFormData((current) => ({
+                      ...current,
+                      confirmPassword: e.target.value
+                    }));
+                    setAccountSecurityError("");
+                    setAccountSecuritySuccess("");
+                  }}
+                  autoComplete="new-password"
+                  maxLength={255}
+                />
+
+                <button
+                  type="submit"
+                  className="auth-button compact-button discord-profile-password-button"
+                  disabled={
+                    isChangingPassword ||
+                    isDeletingAccount ||
+                    isUpdatingProfile ||
+                    isUpdatingAvatar
+                  }
+                >
+                  {isChangingPassword ? "Changing..." : "Change password"}
+                </button>
+              </form>
+            </section>
+
+            <div className="discord-modal-danger-zone discord-profile-danger-zone">
               <div>
                 <strong>Delete account</strong>
-                <p>Your current password above is required. This cannot be undone.</p>
+                <p>Enter your current password above first. This cannot be undone.</p>
               </div>
               <button
                 type="button"
                 className="auth-button auth-button-danger compact-button"
                 onClick={handleDeleteAccount}
-                disabled={isChangingPassword || isDeletingAccount}
+                disabled={
+                  isChangingPassword ||
+                  isDeletingAccount ||
+                  isUpdatingProfile ||
+                  isUpdatingAvatar
+                }
               >
                 {isDeletingAccount ? "Deleting..." : "Delete account"}
               </button>
