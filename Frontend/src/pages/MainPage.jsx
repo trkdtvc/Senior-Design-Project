@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 import {
   changePassword,
   deleteAccount,
@@ -1064,11 +1065,13 @@ const MainPage = () => {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [removeFriendError, setRemoveFriendError] = useState("");
   const [removingFriendId, setRemovingFriendId] = useState(null);
-  const [hoveredChannelId, setHoveredChannelId] = useState(null);
   const [inviteError, setInviteError] = useState("");
   const [openChannelMenuId, setOpenChannelMenuId] = useState(null);
+  const [channelMenuDirection, setChannelMenuDirection] = useState("down");
   const [openMemberMenuId, setOpenMemberMenuId] = useState(null);
   const [memberMenuDirection, setMemberMenuDirection] = useState("down");
+  const [openMemberRoleSubmenuId, setOpenMemberRoleSubmenuId] = useState(null);
+  const [isServerContextMenuOpen, setIsServerContextMenuOpen] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [isInviteCopied, setIsInviteCopied] = useState(false);
@@ -1116,8 +1119,8 @@ const MainPage = () => {
   const [mentionChannelCounts, setMentionChannelCounts] = useState({});
   const [mentionServerCounts, setMentionServerCounts] = useState({});
   const [activeMentionHighlight, setActiveMentionHighlight] = useState(null);
-  const [hoveredConversationId, setHoveredConversationId] = useState(null);
   const [openConversationMenuId, setOpenConversationMenuId] = useState(null);
+  const [conversationMenuDirection, setConversationMenuDirection] = useState("down");
   const [isDeletingConversation, setIsDeletingConversation] = useState(false);
   const [directConversationError, setDirectConversationError] = useState("");
   const [deletingMessageKey, setDeletingMessageKey] = useState(null);
@@ -1126,6 +1129,7 @@ const MainPage = () => {
   const [savingEditedMessageKey, setSavingEditedMessageKey] = useState(null);
   const [selectedReplyMessage, setSelectedReplyMessage] = useState(null);
   const [openMessageMenuKey, setOpenMessageMenuKey] = useState(null);
+  const [messageMenuDirection, setMessageMenuDirection] = useState("down");
   const [channelTypingUsers, setChannelTypingUsers] = useState([]);
   const [directTypingUsers, setDirectTypingUsers] = useState([]);
   const [pinnedMessages, setPinnedMessages] = useState([]);
@@ -3829,11 +3833,17 @@ const MainPage = () => {
   }, [displayedMessages, flashPinnedMessage]);
 
   useEffect(() => {
-    const handleGlobalClick = (event) => {
+    const closeActionMenus = () => {
       setOpenChannelMenuId(null);
       setOpenMemberMenuId(null);
+      setOpenMemberRoleSubmenuId(null);
       setOpenConversationMenuId(null);
       setOpenMessageMenuKey(null);
+      setIsServerContextMenuOpen(false);
+    };
+
+    const handleGlobalClick = (event) => {
+      closeActionMenus();
 
       if (
         emojiPickerRef.current &&
@@ -3843,10 +3853,24 @@ const MainPage = () => {
       }
     };
 
+    const handleGlobalContextMenu = () => {
+      closeActionMenus();
+    };
+
+    const handleGlobalKeyDown = (event) => {
+      if (event.key === "Escape") {
+        closeActionMenus();
+      }
+    };
+
     window.addEventListener("click", handleGlobalClick);
+    window.addEventListener("contextmenu", handleGlobalContextMenu);
+    window.addEventListener("keydown", handleGlobalKeyDown);
 
     return () => {
       window.removeEventListener("click", handleGlobalClick);
+      window.removeEventListener("contextmenu", handleGlobalContextMenu);
+      window.removeEventListener("keydown", handleGlobalKeyDown);
     };
   }, []);
 
@@ -4997,6 +5021,7 @@ const MainPage = () => {
       return;
     }
 
+    setIsServerContextMenuOpen(false);
     setEditServerFormData({
       server_name: getServerName(activeServer),
       description: getServerDescription(activeServer)
@@ -6355,16 +6380,47 @@ const MainPage = () => {
       !(currentUserServerRole === "admin" && memberRole !== "member");
     const canChangeMemberRole =
       currentUserCanManageRoles && !memberIsCurrentUser && memberRole !== "owner";
-    const nextRole = memberRole === "admin" ? "member" : "admin";
     const isRemovingMember = String(removingServerMemberId) === String(memberId);
     const isUpdatingRole = String(updatingMemberRoleId) === String(memberId);
     const isBanningMember = serverBanActionKey === `ban-${memberId}`;
 
     const hasMemberActions = canChangeMemberRole || canRemoveMember;
     const isMemberMenuOpen = String(openMemberMenuId) === String(memberId);
+    const isRoleSubmenuOpen =
+      String(openMemberRoleSubmenuId) === String(memberId);
+
+    const openMemberContextMenu = (event) => {
+      if (!hasMemberActions) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const rowRect = event.currentTarget.getBoundingClientRect();
+      const estimatedMenuHeight = canChangeMemberRole && canRemoveMember ? 126 : 82;
+      const roomBelow = window.innerHeight - rowRect.bottom;
+
+      setMemberMenuDirection(
+        roomBelow < estimatedMenuHeight + 20 ? "up" : "down"
+      );
+      setOpenChannelMenuId(null);
+      setOpenConversationMenuId(null);
+      setOpenMessageMenuKey(null);
+      setIsServerContextMenuOpen(false);
+      setOpenMemberRoleSubmenuId(null);
+      setOpenMemberMenuId(memberId);
+    };
 
     return (
-      <div key={memberId} className="server-member-item discord-member-item">
+      <div
+        key={memberId}
+        className={`server-member-item discord-member-item${
+          hasMemberActions ? " discord-context-target" : ""
+        }${isMemberMenuOpen ? " discord-context-target-open" : ""}`}
+        onContextMenu={openMemberContextMenu}
+        title={hasMemberActions ? "Right-click for member options" : undefined}
+      >
         <div className="discord-member-row-top">
           <div className="discord-profile-avatar member-avatar">
             {renderAvatarContent(getEntityAvatarPath(member), getMemberName(member))}
@@ -6383,94 +6439,112 @@ const MainPage = () => {
               </span>
             </div>
           </div>
+        </div>
 
-          {hasMemberActions ? (
-            <div
-              className="discord-menu-anchor discord-member-menu-anchor"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <button
-                type="button"
-                className="discord-account-action discord-member-menu-trigger"
-                onClick={(event) => {
-                  const isAlreadyOpen =
-                    String(openMemberMenuId) === String(memberId);
-
-                  if (isAlreadyOpen) {
-                    setOpenMemberMenuId(null);
-                    return;
-                  }
-
-                  const buttonRect = event.currentTarget.getBoundingClientRect();
-                  const estimatedMenuHeight = 124;
-                  const roomBelow = window.innerHeight - buttonRect.bottom;
-
-                  setMemberMenuDirection(
-                    roomBelow < estimatedMenuHeight + 16 ? "up" : "down"
-                  );
-                  setOpenMemberMenuId(memberId);
+        {isMemberMenuOpen
+          ? createPortal(
+              <div
+                className={`discord-member-context-portal discord-context-menu-${memberMenuDirection}`}
+                onClick={(event) => event.stopPropagation()}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
                 }}
-                aria-label={`Manage ${getMemberName(member)}`}
-                title={`Manage ${getMemberName(member)}`}
-                aria-expanded={isMemberMenuOpen}
               >
-                ⋯
-              </button>
-
-              {isMemberMenuOpen ? (
+                <div className="discord-popover-menu discord-member-actions-menu">
+              {canChangeMemberRole ? (
                 <div
-                  className={`discord-popover-menu discord-member-actions-menu discord-member-actions-menu-${memberMenuDirection}`}
+                  className="discord-member-role-menu-entry"
+                  onMouseEnter={() => setOpenMemberRoleSubmenuId(memberId)}
                 >
-                  {canChangeMemberRole ? (
-                    <button
-                      type="button"
-                      className="discord-popover-menu-item"
-                      onClick={() => {
-                        setOpenMemberMenuId(null);
-                        handleUpdateServerMemberRole(member, nextRole);
-                      }}
-                      disabled={isUpdatingRole}
+                  <button
+                    type="button"
+                    className="discord-popover-menu-item discord-popover-menu-item-has-submenu"
+                    onClick={() =>
+                      setOpenMemberRoleSubmenuId((current) =>
+                        String(current) === String(memberId) ? null : memberId
+                      )
+                    }
+                    aria-haspopup="menu"
+                    aria-expanded={isRoleSubmenuOpen}
+                  >
+                    <span>Roles</span>
+                    <span className="discord-context-menu-chevron" aria-hidden="true">›</span>
+                  </button>
+
+                  {isRoleSubmenuOpen ? (
+                    <div
+                      className="discord-popover-menu discord-member-role-submenu"
+                      role="menu"
                     >
-                      {isUpdatingRole
-                        ? "Updating..."
-                        : memberRole === "admin"
-                          ? "Make member"
-                          : "Make admin"}
-                    </button>
-                  ) : null}
+                      {["member", "admin"].map((role) => {
+                        const isSelectedRole = memberRole === role;
 
-                  {canRemoveMember ? (
-                    <>
-                      <button
-                        type="button"
-                        className="discord-popover-menu-item"
-                        onClick={() => {
-                          setOpenMemberMenuId(null);
-                          handleRemoveServerMember(member);
-                        }}
-                        disabled={isRemovingMember || isBanningMember}
-                      >
-                        {isRemovingMember ? "Removing..." : "Remove"}
-                      </button>
+                        return (
+                          <button
+                            key={role}
+                            type="button"
+                            className={`discord-popover-menu-item discord-member-role-option${
+                              isSelectedRole ? " discord-popover-menu-item-selected" : ""
+                            }`}
+                            onClick={() => {
+                              if (isSelectedRole) {
+                                return;
+                              }
 
-                      <button
-                        type="button"
-                        className="discord-popover-menu-item discord-popover-menu-item-danger"
-                        onClick={() => {
-                          setOpenMemberMenuId(null);
-                          handleBanServerMember(member);
-                        }}
-                        disabled={isBanningMember || isRemovingMember}
-                      >
-                        {isBanningMember ? "Banning..." : "Ban"}
-                      </button>
-                    </>
+                              setOpenMemberRoleSubmenuId(null);
+                              setOpenMemberMenuId(null);
+                              handleUpdateServerMemberRole(member, role);
+                            }}
+                            disabled={isUpdatingRole || isSelectedRole}
+                            role="menuitem"
+                          >
+                            <span>{role === "admin" ? "Admin" : "Member"}</span>
+                            <span className="discord-role-option-check" aria-hidden="true">
+                              {isSelectedRole ? "✓" : ""}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
-            </div>
-          ) : null}
-        </div>
+
+              {canRemoveMember ? (
+                <>
+                  <button
+                    type="button"
+                    className="discord-popover-menu-item"
+                    onClick={() => {
+                      setOpenMemberRoleSubmenuId(null);
+                      setOpenMemberMenuId(null);
+                      handleRemoveServerMember(member);
+                    }}
+                    disabled={isRemovingMember || isBanningMember}
+                  >
+                    {isRemovingMember ? "Removing..." : "Remove member"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="discord-popover-menu-item discord-popover-menu-item-danger"
+                    onClick={() => {
+                      setOpenMemberRoleSubmenuId(null);
+                      setOpenMemberMenuId(null);
+                      handleBanServerMember(member);
+                    }}
+                    disabled={isBanningMember || isRemovingMember}
+                  >
+                    {isBanningMember ? "Banning..." : "Ban member"}
+                  </button>
+                </>
+              ) : null}
+                </div>
+              </div>,
+              document.body
+            )
+          : null}
       </div>
     );
   };
@@ -6642,7 +6716,26 @@ const MainPage = () => {
               </div>
             ) : (
               <div className="discord-sidebar-pane-top">
-                <div className="discord-pane-header">
+                <div
+                  className={`discord-pane-header${
+                    currentUserCanManageServer ? " discord-server-context-target" : ""
+                  }${isServerContextMenuOpen ? " discord-context-target-open" : ""}`}
+                  onContextMenu={(event) => {
+                    if (!currentUserCanManageServer) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setOpenChannelMenuId(null);
+                    setOpenMemberMenuId(null);
+                    setOpenMemberRoleSubmenuId(null);
+                    setOpenConversationMenuId(null);
+                    setOpenMessageMenuKey(null);
+                    setIsServerContextMenuOpen(true);
+                  }}
+                  title={currentUserCanManageServer ? "Right-click for server options" : undefined}
+                >
                   <div className="discord-pane-header-row">
                     <div className="discord-pane-header-copy">
                       <p className="discord-pane-label">Server</p>
@@ -6650,23 +6743,32 @@ const MainPage = () => {
                         {getServerName(activeServer)}
                       </h1>
                     </div>
-
-                    {currentUserCanManageServer ? (
-                      <button
-                        type="button"
-                        className="discord-pane-header-action"
-                        onClick={handleOpenEditServer}
-                        title="Edit server"
-                        aria-label="Edit server"
-                      >
-                        Edit
-                      </button>
-                    ) : null}
                   </div>
 
                   <p className="discord-pane-subtitle">
                     {getServerDescription(activeServer) || "No description provided."}
                   </p>
+
+                  {isServerContextMenuOpen ? (
+                    <div
+                      className="discord-context-menu-anchor discord-server-context-anchor"
+                      onClick={(event) => event.stopPropagation()}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      <div className="discord-popover-menu discord-server-context-menu">
+                        <button
+                          type="button"
+                          className="discord-popover-menu-item"
+                          onClick={handleOpenEditServer}
+                        >
+                          Edit server
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="discord-search-wrap">
@@ -6723,13 +6825,26 @@ const MainPage = () => {
                         return (
                           <div
                             key={conversationId}
-                            onMouseEnter={() => setHoveredConversationId(conversationId)}
-                            onMouseLeave={() =>
-                              setHoveredConversationId((current) =>
-                                String(current) === String(conversationId) ? null : current
-                              )
-                            }
-                            className="discord-list-row"
+                            className={`discord-list-row discord-context-target${
+                              String(openConversationMenuId) === String(conversationId)
+                                ? " discord-context-target-open"
+                                : ""
+                            }`}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+
+                              const rowRect = event.currentTarget.getBoundingClientRect();
+                              const roomBelow = window.innerHeight - rowRect.bottom;
+                              setConversationMenuDirection(roomBelow < 116 ? "up" : "down");
+                              setOpenChannelMenuId(null);
+                              setOpenMemberMenuId(null);
+                              setOpenMemberRoleSubmenuId(null);
+                              setOpenMessageMenuKey(null);
+                              setIsServerContextMenuOpen(false);
+                              setOpenConversationMenuId(conversationId);
+                            }}
+                            title="Right-click for conversation options"
                           >
                             <button
                               type="button"
@@ -6783,26 +6898,17 @@ const MainPage = () => {
                               </div>
                             </button>
 
-                            {String(hoveredConversationId) === String(conversationId) ||
-                              String(openConversationMenuId) === String(conversationId) ? (
-                              <div className="discord-menu-anchor">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenConversationMenuId((current) =>
-                                      String(current) === String(conversationId)
-                                        ? null
-                                        : conversationId
-                                    );
-                                  }}
-                                  className="discord-account-action"
-                                >
-                                  ⋯
-                                </button>
+                            {String(openConversationMenuId) === String(conversationId) ? (
+                              <div
+                                className="discord-context-menu-anchor discord-list-context-anchor"
+                                onClick={(event) => event.stopPropagation()}
+                                onContextMenu={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                              >
+                                <div className={`discord-popover-menu discord-context-menu-${conversationMenuDirection}`}>
 
-                                {String(openConversationMenuId) === String(conversationId) ? (
-                                  <div className="discord-popover-menu">
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -6834,8 +6940,7 @@ const MainPage = () => {
                                     >
                                       {isDeletingConversation ? "Deleting..." : "Delete DM"}
                                     </button>
-                                  </div>
-                                ) : null}
+                                                                  </div>
                               </div>
                             ) : null}
                           </div>
@@ -6873,11 +6978,31 @@ const MainPage = () => {
                           return (
                             <div
                               key={channelId}
-                              onMouseEnter={() => setHoveredChannelId(channelId)}
-                              onMouseLeave={() => setHoveredChannelId((current) =>
-                                String(current) === String(channelId) ? null : current
-                              )}
-                              className="discord-list-row"
+                              className={`discord-list-row discord-context-target${
+                                String(openChannelMenuId) === String(channelId)
+                                  ? " discord-context-target-open"
+                                  : ""
+                              }`}
+                              onContextMenu={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+
+                                const rowRect = event.currentTarget.getBoundingClientRect();
+                                const estimatedMenuHeight =
+                                  currentUserCanManageServer && !isGeneralChannel ? 136 : 62;
+                                const roomBelow = window.innerHeight - rowRect.bottom;
+
+                                setChannelMenuDirection(
+                                  roomBelow < estimatedMenuHeight + 16 ? "up" : "down"
+                                );
+                                setOpenMemberMenuId(null);
+                                setOpenMemberRoleSubmenuId(null);
+                                setOpenConversationMenuId(null);
+                                setOpenMessageMenuKey(null);
+                                setIsServerContextMenuOpen(false);
+                                setOpenChannelMenuId(channelId);
+                              }}
+                              title="Right-click for channel options"
                             >
                               <button
                                 type="button"
@@ -6907,24 +7032,17 @@ const MainPage = () => {
                                 ) : null}
                               </button>
 
-                              {String(hoveredChannelId) === String(channelId) ||
-                                String(openChannelMenuId) === String(channelId) ? (
-                                <div className="discord-menu-anchor">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setOpenChannelMenuId((current) =>
-                                        String(current) === String(channelId) ? null : channelId
-                                      );
-                                    }}
-                                    className="discord-account-action"
-                                  >
-                                    ⋯
-                                  </button>
+                              {String(openChannelMenuId) === String(channelId) ? (
+                                <div
+                                  className="discord-context-menu-anchor discord-list-context-anchor"
+                                  onClick={(event) => event.stopPropagation()}
+                                  onContextMenu={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                  }}
+                                >
+                                  <div className={`discord-popover-menu discord-context-menu-${channelMenuDirection}`}>
 
-                                  {String(openChannelMenuId) === String(channelId) ? (
-                                    <div className="discord-popover-menu">
                                       <button
                                         type="button"
                                         onClick={(e) => {
@@ -6971,8 +7089,7 @@ const MainPage = () => {
                                           </button>
                                         </>
                                       ) : null}
-                                    </div>
-                                  ) : null}
+                                                                      </div>
                                 </div>
                               ) : null}
                             </div>
@@ -8018,7 +8135,30 @@ const MainPage = () => {
                     <div
                       key={key}
                       data-message-key={String(messageIdForDelete || key)}
-                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${attachments.length > 0 ? " discord-message-row-with-attachments" : ""}${attachments.length > 0 && !content ? " discord-message-row-attachment-only" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}${shouldShowMentionEmphasis ? " discord-message-row-mentioned" : ""}${activePinnedJumpMessageId && messageIdForDelete && String(activePinnedJumpMessageId) === String(messageIdForDelete) ? " discord-message-row-pinned-jump" : ""}`}
+                      className={`discord-message-row${isOwnMessage ? " discord-message-row-own" : ""}${attachments.length > 0 ? " discord-message-row-with-attachments" : ""}${attachments.length > 0 && !content ? " discord-message-row-attachment-only" : ""}${isActiveSearchMessage ? " discord-message-row-search-active" : ""}${shouldShowMentionEmphasis ? " discord-message-row-mentioned" : ""}${activePinnedJumpMessageId && messageIdForDelete && String(activePinnedJumpMessageId) === String(messageIdForDelete) ? " discord-message-row-pinned-jump" : ""}${openMessageMenuKey === messageDeleteKey ? " discord-context-target-open" : ""}`}
+                      onContextMenu={(event) => {
+                        if (!messageIdForDelete || isThisMessageEditing) {
+                          return;
+                        }
+
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        const estimatedMenuHeight =
+                          isOwnMessage || (!isDmView && currentUserCanManageServer) ? 300 : 230;
+                        const roomBelow = window.innerHeight - event.clientY;
+
+                        setMessageMenuDirection(
+                          roomBelow < estimatedMenuHeight + 24 ? "up" : "down"
+                        );
+                        setOpenChannelMenuId(null);
+                        setOpenMemberMenuId(null);
+                        setOpenMemberRoleSubmenuId(null);
+                        setOpenConversationMenuId(null);
+                        setIsServerContextMenuOpen(false);
+                        setOpenMessageMenuKey(messageDeleteKey);
+                      }}
+                      title={!isThisMessageEditing ? "Right-click for message options" : undefined}
                     >
                       {!isOwnMessage ? (
                         <div className="discord-message-avatar">
@@ -8032,28 +8172,16 @@ const MainPage = () => {
                       ) : null}
 
                       <div className="discord-message-body">
-                        {!isThisMessageEditing ? (
+                        {!isThisMessageEditing && openMessageMenuKey === messageDeleteKey ? (
                           <div
-                            className={`discord-message-menu${reactions.length > 0 ? " discord-message-menu-has-reactions" : ""}${openMessageMenuKey === messageDeleteKey ? " discord-message-menu-open" : ""}`}
-                            onClick={(e) => e.stopPropagation()}
+                            className={`discord-message-menu discord-message-menu-open discord-message-context-${messageMenuDirection}${reactions.length > 0 ? " discord-message-menu-has-reactions" : ""}`}
+                            onClick={(event) => event.stopPropagation()}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
                           >
-                            <button
-                              type="button"
-                              className="discord-message-menu-trigger"
-                              onClick={() =>
-                                setOpenMessageMenuKey((currentKey) =>
-                                  currentKey === messageDeleteKey ? null : messageDeleteKey
-                                )
-                              }
-                              disabled={!messageIdForDelete}
-                              aria-label="Message actions"
-                              title="Message actions"
-                            >
-                              ⋯
-                            </button>
-
-                            {openMessageMenuKey === messageDeleteKey ? (
-                              <div className="discord-message-options-menu">
+                            <div className="discord-message-options-menu">
                                 <div
                                   className="discord-message-reaction-picker"
                                   aria-label="Quick message reactions"
@@ -8179,8 +8307,7 @@ const MainPage = () => {
                                     </button>
                                   </div>
                                 ) : null}
-                              </div>
-                            ) : null}
+                            </div>
                           </div>
                         ) : null}
 

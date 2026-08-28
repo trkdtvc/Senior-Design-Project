@@ -5915,3 +5915,222 @@ select:focus-visible,
   }
 }
 
+
+
+/* RIGHT-CLICK CONTEXT MENUS — action discovery without visible three-dot buttons */
+.discord-context-target {
+  position: relative;
+}
+
+.discord-context-target-open {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.discord-context-menu-anchor {
+  position: absolute;
+  z-index: 180;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+
+.discord-list-context-anchor,
+.discord-member-context-anchor {
+  top: 50%;
+  right: 10px;
+}
+
+.discord-list-context-anchor .discord-popover-menu,
+.discord-member-context-anchor .discord-popover-menu {
+  right: 0;
+  margin: 0;
+}
+
+.discord-popover-menu.discord-context-menu-down,
+.discord-member-actions-menu.discord-context-menu-down {
+  top: 8px;
+  bottom: auto;
+}
+
+.discord-popover-menu.discord-context-menu-up,
+.discord-member-actions-menu.discord-context-menu-up {
+  top: auto;
+  bottom: 8px;
+}
+
+.discord-server-context-target {
+  position: relative;
+  cursor: context-menu;
+  transition: background-color var(--app-transition), border-color var(--app-transition);
+}
+
+.discord-server-context-target:hover,
+.discord-server-context-target.discord-context-target-open {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.discord-server-context-target:hover .discord-pane-title {
+  color: #ffffff;
+}
+
+.discord-server-context-anchor {
+  right: 12px;
+  bottom: 4px;
+}
+
+.discord-server-context-menu {
+  top: 8px;
+  right: 0;
+  min-width: 164px;
+}
+
+.discord-member-item.discord-context-target {
+  cursor: context-menu;
+}
+
+.discord-member-actions-menu {
+  min-width: 174px;
+  max-height: none;
+  overflow: visible;
+}
+
+.discord-member-role-menu-entry {
+  position: relative;
+}
+
+.discord-popover-menu-item-has-submenu,
+.discord-member-role-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.discord-context-menu-chevron {
+  color: var(--app-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.discord-member-role-submenu {
+  top: -6px;
+  right: calc(100% + 8px);
+  min-width: 150px;
+  z-index: 190;
+}
+
+.discord-member-role-option:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.discord-popover-menu-item-selected {
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--app-text);
+}
+
+.discord-role-option-check {
+  min-width: 14px;
+  color: var(--app-text-soft);
+  text-align: right;
+}
+
+/* Message actions now appear only from right-click and stay beside the message. */
+.discord-message-menu,
+.discord-message-menu-has-reactions {
+  top: 50%;
+  right: -8px;
+  width: 0;
+  height: 0;
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.discord-message-row-own .discord-message-menu {
+  right: auto;
+  left: -8px;
+}
+
+.discord-message-options-menu {
+  top: 8px;
+  right: auto;
+  left: 8px;
+  transform: none;
+}
+
+.discord-message-row-own .discord-message-options-menu {
+  right: 8px;
+  left: auto;
+}
+
+.discord-message-context-up .discord-message-options-menu {
+  top: auto;
+  bottom: 8px;
+}
+
+.discord-message-row-with-attachments:not(.discord-message-row-own) .discord-message-menu,
+.discord-message-row-own.discord-message-row-with-attachments .discord-message-menu {
+  top: 50%;
+}
+
+.discord-message-row {
+  cursor: context-menu;
+}
+
+.discord-message-row:has(textarea),
+.discord-message-row:has(input) {
+  cursor: default;
+}
+
+/* Old action triggers are intentionally unused; keep them out of layout if stale markup is cached. */
+.discord-message-menu-trigger,
+.discord-member-menu-trigger {
+  display: none !important;
+}
+
+/* Member context menus live in the document overlay layer so the scrollable
+   members panel can never clip or scroll the menu itself. */
+.discord-member-item.discord-context-target-open {
+  anchor-name: --active-member-context-anchor;
+}
+
+.discord-member-context-portal {
+  position: fixed;
+  position-anchor: --active-member-context-anchor;
+  z-index: 1000;
+  width: max-content;
+  height: max-content;
+  pointer-events: auto;
+}
+
+.discord-member-context-portal.discord-context-menu-down {
+  top: anchor(bottom);
+  left: anchor(left);
+  margin-top: 6px;
+}
+
+.discord-member-context-portal.discord-context-menu-up {
+  bottom: calc(100vh - anchor(top));
+  left: anchor(left);
+  margin-bottom: 6px;
+}
+
+.discord-member-context-portal .discord-member-actions-menu {
+  position: relative;
+  inset: auto;
+  min-width: 184px;
+  max-height: none;
+  overflow: visible;
+  margin: 0;
+}
+
+.discord-member-context-portal .discord-member-role-submenu {
+  top: -6px;
+  right: calc(100% + 8px);
+  left: auto;
+  bottom: auto;
+  min-width: 154px;
+  max-height: none;
+  overflow: visible;
+}
