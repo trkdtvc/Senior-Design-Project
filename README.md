@@ -1,84 +1,88 @@
 # Senior Design Project
 
-**Your Friendly Neighborhood Chatster (YFNC)** is a full-stack real-time chat application built as a senior design project. Users can create and join servers, communicate in channels and direct messages, manage roles and permissions, share attachments, manage friends and safety settings, and use an integrated AI assistant.
+**Your Friendly Neighborhood Chatster (YFNC)** is a full-stack real-time chat application I built as my senior design project. The main idea was to create a chat platform where users can create and join servers, communicate through channels and direct messages, manage roles and permissions, share attachments, add friends, use safety features, and interact with an integrated AI assistant.
 
-## Technology stack
+## Technology Stack
+
+The project is split into a React frontend, a Node.js/Express backend, and a MySQL database.
 
 - **Frontend:** React 19, Vite, React Router, Socket.IO Client, CSS
 - **Backend:** Node.js, Express 5, Socket.IO, JWT, MySQL2, Nodemailer, Multer, Swagger/OpenAPI
 - **Database:** MySQL 8 / InnoDB
 - **Testing:** Jest, Supertest, Selenium WebDriver, ESLint
 
-## Runtime requirements
+## Requirements
 
-The repository pins **Node.js 22.12.0** in `.nvmrc`. The supported Node.js range in both packages is `^20.19.0 || >=22.12.0`, which also satisfies the current Vite runtime requirement. npm 10 or newer is recommended/required by the package metadata.
+The project uses **Node.js 22.12.0**, which is pinned in the `.nvmrc` file. Both the frontend and backend also support `^20.19.0 || >=22.12.0`. npm 10 or newer is recommended.
 
-The `.nvmrc` file can be used by Node version managers that support it. With nvm-windows, use:
+If you use nvm-windows, you can install and switch to the expected Node.js version with:
 
 ```powershell
 nvm install 22.12.0
 nvm use 22.12.0
 ```
 
-## Environment configuration
+## Environment Setup
 
-Real `.env` files are intentionally ignored by Git. Start from the committed examples:
+The real `.env` files are ignored by Git, so the repository only contains example files. Create your local environment files from those examples:
 
 ```bash
 cp Backend/.env.example Backend/.env
 cp Frontend/.env.example Frontend/.env
 ```
 
-On Windows PowerShell, the equivalent is:
+On Windows PowerShell:
 
 ```powershell
 Copy-Item Backend/.env.example Backend/.env
 Copy-Item Frontend/.env.example Frontend/.env
 ```
 
-Fill in the database, JWT, SMTP, and optional hosted-AI credentials in `Backend/.env`. For a production deployment, also set the real frontend/API URLs, CORS origins, proxy-hop count, and a persistent `UPLOAD_DIR` if the host uses an ephemeral filesystem.
+After that, fill in the required database, JWT, SMTP, and optional AI provider values in `Backend/.env`.
 
-The backend validates required configuration before opening the HTTP server. You can validate it explicitly with:
+For production, the real frontend and backend URLs, allowed CORS origins, proxy-hop count, and persistent upload directory should also be configured.
+
+You can check the backend environment configuration before starting the server with:
 
 ```bash
 cd Backend
 npm run config:check
 ```
 
-`AI_PROVIDER` can be `local`, `gemini`, or `openai`. A provider API key is required only when that hosted provider is selected.
+The available AI providers are `local`, `gemini`, and `openai`. An API key is only required if Gemini or OpenAI is selected.
 
-## Database setup and migrations
+## Database Setup
 
-Create the empty MySQL database named by `DB_NAME` first. The application database user should have only the permissions needed for this project.
+First, create an empty MySQL database using the same name as the `DB_NAME` value in your backend `.env` file.
 
-For a brand-new empty database:
+For a completely new database:
 
 ```bash
 cd Backend
 npm run db:setup
 ```
 
-`db:setup` applies the baseline schema and then initializes/runs the migration ledger.
+This applies the base schema and sets up the migration system.
 
-`db:schema` deliberately refuses to run against a non-empty database. Once real data exists, schema changes must be added as numbered SQL files under `Database/migrations/` and applied with:
+The `db:schema` command is intentionally prevented from running on a database that already contains data. Once the application has real data, any future schema changes should be added as numbered SQL files inside `Database/migrations/` and applied with:
 
 ```bash
 npm run db:migrate
 ```
 
-The migration runner records filenames and SHA-256 checksums in `schema_migrations` and refuses to silently accept edits to already-applied migrations.
+Applied migrations are stored in the `schema_migrations` table together with SHA-256 checksums. This prevents an already-applied migration from being edited without being detected.
 
-Optional development/demo data can be loaded with:
+Optional development/demo data can be added with:
 
 ```bash
 npm run db:seed
 ```
 
-The seed command refuses to run when `NODE_ENV=production`.
+The seed command will not run when `NODE_ENV=production`.
 
-## Install and run
+## Running the Project Locally
 
-Backend:
+Start the backend:
 
 ```bash
 cd Backend
@@ -87,7 +91,7 @@ npm run config:check
 npm start
 ```
 
-Frontend, in a second terminal:
+Then start the frontend in a second terminal:
 
 ```bash
 cd Frontend
@@ -95,18 +99,20 @@ npm ci
 npm run dev
 ```
 
-The default local addresses in the example configuration are:
+With the default local configuration, the application uses:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:5000`
 - API: `http://localhost:5000/api`
 - Swagger/OpenAPI: `http://localhost:5000/api-docs` when enabled
 
-Swagger is enabled by default outside production and disabled by default in production unless `SWAGGER_ENABLED=true` is explicitly configured. `API_PUBLIC_URL` controls the server URL advertised in the generated OpenAPI specification.
+Swagger is enabled by default during development. In production it is disabled unless `SWAGGER_ENABLED=true` is set. `API_PUBLIC_URL` controls which backend URL appears in the generated OpenAPI documentation.
 
-## Production build and deployment
+## Production Build and Deployment
 
-The frontend intentionally requires `VITE_API_URL` for production builds so there is no silent localhost fallback. Before deployment, set it to the real production API URL (or `/api` for same-origin hosting):
+For a production frontend build, `VITE_API_URL` must be set to the real API URL. This is intentional so a production build cannot accidentally fall back to localhost.
+
+Then run:
 
 ```bash
 cd Frontend
@@ -114,24 +120,28 @@ npm run lint
 npm run build
 ```
 
-The generated production assets are written to `Frontend/dist/`.
+The built frontend is generated in `Frontend/dist/`.
 
-For provider-neutral production requirements, health-check endpoints, persistent upload guidance, scaling assumptions, and the release checklist, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+More detailed deployment information, including production environment variables, health checks, persistent uploads, scaling notes, release checks, and rollback guidance, is available in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-## Continuous integration
+## Continuous Integration
 
-GitHub Actions runs the backend configuration check, complete Jest suite, dependency audit, frontend lint, production build, and frontend dependency audit on pushes and pull requests to `main` (`.github/workflows/ci.yml`). Selenium remains a release-candidate/local system test because its authenticated flow requires a running application and test account.
+The project includes a GitHub Actions workflow in `.github/workflows/ci.yml`.
 
-## Tests
+On pushes and pull requests to `main`, it automatically runs the backend configuration check, Jest tests, dependency audits, frontend linting, and the production frontend build.
 
-Backend full suite:
+Selenium is kept as a local/release-candidate system test because the authenticated flow needs a running application and a test account.
+
+## Testing
+
+To run the complete backend test suite:
 
 ```bash
 cd Backend
 npm test
 ```
 
-Backend subsets:
+You can also run the test groups separately:
 
 ```bash
 npm run test:unit
@@ -139,7 +149,7 @@ npm run test:integration
 npm run test:coverage
 ```
 
-Frontend quality checks:
+For frontend checks:
 
 ```bash
 cd Frontend
@@ -147,7 +157,7 @@ npm run lint
 npm run build
 ```
 
-Selenium system/E2E testing expects the frontend and backend to already be running:
+The Selenium E2E test expects both the frontend and backend to already be running:
 
 ```bash
 npm run test:e2e
@@ -155,19 +165,19 @@ npm run test:e2e
 
 Optional E2E environment variables include `E2E_APP_URL`, `E2E_HEADLESS`, `E2E_USER_LOGIN`, `E2E_USER_PASSWORD`, `E2E_CHANNEL_URL`, `E2E_MESSAGE_TEXT`, and `CHROME_BINARY_PATH`.
 
-## Repository layout
+## Project Structure
 
 ```text
 Backend/
-  scripts/           operational/configuration and database scripts
-  src/               Express/Socket.IO application code
+  scripts/           configuration and database scripts
+  src/               Express and Socket.IO application code
   tests/             Jest unit and integration tests
   uploads/           local development upload storage
 Database/
-  schema.sql         baseline schema for a new empty database
-  seed.sql           repeatable development/demo seed
-  migrations/        forward-only schema changes after the baseline
+  schema.sql         base schema for a new database
+  seed.sql           optional development/demo data
+  migrations/        database changes added after the base schema
 Frontend/
   src/               React application
-  tests/selenium/    system/E2E smoke test
+  tests/selenium/    Selenium system/E2E test
 ```
