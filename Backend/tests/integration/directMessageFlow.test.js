@@ -1,5 +1,5 @@
 jest.mock("../../src/models/userModel", () => ({
-  findUserById: jest.fn()
+  findUserCredentialsById: jest.fn()
 }));
 
 jest.mock("../../src/config/db", () => ({
@@ -42,7 +42,7 @@ jest.mock("../../src/services/attachmentFileService", () => ({
 }));
 
 const request = require("supertest");
-const jwt = require("jsonwebtoken");
+const { signAuthToken } = require("../../src/services/authTokenService");
 const app = require("../../src/app");
 const { pool } = require("../../src/config/db");
 const userModel = require("../../src/models/userModel");
@@ -53,14 +53,11 @@ const USER = {
   user_id: 31,
   username: "alice",
   email: "alice@example.com",
+  password_hash: "hash:GoodPassword1!",
   is_verified: 1
 };
 
-const token = jwt.sign(
-  { user_id: USER.user_id, username: USER.username, email: USER.email },
-  process.env.JWT_SECRET,
-  { expiresIn: "1h" }
-);
+const token = signAuthToken(USER, { expiresIn: "1h" });
 
 const conversation = {
   conversation_id: 90,
@@ -88,7 +85,7 @@ describe("direct messaging integration flow", () => {
     jest.clearAllMocks();
     pool.execute.mockReset();
 
-    userModel.findUserById.mockResolvedValue({ ...USER });
+    userModel.findUserCredentialsById.mockResolvedValue({ ...USER });
     directModel.getConversationById.mockResolvedValue({ ...conversation });
     directModel.isUserInConversation.mockResolvedValue(true);
     directModel.getConversationByUsers.mockResolvedValue(null);

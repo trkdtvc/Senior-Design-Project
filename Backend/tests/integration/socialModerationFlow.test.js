@@ -1,5 +1,5 @@
 jest.mock("../../src/models/userModel", () => ({
-  findUserById: jest.fn()
+  findUserCredentialsById: jest.fn()
 }));
 
 jest.mock("../../src/models/friendRequestModel", () => ({
@@ -86,7 +86,7 @@ jest.mock("../../src/models/notificationSettingsModel", () => ({
 }));
 
 const request = require("supertest");
-const jwt = require("jsonwebtoken");
+const { signAuthToken } = require("../../src/services/authTokenService");
 const app = require("../../src/app");
 const userModel = require("../../src/models/userModel");
 const friendModel = require("../../src/models/friendRequestModel");
@@ -103,20 +103,17 @@ const USER = {
   user_id: 61,
   username: "owner",
   email: "owner@example.com",
+  password_hash: "hash:GoodPassword1!",
   is_verified: 1
 };
 
-const token = jwt.sign(
-  { user_id: USER.user_id, username: USER.username, email: USER.email },
-  process.env.JWT_SECRET,
-  { expiresIn: "1h" }
-);
+const token = signAuthToken(USER, { expiresIn: "1h" });
 
 describe("social, moderation, invite, and mute integration flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    userModel.findUserById.mockResolvedValue({ ...USER });
+    userModel.findUserCredentialsById.mockResolvedValue({ ...USER });
 
     friendModel.findUserByUsernameOrEmail.mockResolvedValue({
       user_id: 62,

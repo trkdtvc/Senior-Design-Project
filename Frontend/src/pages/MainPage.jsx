@@ -66,6 +66,7 @@ import {
 } from "../services/serverInviteService";
 import { connectSocket, disconnectSocket } from "../services/socket";
 import { getFileBaseUrl } from "../services/apiClient";
+import { fetchAttachmentBlob } from "../services/attachmentService";
 import {
   getNotificationSettings,
   setServerMute,
@@ -618,14 +619,6 @@ const getStoredUploadUrl = (fileUrl) => {
   return `${FILE_BASE_URL}${normalizedUrl.startsWith("/") ? normalizedUrl : `/${normalizedUrl}`}`;
 };
 
-const getAttachmentUrl = (attachment) =>
-  getStoredUploadUrl(
-    attachment?.file_url ||
-    attachment?.fileUrl ||
-    attachment?.url ||
-    ""
-  );
-
 const getEntityAvatarPath = (entity) =>
   entity?.avatar_url ||
   entity?.avatarUrl ||
@@ -896,14 +889,96 @@ const isVideoAttachment = (attachment) =>
 const isAudioAttachment = (attachment) =>
   getAttachmentType(attachment).startsWith("audio/");
 
-const renderAttachmentPreview = (attachment, onPreviewAttachment) => {
-  const attachmentUrl = getAttachmentUrl(attachment);
+const useSecureAttachmentUrl = (attachment) => {
+  const [attachmentState, setAttachmentState] = useState({
+    requestKey: "",
+    url: "",
+    error: ""
+  });
+  const token = getAuthToken();
+  const attachmentId = attachment?.attachment_id || attachment?.attachmentId || null;
+  const directMessageId =
+    attachment?.direct_message_id || attachment?.directMessageId || null;
+  const requestKey = attachmentId
+    ? `${directMessageId ? "direct" : "channel"}:${attachmentId}`
+    : "";
+
+  useEffect(() => {
+    let objectUrl = "";
+    let cancelled = false;
+
+    if (!attachment || !attachmentId || !token) {
+      return undefined;
+    }
+
+    fetchAttachmentBlob(token, attachment)
+      .then((blob) => {
+        if (cancelled) {
+          return;
+        }
+
+        objectUrl = URL.createObjectURL(blob);
+        setAttachmentState({
+          requestKey,
+          url: objectUrl,
+          error: ""
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setAttachmentState({
+            requestKey,
+            url: "",
+            error: error.message || "Unable to load attachment."
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [attachment, attachmentId, requestKey, token]);
+
+  const isCurrentAttachment = Boolean(requestKey) && attachmentState.requestKey === requestKey;
+
+  return {
+    attachmentUrl: isCurrentAttachment ? attachmentState.url : "",
+    attachmentError: isCurrentAttachment ? attachmentState.error : ""
+  };
+};
+
+const AttachmentPreview = ({ attachment, onPreviewAttachment }) => {
+  const { attachmentUrl, attachmentError } = useSecureAttachmentUrl(attachment);
   const attachmentName = getAttachmentName(attachment);
   const attachmentSize = formatFileSize(getAttachmentSize(attachment));
   const attachmentKind = getAttachmentKind(attachment);
 
+  if (attachmentError) {
+    return (
+      <div className="discord-attachment-file discord-attachment-file-generic">
+        <span className="discord-attachment-icon">⚠️</span>
+        <span className="discord-attachment-meta">
+          <span className="discord-attachment-name">{attachmentName}</span>
+          <span className="discord-attachment-size">{attachmentError}</span>
+        </span>
+      </div>
+    );
+  }
+
   if (!attachmentUrl) {
-    return null;
+    return (
+      <div className="discord-attachment-file discord-attachment-file-generic">
+        <span className="discord-attachment-icon">📎</span>
+        <span className="discord-attachment-meta">
+          <span className="discord-attachment-name">{attachmentName}</span>
+          <span className="discord-attachment-size">Loading attachment...</span>
+        </span>
+      </div>
+    );
   }
 
   if (isImageAttachment(attachment)) {
@@ -926,7 +1001,7 @@ const renderAttachmentPreview = (attachment, onPreviewAttachment) => {
           <span className="discord-attachment-kind">{attachmentKind}</span>
           <span className="discord-attachment-name">{attachmentName}</span>
           {attachmentSize ? <span>{attachmentSize}</span> : null}
-          <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
+          <a href={attachmentUrl} download={attachmentName}>
             Download
           </a>
         </div>
@@ -950,7 +1025,7 @@ const renderAttachmentPreview = (attachment, onPreviewAttachment) => {
           <button type="button" onClick={() => onPreviewAttachment?.(attachment)}>
             Preview
           </button>
-          <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
+          <a href={attachmentUrl} download={attachmentName}>
             Download
           </a>
         </div>
@@ -975,7 +1050,7 @@ const renderAttachmentPreview = (attachment, onPreviewAttachment) => {
           />
         </span>
 
-        <a href={attachmentUrl} target="_blank" rel="noreferrer" download>
+        <a href={attachmentUrl} download={attachmentName}>
           Download
         </a>
       </div>
@@ -985,10 +1060,8 @@ const renderAttachmentPreview = (attachment, onPreviewAttachment) => {
   return (
     <a
       href={attachmentUrl}
-      target="_blank"
-      rel="noreferrer"
       className="discord-attachment-file discord-attachment-file-generic"
-      download
+      download={attachmentName}
     >
       <span className="discord-attachment-icon">📎</span>
 
@@ -1149,6 +1222,8 @@ const MainPage = () => {
   const [safetyActionSuccess, setSafetyActionSuccess] = useState("");
   const [safetyActionKey, setSafetyActionKey] = useState(null);
   const [previewAttachment, setPreviewAttachment] = useState(null);
+  const { attachmentUrl: previewAttachmentUrl, attachmentError: previewAttachmentError } =
+    useSecureAttachmentUrl(previewAttachment);
 
   const [activeServerId, setActiveServerId] = useState(null);
   const [activeChannelId, setActiveChannelId] = useState(null);
@@ -3768,7 +3843,8 @@ const MainPage = () => {
     updatePinnedMessageInState,
     mutedServerIds,
     mutedChannelIds,
-    mutedDirectConversationIds
+    mutedDirectConversationIds,
+    navigate
   ]);
 
   useEffect(() => {
@@ -8427,7 +8503,10 @@ const MainPage = () => {
                                   attachment.file_url
                                 }
                               >
-                                {renderAttachmentPreview(attachment, setPreviewAttachment)}
+                                <AttachmentPreview
+                                  attachment={attachment}
+                                  onPreviewAttachment={setPreviewAttachment}
+                                />
                               </div>
                             ))}
                           </div>
@@ -9372,37 +9451,41 @@ const MainPage = () => {
             </div>
 
             <div className="discord-attachment-preview-body">
-              {isImageAttachment(previewAttachment) ? (
+              {previewAttachmentError ? (
+                <p className="auth-error">{previewAttachmentError}</p>
+              ) : !previewAttachmentUrl ? (
+                <p className="discord-modal-subtitle">Loading attachment...</p>
+              ) : isImageAttachment(previewAttachment) ? (
                 <img
-                  src={getAttachmentUrl(previewAttachment)}
+                  src={previewAttachmentUrl}
                   alt={getAttachmentName(previewAttachment)}
                   className="discord-attachment-preview-image"
                 />
               ) : isVideoAttachment(previewAttachment) ? (
                 <video
                   controls
-                  src={getAttachmentUrl(previewAttachment)}
+                  src={previewAttachmentUrl}
                   className="discord-attachment-preview-video"
                 />
               ) : isAudioAttachment(previewAttachment) ? (
                 <audio
                   controls
-                  src={getAttachmentUrl(previewAttachment)}
+                  src={previewAttachmentUrl}
                   className="discord-attachment-audio"
                 />
               ) : null}
             </div>
 
             <div className="discord-modal-actions">
-              <a
-                href={getAttachmentUrl(previewAttachment)}
-                target="_blank"
-                rel="noreferrer"
-                download
-                className="auth-button compact-button discord-modal-link-button"
-              >
-                Download
-              </a>
+              {previewAttachmentUrl ? (
+                <a
+                  href={previewAttachmentUrl}
+                  download={getAttachmentName(previewAttachment)}
+                  className="auth-button compact-button discord-modal-link-button"
+                >
+                  Download
+                </a>
+              ) : null}
             </div>
           </div>
         </div>

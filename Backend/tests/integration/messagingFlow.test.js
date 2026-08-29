@@ -1,5 +1,5 @@
 jest.mock("../../src/models/userModel", () => ({
-  findUserById: jest.fn()
+  findUserCredentialsById: jest.fn()
 }));
 
 jest.mock("../../src/models/messageModel", () => ({
@@ -43,7 +43,7 @@ jest.mock("../../src/services/attachmentFileService", () => ({
 }));
 
 const request = require("supertest");
-const jwt = require("jsonwebtoken");
+const { signAuthToken } = require("../../src/services/authTokenService");
 const app = require("../../src/app");
 const userModel = require("../../src/models/userModel");
 const messageModel = require("../../src/models/messageModel");
@@ -53,14 +53,11 @@ const USER = {
   user_id: 21,
   username: "alice",
   email: "alice@example.com",
+  password_hash: "hash:GoodPassword1!",
   is_verified: 1
 };
 
-const token = jwt.sign(
-  { user_id: USER.user_id, username: USER.username, email: USER.email },
-  process.env.JWT_SECRET,
-  { expiresIn: "1h" }
-);
+const token = signAuthToken(USER, { expiresIn: "1h" });
 
 const baseMessage = {
   message_id: 300,
@@ -84,7 +81,7 @@ describe("channel messaging integration flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    userModel.findUserById.mockResolvedValue({ ...USER });
+    userModel.findUserCredentialsById.mockResolvedValue({ ...USER });
     messageModel.isUserMemberOfChannelServer.mockResolvedValue(true);
     messageModel.createMessage.mockResolvedValue({ insertId: 300 });
     messageModel.getMessageById.mockResolvedValue({ ...baseMessage });

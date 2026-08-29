@@ -21,7 +21,10 @@ const {
   emailActionRateLimiter,
   passwordResetRateLimiter
 } = require("../middleware/rateLimitMiddleware");
-const { uploadProfileAvatar } = require("../middleware/uploadMiddleware");
+const {
+  uploadProfileAvatar,
+  validateAvatarContents
+} = require("../middleware/uploadMiddleware");
 
 const router = express.Router();
 
@@ -163,6 +166,7 @@ router.put(
   "/profile/avatar",
   protect,
   uploadProfileAvatar.single("avatar"),
+  validateAvatarContents,
   updateProfileAvatar
 );
 router.delete("/profile/avatar", protect, deleteProfileAvatar);

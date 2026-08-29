@@ -4,7 +4,8 @@ const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
-const { findUserById, setUserOnlineState } = require("./models/userModel");
+const { findUserCredentialsById, setUserOnlineState } = require("./models/userModel");
+const { tokenMatchesCurrentCredentials } = require("./services/authTokenService");
 const { isUserMemberOfServer } = require("./models/serverMemberModel");
 const userSafetyModel = require("./models/userSafetyModel");
 const { isUserMemberOfChannelServer } = require("./models/messageModel");
@@ -116,10 +117,14 @@ io.use(async (socket, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await findUserById(decoded.user_id);
+    const user = await findUserCredentialsById(decoded.user_id);
 
     if (!user) {
       return next(new Error("Not authorized, account unavailable"));
+    }
+
+    if (!tokenMatchesCurrentCredentials(decoded, user)) {
+      return next(new Error("Not authorized, session expired"));
     }
 
     if (!user.is_verified) {

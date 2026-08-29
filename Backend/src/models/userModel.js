@@ -41,7 +41,7 @@ const findUserById = async (userId) => {
 
 const findUserCredentialsById = async (userId) => {
   const [rows] = await pool.execute(
-    `SELECT user_id, username, email, avatar_url, password_hash, is_verified
+    `SELECT user_id, username, email, avatar_url, password_hash, is_verified, status, is_online, last_seen_at
      FROM users
      WHERE user_id = ?
      LIMIT 1`,

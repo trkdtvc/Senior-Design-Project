@@ -23,6 +23,7 @@ const {
 } = require("../models/directMessageModel");
 const userSafetyModel = require("../models/userSafetyModel");
 const { deleteStoredFiles } = require("../services/attachmentFileService");
+const { markUploadedFileCommitted } = require("../middleware/uploadMiddleware");
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -337,6 +338,8 @@ const sendDirectMessageToConversation = async (req, res, next) => {
         newMessage.direct_message_id,
         attachmentPayload
       );
+
+      markUploadedFileCommitted(req);
 
       newMessage.attachments = [
         {

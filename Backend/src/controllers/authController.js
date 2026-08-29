@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { sendEmail } = require("../services/emailService");
+const { signAuthToken } = require("../services/authTokenService");
 const {
   findUserByEmail,
   findUserByUsername,
@@ -25,18 +25,6 @@ const {
 const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_HOURS = 24;
 const { deleteStoredFiles } = require("../services/attachmentFileService");
-
-const generateToken = (user) => {
-  return jwt.sign(
-    {
-      user_id: user.user_id,
-      username: user.username,
-      email: user.email
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-};
 
 const getFrontendBaseUrl = () => {
   return process.env.FRONTEND_URL || "http://localhost:5173";
@@ -288,7 +276,7 @@ const loginUser = async (req, res, next) => {
       });
     }
 
-    const token = generateToken(user);
+    const token = signAuthToken(user);
 
     return res.status(200).json({
       message: "Login successful",
@@ -556,6 +544,12 @@ const resetPassword = async (req, res, next) => {
 
     await updateUserPassword(user.user_id, passwordHash);
 
+    const io = req.app.get("io");
+
+    if (io) {
+      io.in(`user_${user.user_id}`).disconnectSockets(true);
+    }
+
     return res.status(200).json({
       message: "Password reset successfully."
     });
@@ -621,8 +615,19 @@ const changePassword = async (req, res, next) => {
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await updateUserPassword(user.user_id, passwordHash);
 
-    const freshUser = await findUserById(user.user_id);
-    const token = generateToken(freshUser);
+    const freshUser = await findUserCredentialsById(user.user_id);
+
+    if (!freshUser) {
+      res.status(404);
+      throw new Error("User not found");
+    }
+
+    const token = signAuthToken(freshUser);
+    const io = req.app.get("io");
+
+    if (io) {
+      io.in(`user_${user.user_id}`).disconnectSockets(true);
+    }
 
     res.status(200).json({
       message: "Password changed successfully",
@@ -778,7 +783,18 @@ const updateProfile = async (req, res, next) => {
       );
     }
 
-    const token = emailChanged ? null : generateToken(updatedUser);
+    let token = null;
+
+    if (!emailChanged) {
+      const updatedCredentials = await findUserCredentialsById(req.user.user_id);
+
+      if (!updatedCredentials) {
+        res.status(404);
+        throw new Error("User not found");
+      }
+
+      token = signAuthToken(updatedCredentials);
+    }
     const safeUser = getSafeUserResponse(updatedUser);
     const io = req.app.get("io");
 

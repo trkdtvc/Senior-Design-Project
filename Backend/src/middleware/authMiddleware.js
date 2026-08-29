@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
-const { findUserById } = require("../models/userModel");
+const { findUserCredentialsById } = require("../models/userModel");
+const { tokenMatchesCurrentCredentials } = require("../services/authTokenService");
 
 const protect = async (req, res, next) => {
   try {
@@ -11,10 +12,14 @@ const protect = async (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await findUserById(decoded.user_id);
+    const user = await findUserCredentialsById(decoded.user_id);
 
     if (!user) {
       return res.status(401).json({ message: "Not authorized, account not found" });
+    }
+
+    if (!tokenMatchesCurrentCredentials(decoded, user)) {
+      return res.status(401).json({ message: "Not authorized, session expired" });
     }
 
     if (!user.is_verified) {

@@ -1,5 +1,5 @@
 jest.mock("../../src/models/userModel", () => ({
-  findUserById: jest.fn()
+  findUserCredentialsById: jest.fn()
 }));
 
 jest.mock("../../src/models/serverModel", () => ({
@@ -39,7 +39,7 @@ jest.mock("../../src/services/attachmentFileService", () => ({
 }));
 
 const request = require("supertest");
-const jwt = require("jsonwebtoken");
+const { signAuthToken } = require("../../src/services/authTokenService");
 const app = require("../../src/app");
 const userModel = require("../../src/models/userModel");
 const serverModel = require("../../src/models/serverModel");
@@ -50,19 +50,16 @@ const USER = {
   user_id: 10,
   username: "owner",
   email: "owner@example.com",
+  password_hash: "hash:GoodPassword1!",
   is_verified: 1
 };
 
-const token = jwt.sign(
-  { user_id: USER.user_id, username: USER.username, email: USER.email },
-  process.env.JWT_SECRET,
-  { expiresIn: "1h" }
-);
+const token = signAuthToken(USER, { expiresIn: "1h" });
 
 describe("server and channel integration flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    userModel.findUserById.mockResolvedValue({ ...USER });
+    userModel.findUserCredentialsById.mockResolvedValue({ ...USER });
 
     permissionModel.canManageServerContent.mockResolvedValue({
       serverExists: true,

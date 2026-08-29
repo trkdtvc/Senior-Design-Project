@@ -1,10 +1,11 @@
 jest.mock("../../src/models/userModel", () => ({
-  findUserById: jest.fn()
+  findUserCredentialsById: jest.fn()
 }));
 
 const jwt = require("jsonwebtoken");
-const { findUserById } = require("../../src/models/userModel");
+const { findUserCredentialsById } = require("../../src/models/userModel");
 const { protect } = require("../../src/middleware/authMiddleware");
+const { signAuthToken } = require("../../src/services/authTokenService");
 
 const makeRes = () => {
   const res = {};
@@ -13,9 +14,18 @@ const makeRes = () => {
   return res;
 };
 
+const VERIFIED_USER = {
+  user_id: 5,
+  username: "newname",
+  email: "new@example.com",
+  avatar_url: "/uploads/avatars/a.png",
+  password_hash: "hash:CurrentPassword1!",
+  is_verified: 1
+};
+
 describe("auth middleware", () => {
   beforeEach(() => {
-    findUserById.mockReset();
+    findUserCredentialsById.mockReset();
   });
 
   test("rejects a request without a bearer token", async () => {
@@ -43,7 +53,7 @@ describe("auth middleware", () => {
 
   test("rejects a token whose account no longer exists", async () => {
     const token = jwt.sign({ user_id: 5 }, process.env.JWT_SECRET);
-    findUserById.mockResolvedValue(null);
+    findUserCredentialsById.mockResolvedValue(null);
     const req = { headers: { authorization: `Bearer ${token}` } };
     const res = makeRes();
     const next = jest.fn();
@@ -56,14 +66,34 @@ describe("auth middleware", () => {
     });
   });
 
-  test("rejects an unverified account even with a valid token", async () => {
-    const token = jwt.sign({ user_id: 5 }, process.env.JWT_SECRET);
-    findUserById.mockResolvedValue({
-      user_id: 5,
+  test("rejects an older token after the account password changes", async () => {
+    const token = signAuthToken(VERIFIED_USER, { expiresIn: "1h" });
+    findUserCredentialsById.mockResolvedValue({
+      ...VERIFIED_USER,
+      password_hash: "hash:DifferentPassword2!"
+    });
+    const req = { headers: { authorization: `Bearer ${token}` } };
+    const res = makeRes();
+    const next = jest.fn();
+
+    await protect(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Not authorized, session expired"
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("rejects an unverified account even with a current valid token", async () => {
+    const pendingUser = {
+      ...VERIFIED_USER,
       username: "pending",
       email: "pending@example.com",
       is_verified: 0
-    });
+    };
+    const token = signAuthToken(pendingUser, { expiresIn: "1h" });
+    findUserCredentialsById.mockResolvedValue(pendingUser);
     const req = { headers: { authorization: `Bearer ${token}` } };
     const res = makeRes();
     const next = jest.fn();
@@ -78,17 +108,15 @@ describe("auth middleware", () => {
   });
 
   test("hydrates req.user from the current verified database record", async () => {
-    const token = jwt.sign(
-      { user_id: 5, username: "oldname", email: "old@example.com" },
-      process.env.JWT_SECRET
+    const token = signAuthToken(
+      {
+        ...VERIFIED_USER,
+        username: "oldname",
+        email: "old@example.com"
+      },
+      { expiresIn: "1h" }
     );
-    findUserById.mockResolvedValue({
-      user_id: 5,
-      username: "newname",
-      email: "new@example.com",
-      avatar_url: "/uploads/avatars/a.png",
-      is_verified: 1
-    });
+    findUserCredentialsById.mockResolvedValue({ ...VERIFIED_USER });
     const req = { headers: { authorization: `Bearer ${token}` } };
     const res = makeRes();
     const next = jest.fn();

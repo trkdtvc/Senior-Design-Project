@@ -34,6 +34,7 @@ jest.mock("../../src/models/userModel", () => ({
 
 const request = require("supertest");
 const jwt = require("jsonwebtoken");
+const { signAuthToken } = require("../../src/services/authTokenService");
 const app = require("../../src/app");
 const userModel = require("../../src/models/userModel");
 const { sendEmail } = require("../../src/services/emailService");
@@ -52,15 +53,7 @@ const VERIFIED_USER = {
 };
 
 const tokenFor = (user = VERIFIED_USER) =>
-  jwt.sign(
-    {
-      user_id: user.user_id,
-      username: user.username,
-      email: user.email
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: "1h" }
-  );
+  signAuthToken(user, { expiresIn: "1h" });
 
 describe("authentication and account integration flow", () => {
   let currentUser;
@@ -92,8 +85,16 @@ describe("authentication and account integration flow", () => {
         };
       }
     );
-    userModel.findUserCredentialsById.mockResolvedValue({ ...VERIFIED_USER });
-    userModel.updateUserPassword.mockResolvedValue({ affectedRows: 1 });
+    userModel.findUserCredentialsById.mockImplementation(async () =>
+      currentUser ? { ...currentUser } : null
+    );
+    userModel.updateUserPassword.mockImplementation(async (userId, passwordHash) => {
+      if (currentUser && Number(currentUser.user_id) === Number(userId)) {
+        currentUser.password_hash = passwordHash;
+      }
+
+      return { affectedRows: 1 };
+    });
     userModel.getAttachmentUrlsAffectedByUserDeletion.mockResolvedValue([]);
     userModel.deleteUserById.mockResolvedValue({ affectedRows: 1 });
   });
@@ -248,8 +249,6 @@ describe("authentication and account integration flow", () => {
   });
 
   test("changes password only when the current password is correct and new password differs", async () => {
-    userModel.findUserCredentialsById.mockResolvedValue({ ...VERIFIED_USER });
-
     const response = await request(app)
       .patch("/api/auth/password")
       .set("Authorization", `Bearer ${tokenFor()}`)

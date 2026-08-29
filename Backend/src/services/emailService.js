@@ -24,7 +24,9 @@ const transporter = nodemailer.createTransport({
     process.env.MAIL_GREETING_TIMEOUT_MS,
     10000
   ),
-  socketTimeout: getPositiveNumber(process.env.MAIL_SOCKET_TIMEOUT_MS, 30000)
+  socketTimeout: getPositiveNumber(process.env.MAIL_SOCKET_TIMEOUT_MS, 30000),
+  disableFileAccess: true,
+  disableUrlAccess: true
 });
 
 const sendEmail = async ({ to, subject, text, html }) => {

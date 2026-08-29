@@ -2,7 +2,11 @@ const express = require("express");
 const router = express.Router();
 const messageController = require("../controllers/messageController");
 const { protect } = require("../middleware/authMiddleware");
-const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
+const {
+  cleanupUncommittedUpload,
+  uploadMessageAttachment,
+  validateMessageAttachmentContents
+} = require("../middleware/uploadMiddleware");
 
 /**
  * @swagger
@@ -57,6 +61,8 @@ router.post(
   "/",
   protect,
   uploadMessageAttachment.single("attachment"),
+  cleanupUncommittedUpload,
+  validateMessageAttachmentContents,
   messageController.createMessage
 );
 

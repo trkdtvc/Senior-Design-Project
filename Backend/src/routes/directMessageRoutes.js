@@ -16,7 +16,11 @@ const {
   getUnreadDirectConversationCounts
 } = require("../controllers/directMessageController");
 const { protect } = require("../middleware/authMiddleware");
-const { uploadMessageAttachment } = require("../middleware/uploadMiddleware");
+const {
+  cleanupUncommittedUpload,
+  uploadMessageAttachment,
+  validateMessageAttachmentContents
+} = require("../middleware/uploadMiddleware");
 const {
   isUserInConversation,
   searchDirectMessagesByConversationId
@@ -253,6 +257,8 @@ router.post(
   "/",
   protect,
   uploadMessageAttachment.single("attachment"),
+  cleanupUncommittedUpload,
+  validateMessageAttachmentContents,
   sendDirectMessageToConversation
 );
 

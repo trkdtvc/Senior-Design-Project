@@ -1,5 +1,5 @@
 jest.mock("../../src/models/userModel", () => ({
-  findUserById: jest.fn()
+  findUserCredentialsById: jest.fn()
 }));
 
 jest.mock("../../src/models/messageModel", () => ({
@@ -25,7 +25,7 @@ jest.mock("../../src/services/aiService", () => ({
 }));
 
 const request = require("supertest");
-const jwt = require("jsonwebtoken");
+const { signAuthToken } = require("../../src/services/authTokenService");
 const app = require("../../src/app");
 const userModel = require("../../src/models/userModel");
 const messageModel = require("../../src/models/messageModel");
@@ -37,19 +37,16 @@ const USER = {
   user_id: 71,
   username: "alice",
   email: "alice@example.com",
+  password_hash: "hash:GoodPassword1!",
   is_verified: 1
 };
 
-const token = jwt.sign(
-  { user_id: USER.user_id, username: USER.username, email: USER.email },
-  process.env.JWT_SECRET,
-  { expiresIn: "1h" }
-);
+const token = signAuthToken(USER, { expiresIn: "1h" });
 
 describe("AI route integration flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    userModel.findUserById.mockResolvedValue({ ...USER });
+    userModel.findUserCredentialsById.mockResolvedValue({ ...USER });
     messageModel.isUserMemberOfChannelServer.mockResolvedValue(true);
     directModel.getConversationById.mockResolvedValue({
       conversation_id: 90,

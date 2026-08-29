@@ -1,6 +1,7 @@
 const messageModel = require("../models/messageModel");
 const { canManageServerContent } = require("../models/permissionModel");
 const { deleteStoredFiles } = require("../services/attachmentFileService");
+const { markUploadedFileCommitted } = require("../middleware/uploadMiddleware");
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -157,6 +158,8 @@ const createMessage = async (req, res, next) => {
         messageId,
         attachmentPayload
       );
+
+      markUploadedFileCommitted(req);
 
       attachment = {
         attachment_id: attachmentResult.insertId,
