@@ -17,6 +17,10 @@ const {
 } = require("../controllers/directMessageController");
 const { protect } = require("../middleware/authMiddleware");
 const {
+  attachmentUploadRateLimiter,
+  messageWriteRateLimiter
+} = require("../middleware/rateLimitMiddleware");
+const {
   cleanupUncommittedUpload,
   uploadMessageAttachment,
   validateMessageAttachmentContents
@@ -123,7 +127,7 @@ router.get(
 router.get(
   "/conversations/:conversationId/search",
   protect,
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const { conversationId } = req.params;
       const userId = req.user?.user_id || req.user?.id;
@@ -158,9 +162,7 @@ router.get(
         matches
       });
     } catch (error) {
-      return res.status(500).json({
-        message: error.message || "Failed to search direct messages."
-      });
+      next(error);
     }
   }
 );
@@ -256,8 +258,10 @@ router.patch(
 router.post(
   "/",
   protect,
+  messageWriteRateLimiter,
   uploadMessageAttachment.single("attachment"),
   cleanupUncommittedUpload,
+  attachmentUploadRateLimiter,
   validateMessageAttachmentContents,
   sendDirectMessageToConversation
 );

@@ -1,11 +1,10 @@
 const crypto = require("crypto");
 const {
-  createServerInvite,
+  replaceActiveServerInvite,
   getInviteByCode,
   getActiveInvitesByServerId,
   isInviteCodeInUse,
   deactivateInvite,
-  deactivateInvitesByServerId,
   deactivateExpiredInvitesByServerId
 } = require("../models/serverInviteModel");
 
@@ -51,11 +50,9 @@ const createInvite = async (req, res, next) => {
       Date.now() + INVITE_DURATION_MINUTES * 60 * 1000
     );
 
-    await deactivateInvitesByServerId(serverId);
-
     const inviteCode = await generateInviteCode();
 
-    await createServerInvite(serverId, userId, inviteCode, expiresAt);
+    await replaceActiveServerInvite(serverId, userId, inviteCode, expiresAt);
 
     res.status(201).json({
       message: `Invite created successfully. It will expire in ${INVITE_DURATION_MINUTES} minutes.`,

@@ -135,30 +135,23 @@ const createMessage = async (req, res, next) => {
       }
     }
 
-    const result = await messageModel.createMessage(
-      channelId,
-      userId,
-      trimmedContent,
-      replyToMessageId || null
-    );
-    const messageId = result.insertId;
-
     const mentionedUserIds = trimmedContent
       ? await extractMentionedUserIds(channelId, trimmedContent, userId)
       : [];
 
-    if (mentionedUserIds.length > 0) {
-      await messageModel.createMessageMentions(messageId, mentionedUserIds);
-    }
-
+    const { messageResult, attachmentResult } =
+      await messageModel.createMessageWithMetadata({
+        channelId,
+        userId,
+        content: trimmedContent,
+        replyToMessageId: replyToMessageId || null,
+        mentionedUserIds,
+        attachmentData: attachmentPayload
+      });
+    const messageId = messageResult.insertId;
     let attachment = null;
 
-    if (attachmentPayload) {
-      const attachmentResult = await messageModel.createMessageAttachment(
-        messageId,
-        attachmentPayload
-      );
-
+    if (attachmentPayload && attachmentResult) {
       markUploadedFileCommitted(req);
 
       attachment = {

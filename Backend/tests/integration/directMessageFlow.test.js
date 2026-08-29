@@ -16,8 +16,7 @@ jest.mock("../../src/models/directMessageModel", () => ({
   getUserConversations: jest.fn(),
   getMessagesByConversationId: jest.fn(),
   getDirectMessageById: jest.fn(),
-  createDirectMessage: jest.fn(),
-  createDirectMessageAttachment: jest.fn(),
+  createDirectMessageWithAttachment: jest.fn(),
   getDirectMessageAttachmentsByMessageId: jest.fn(),
   updateDirectMessageById: jest.fn(),
   deleteDirectMessageAttachmentsByMessageId: jest.fn(),
@@ -28,6 +27,7 @@ jest.mock("../../src/models/directMessageModel", () => ({
   getPinnedDirectMessagesByConversationId: jest.fn(),
   hideDirectConversationForUser: jest.fn(),
   markDirectConversationAsRead: jest.fn(),
+  searchDirectMessagesByConversationId: jest.fn(),
   getUnreadDirectConversationCountsByUserId: jest.fn()
 }));
 
@@ -95,7 +95,8 @@ describe("direct messaging integration flow", () => {
       messages: [{ ...directMessage }],
       pagination: { hasOlder: false, hasNewer: false, limit: 30 }
     });
-    directModel.createDirectMessage.mockResolvedValue({ ...directMessage });
+    directModel.createDirectMessageWithAttachment.mockResolvedValue({ ...directMessage });
+    directModel.searchDirectMessagesByConversationId.mockResolvedValue([{ ...directMessage }]);
     directModel.getDirectMessageById.mockResolvedValue({ ...directMessage });
     directModel.toggleDirectMessageReaction.mockResolvedValue({
       action: "added",
@@ -176,7 +177,7 @@ describe("direct messaging integration flow", () => {
       .send({ conversationId: 90, content: "Should fail" });
 
     expect(response.statusCode).toBe(403);
-    expect(directModel.createDirectMessage).not.toHaveBeenCalled();
+    expect(directModel.createDirectMessageWithAttachment).not.toHaveBeenCalled();
   });
 
   test("sends a direct message in an accessible, unblocked conversation", async () => {
@@ -186,12 +187,13 @@ describe("direct messaging integration flow", () => {
       .send({ conversationId: 90, content: " Hello Bob " });
 
     expect(response.statusCode).toBe(201);
-    expect(directModel.createDirectMessage).toHaveBeenCalledWith(
-      90,
-      USER.user_id,
-      "Hello Bob",
-      null
-    );
+    expect(directModel.createDirectMessageWithAttachment).toHaveBeenCalledWith({
+      conversationId: 90,
+      senderId: USER.user_id,
+      content: "Hello Bob",
+      replyToDirectMessageId: null,
+      attachmentData: null
+    });
   });
 
   test("prevents editing another user's direct message", async () => {

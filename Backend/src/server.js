@@ -4,7 +4,13 @@ const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
-const { findUserCredentialsById, setUserOnlineState } = require("./models/userModel");
+const { closeDB } = require("./config/db");
+const {
+  findUserCredentialsById,
+  getPresenceAudienceUserIds,
+  setAllUsersOffline,
+  setUserOnlineState
+} = require("./models/userModel");
 const { tokenMatchesCurrentCredentials } = require("./services/authTokenService");
 const { isUserMemberOfServer } = require("./models/serverMemberModel");
 const userSafetyModel = require("./models/userSafetyModel");
@@ -38,6 +44,7 @@ const io = new Server(httpServer, {
 app.set("io", io);
 
 const activeUserSockets = new Map();
+let isShuttingDown = false;
 
 const getSocketToken = (socket) => {
   const authToken = socket.handshake?.auth?.token;
@@ -90,15 +97,23 @@ const getActiveSocketCount = (userId) => {
   return existingSockets ? existingSockets.size : 0;
 };
 
-const emitPresenceUpdate = (userId, username, isOnline, lastSeenAt = null) => {
+const emitPresenceUpdate = async (userId, username, isOnline, lastSeenAt = null) => {
   const payload = {
-    user_id: userId,
+    user_id: Number(userId),
     username,
     status: isOnline ? "online" : "offline",
     last_seen_at: lastSeenAt || null
   };
+  const audienceUserIds = new Set(
+    await getPresenceAudienceUserIds(userId)
+  );
 
-  io.emit("presence_update", payload);
+  // Keep the user's own tabs/devices synchronized as well.
+  audienceUserIds.add(Number(userId));
+
+  audienceUserIds.forEach((audienceUserId) => {
+    io.to(`user_${audienceUserId}`).emit("presence_update", payload);
+  });
 };
 
 const isConversationParticipant = (conversation, userId) =>
@@ -161,7 +176,7 @@ io.on("connection", async (socket) => {
   if (previousSocketCount === 0) {
     try {
       await setUserOnlineState(userId, true, null);
-      emitPresenceUpdate(userId, username, true, null);
+      await emitPresenceUpdate(userId, username, true, null);
     } catch (error) {
       console.error("Failed to mark user online:", error.message);
     }
@@ -317,7 +332,7 @@ io.on("connection", async (socket) => {
       `Active sockets after disconnect for user ${userId}: ${getActiveSocketCount(userId)}`
     );
 
-    if (getActiveSocketCount(userId) > 0) {
+    if (getActiveSocketCount(userId) > 0 || isShuttingDown) {
       return;
     }
 
@@ -325,19 +340,110 @@ io.on("connection", async (socket) => {
       const lastSeenAt = new Date();
 
       await setUserOnlineState(userId, false, lastSeenAt);
-      emitPresenceUpdate(userId, username, false, lastSeenAt);
+      await emitPresenceUpdate(userId, username, false, lastSeenAt);
     } catch (error) {
       console.error("Failed to mark user offline:", error.message);
     }
   });
 });
 
-const startServer = async () => {
-  await connectDB();
+const closeSocketServer = async () => {
+  if (!httpServer.listening) {
+    io.close();
+    return;
+  }
 
-  httpServer.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  await new Promise((resolve) => {
+    io.close(() => resolve());
   });
 };
 
-startServer();
+const shutdown = async (reason, exitCode = 0) => {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`Shutting down server (${reason})...`);
+
+  const forceExitTimer = setTimeout(() => {
+    console.error("Graceful shutdown timed out; forcing exit.");
+    process.exit(1);
+  }, 10000);
+  forceExitTimer.unref?.();
+
+  let shutdownFailed = false;
+
+  try {
+    await closeSocketServer();
+  } catch (error) {
+    shutdownFailed = true;
+    console.error("Failed to close Socket.IO/HTTP server:", error.stack || error.message);
+  }
+
+  try {
+    await setAllUsersOffline(new Date());
+  } catch (error) {
+    shutdownFailed = true;
+    console.error("Failed to clear presence during shutdown:", error.stack || error.message);
+  }
+
+  try {
+    await closeDB();
+  } catch (error) {
+    shutdownFailed = true;
+    console.error("Failed to close database pool:", error.stack || error.message);
+  }
+
+  clearTimeout(forceExitTimer);
+  process.exit(shutdownFailed ? 1 : exitCode);
+};
+
+const startHttpServer = async () =>
+  new Promise((resolve, reject) => {
+    const handleError = (error) => {
+      httpServer.off("listening", handleListening);
+      reject(error);
+    };
+
+    const handleListening = () => {
+      httpServer.off("error", handleError);
+      console.log(`Server running on port ${PORT}`);
+      resolve();
+    };
+
+    httpServer.once("error", handleError);
+    httpServer.once("listening", handleListening);
+    httpServer.listen(PORT);
+  });
+
+const startServer = async () => {
+  await connectDB();
+
+  // Clear stale presence left behind by an unclean prior shutdown.
+  await setAllUsersOffline(new Date());
+  await startHttpServer();
+};
+
+process.once("SIGTERM", () => {
+  shutdown("SIGTERM");
+});
+
+process.once("SIGINT", () => {
+  shutdown("SIGINT");
+});
+
+process.once("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+  shutdown("unhandledRejection", 1);
+});
+
+process.once("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error.stack || error.message);
+  shutdown("uncaughtException", 1);
+});
+
+startServer().catch((error) => {
+  console.error("Failed to start server:", error.stack || error.message);
+  shutdown("startup failure", 1);
+});

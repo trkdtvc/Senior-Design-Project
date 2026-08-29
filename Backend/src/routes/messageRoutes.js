@@ -3,6 +3,10 @@ const router = express.Router();
 const messageController = require("../controllers/messageController");
 const { protect } = require("../middleware/authMiddleware");
 const {
+  attachmentUploadRateLimiter,
+  messageWriteRateLimiter
+} = require("../middleware/rateLimitMiddleware");
+const {
   cleanupUncommittedUpload,
   uploadMessageAttachment,
   validateMessageAttachmentContents
@@ -60,8 +64,10 @@ const {
 router.post(
   "/",
   protect,
+  messageWriteRateLimiter,
   uploadMessageAttachment.single("attachment"),
   cleanupUncommittedUpload,
+  attachmentUploadRateLimiter,
   validateMessageAttachmentContents,
   messageController.createMessage
 );

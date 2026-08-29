@@ -1,4 +1,4 @@
-const { pool } = require("../config/db");
+const { pool, withTransaction } = require("../config/db");
 
 const createServerInvite = async (
   serverId,
@@ -14,6 +14,38 @@ const createServerInvite = async (
 
   return result;
 };
+
+const replaceActiveServerInvite = async (
+  serverId,
+  createdBy,
+  inviteCode,
+  expiresAt = null
+) =>
+  withTransaction(async (connection) => {
+    const [serverRows] = await connection.execute(
+      "SELECT server_id FROM servers WHERE server_id = ? LIMIT 1 FOR UPDATE",
+      [serverId]
+    );
+
+    if (!serverRows[0]) {
+      const error = new Error("Server not found.");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    await connection.execute(
+      "UPDATE server_invites SET is_active = 0 WHERE server_id = ? AND is_active = 1",
+      [serverId]
+    );
+
+    const [result] = await connection.execute(
+      `INSERT INTO server_invites (server_id, created_by, invite_code, expires_at, is_active)
+       VALUES (?, ?, ?, ?, 1)`,
+      [serverId, createdBy, inviteCode, expiresAt]
+    );
+
+    return result;
+  });
 
 const getInviteByCode = async (inviteCode) => {
   const [rows] = await pool.execute(
@@ -100,6 +132,7 @@ const deactivateExpiredInvitesByServerId = async (serverId) => {
 
 module.exports = {
   createServerInvite,
+  replaceActiveServerInvite,
   getInviteByCode,
   getActiveInvitesByServerId,
   isInviteCodeInUse,

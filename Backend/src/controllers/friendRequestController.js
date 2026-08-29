@@ -185,20 +185,11 @@ const acceptFriendRequest = async (req, res, next) => {
       throw new Error("This friend request can no longer be accepted");
     }
 
-    const existingFriendship =
-      await friendRequestModel.getFriendshipBetweenUsers(
-        request.sender_id,
-        request.receiver_id
-      );
-
-    if (!existingFriendship) {
-      await friendRequestModel.createFriendship(
-        request.sender_id,
-        request.receiver_id
-      );
-    }
-
-    await friendRequestModel.updateFriendRequestStatus(requestId, "accepted");
+    await friendRequestModel.acceptFriendRequestAtomic(
+      requestId,
+      request.sender_id,
+      request.receiver_id
+    );
 
     res.status(200).json({
       message: "Friend request accepted successfully"

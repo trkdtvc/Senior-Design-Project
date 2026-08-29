@@ -1,4 +1,4 @@
-const { pool } = require("../config/db");
+const { pool, withTransaction } = require("../config/db");
 
 const DEFAULT_MESSAGE_LIMIT = 30;
 const MAX_MESSAGE_LIMIT = 60;
@@ -39,6 +39,63 @@ const createMessageAttachment = async (messageId, attachmentData) => {
 
   return result;
 };
+
+const createMessageWithMetadata = async ({
+  channelId,
+  userId,
+  content,
+  replyToMessageId = null,
+  mentionedUserIds = [],
+  attachmentData = null
+}) =>
+  withTransaction(async (connection) => {
+    const [messageResult] = await connection.execute(
+      `INSERT INTO messages (channel_id, user_id, message_content, reply_to_message_id)
+       VALUES (?, ?, ?, ?)`,
+      [channelId, userId, content, replyToMessageId]
+    );
+
+    const messageId = messageResult.insertId;
+    const uniqueMentionedUserIds = [
+      ...new Set(mentionedUserIds.map(Number).filter(Boolean))
+    ];
+
+    if (uniqueMentionedUserIds.length > 0) {
+      const placeholders = uniqueMentionedUserIds.map(() => "(?, ?)").join(", ");
+      const values = uniqueMentionedUserIds.flatMap((mentionedUserId) => [
+        messageId,
+        mentionedUserId
+      ]);
+
+      await connection.query(
+        `INSERT IGNORE INTO message_mentions (message_id, mentioned_user_id)
+         VALUES ${placeholders}`,
+        values
+      );
+    }
+
+    let attachmentResult = null;
+
+    if (attachmentData) {
+      [attachmentResult] = await connection.execute(
+        `INSERT INTO message_attachments
+          (message_id, file_url, file_name, file_type, file_size)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          messageId,
+          attachmentData.file_url,
+          attachmentData.file_name,
+          attachmentData.file_type,
+          attachmentData.file_size
+        ]
+      );
+    }
+
+    return {
+      messageResult,
+      attachmentResult
+    };
+  });
 
 const createMessageMentions = async (messageId, mentionedUserIds = []) => {
   const uniqueMentionedUserIds = [
@@ -747,6 +804,7 @@ const getUnreadMentionCountsByUserId = async (userId) => {
 module.exports = {
   createMessage,
   createMessageAttachment,
+  createMessageWithMetadata,
   getMessageAttachmentsByMessageId,
   createMessageMentions,
   getMessagesByChannelId,

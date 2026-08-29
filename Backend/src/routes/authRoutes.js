@@ -19,7 +19,8 @@ const {
   loginRateLimiter,
   registrationRateLimiter,
   emailActionRateLimiter,
-  passwordResetRateLimiter
+  passwordResetRateLimiter,
+  avatarUploadRateLimiter
 } = require("../middleware/rateLimitMiddleware");
 const {
   uploadProfileAvatar,
@@ -165,6 +166,7 @@ router.patch("/profile", protect, updateProfile);
 router.put(
   "/profile/avatar",
   protect,
+  avatarUploadRateLimiter,
   uploadProfileAvatar.single("avatar"),
   validateAvatarContents,
   updateProfileAvatar

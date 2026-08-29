@@ -1,4 +1,4 @@
-const { pool } = require("../config/db");
+const { pool, withTransaction } = require("../config/db");
 
 const hasBlockBetweenUsers = async (userAId, userBId) => {
   const [rows] = await pool.execute(
@@ -163,6 +163,41 @@ const updateFriendRequestStatus = async (requestId, status) => {
   return result;
 };
 
+const acceptFriendRequestAtomic = async (requestId, senderId, receiverId) => {
+  const userOneId = Math.min(Number(senderId), Number(receiverId));
+  const userTwoId = Math.max(Number(senderId), Number(receiverId));
+
+  return withTransaction(async (connection) => {
+    const [requestResult] = await connection.execute(
+      `UPDATE friend_requests
+       SET status = 'accepted',
+           responded_at = NOW()
+       WHERE request_id = ?
+         AND sender_id = ?
+         AND receiver_id = ?
+         AND status = 'pending'`,
+      [requestId, senderId, receiverId]
+    );
+
+    if (requestResult.affectedRows !== 1) {
+      const error = new Error("This friend request is no longer pending");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const [friendshipResult] = await connection.execute(
+      `INSERT IGNORE INTO friendships (user_one_id, user_two_id)
+       VALUES (?, ?)`,
+      [userOneId, userTwoId]
+    );
+
+    return {
+      requestResult,
+      friendshipResult
+    };
+  });
+};
+
 const createFriendship = async (userAId, userBId) => {
   const userOneId = Math.min(Number(userAId), Number(userBId));
   const userTwoId = Math.max(Number(userAId), Number(userBId));
@@ -250,6 +285,7 @@ module.exports = {
   getOutgoingPendingRequestsByUserId,
   getFriendRequestById,
   updateFriendRequestStatus,
+  acceptFriendRequestAtomic,
   createFriendship,
   getFriendshipBetweenUsers,
   deleteFriendship,

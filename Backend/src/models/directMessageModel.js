@@ -1,4 +1,4 @@
-const { pool } = require("../config/db");
+const { pool, withTransaction } = require("../config/db");
 
 const DEFAULT_DIRECT_MESSAGE_LIMIT = 30;
 const MAX_DIRECT_MESSAGE_LIMIT = 60;
@@ -589,6 +589,90 @@ const createDirectMessage = async (
   };
 };
 
+const createDirectMessageWithAttachment = async ({
+  conversationId,
+  senderId,
+  content,
+  replyToDirectMessageId = null,
+  attachmentData = null
+}) =>
+  withTransaction(async (connection) => {
+    const [messageResult] = await connection.execute(
+      `INSERT INTO direct_messages (
+         conversation_id,
+         sender_id,
+         content,
+         reply_to_direct_message_id
+       )
+       VALUES (?, ?, ?, ?)`,
+      [conversationId, senderId, content, replyToDirectMessageId]
+    );
+
+    await connection.execute(
+      `UPDATE direct_conversations
+       SET updated_at = CURRENT_TIMESTAMP
+       WHERE conversation_id = ?`,
+      [conversationId]
+    );
+
+    let attachmentResult = null;
+
+    if (attachmentData) {
+      [attachmentResult] = await connection.execute(
+        `INSERT INTO direct_message_attachments
+          (direct_message_id, file_url, file_name, file_type, file_size)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          messageResult.insertId,
+          attachmentData.file_url,
+          attachmentData.file_name,
+          attachmentData.file_type,
+          attachmentData.file_size
+        ]
+      );
+    }
+
+    const [rows] = await connection.execute(
+      `SELECT
+         dm.direct_message_id,
+         dm.conversation_id,
+         dm.sender_id,
+         u.username AS sender_username,
+         u.avatar_url AS sender_avatar_url,
+         dm.content,
+         dm.reply_to_direct_message_id,
+         rdm.content AS reply_to_content,
+         rdm.sender_id AS reply_to_sender_id,
+         ru.username AS reply_to_sender_username,
+         dm.created_at,
+         dm.updated_at
+       FROM direct_messages dm
+       JOIN users u ON dm.sender_id = u.user_id
+       LEFT JOIN direct_messages rdm ON dm.reply_to_direct_message_id = rdm.direct_message_id
+       LEFT JOIN users ru ON rdm.sender_id = ru.user_id
+       WHERE dm.direct_message_id = ?
+       LIMIT 1`,
+      [messageResult.insertId]
+    );
+
+    const message = {
+      ...rows[0],
+      attachments: []
+    };
+
+    if (attachmentData && attachmentResult) {
+      message.attachments = [
+        {
+          attachment_id: attachmentResult.insertId,
+          direct_message_id: messageResult.insertId,
+          ...attachmentData
+        }
+      ];
+    }
+
+    return message;
+  });
+
 const createDirectMessageAttachment = async (directMessageId, attachmentData) => {
   const [result] = await pool.execute(
     `
@@ -951,6 +1035,7 @@ module.exports = {
   getMessagesByConversationId,
   getDirectMessageById,
   createDirectMessage,
+  createDirectMessageWithAttachment,
   createDirectMessageAttachment,
   getDirectMessageAttachmentsByMessageId,
   updateDirectMessageById,

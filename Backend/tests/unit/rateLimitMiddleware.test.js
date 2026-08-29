@@ -65,3 +65,69 @@ describe("rate limiting middleware", () => {
     expect(userTwoNext).toHaveBeenCalledTimes(1);
   });
 });
+
+// Messaging limits are intentionally user-scoped so one noisy user does not
+// consume another authenticated user's allowance.
+describe("messaging rate limits", () => {
+  test("blocks the 61st message write for one user while another user remains allowed", () => {
+    jest.resetModules();
+    const { messageWriteRateLimiter } = require("../../src/middleware/rateLimitMiddleware");
+
+    for (let attempt = 1; attempt <= 60; attempt += 1) {
+      const next = jest.fn();
+      messageWriteRateLimiter(
+        { ip: "198.51.100.20", user: { user_id: 10 } },
+        makeRes(),
+        next
+      );
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+
+    const blockedRes = makeRes();
+    messageWriteRateLimiter(
+      { ip: "198.51.100.20", user: { user_id: 10 } },
+      blockedRes,
+      jest.fn()
+    );
+    expect(blockedRes.status).toHaveBeenCalledWith(429);
+
+    const otherUserNext = jest.fn();
+    messageWriteRateLimiter(
+      { ip: "198.51.100.20", user: { user_id: 11 } },
+      makeRes(),
+      otherUserNext
+    );
+    expect(otherUserNext).toHaveBeenCalledTimes(1);
+  });
+
+  test("attachment limiter ignores text-only messages and limits actual file uploads", () => {
+    jest.resetModules();
+    const { attachmentUploadRateLimiter } = require("../../src/middleware/rateLimitMiddleware");
+    const textOnlyNext = jest.fn();
+
+    attachmentUploadRateLimiter(
+      { ip: "198.51.100.30", user: { user_id: 20 }, file: null },
+      makeRes(),
+      textOnlyNext
+    );
+    expect(textOnlyNext).toHaveBeenCalledTimes(1);
+
+    for (let attempt = 1; attempt <= 20; attempt += 1) {
+      const next = jest.fn();
+      attachmentUploadRateLimiter(
+        { ip: "198.51.100.30", user: { user_id: 20 }, file: { filename: `f-${attempt}` } },
+        makeRes(),
+        next
+      );
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+
+    const blockedRes = makeRes();
+    attachmentUploadRateLimiter(
+      { ip: "198.51.100.30", user: { user_id: 20 }, file: { filename: "blocked" } },
+      blockedRes,
+      jest.fn()
+    );
+    expect(blockedRes.status).toHaveBeenCalledWith(429);
+  });
+});

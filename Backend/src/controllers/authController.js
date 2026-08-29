@@ -1,5 +1,4 @@
 const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
 const { sendEmail } = require("../services/emailService");
 const { signAuthToken } = require("../services/authTokenService");
 const {
@@ -7,24 +6,28 @@ const {
   findUserByUsername,
   findUserById,
   findUserCredentialsById,
-  createUser,
-  markUserAsVerified,
+  createUserWithVerificationToken,
+  consumeEmailVerificationToken,
+  replaceEmailVerificationToken,
   setPasswordResetToken,
   findUserByPasswordResetToken,
   updateUserPassword,
+  updateUserPasswordWithResetToken,
   updateUserProfile,
+  updateUserProfileWithVerificationToken,
   updateUserAvatar,
-  invalidateEmailVerificationTokens,
   getAttachmentUrlsAffectedByUserDeletion,
-  deleteUserById,
-  createEmailVerificationToken,
-  findEmailVerificationTokenRecord,
-  markEmailVerificationTokenAsUsed
+  deleteUserById
 } = require("../models/userModel");
+const { deleteStoredFiles } = require("../services/attachmentFileService");
+const {
+  createOneTimeTokenPair,
+  hashOneTimeToken,
+  isValidOneTimeToken
+} = require("../services/oneTimeTokenService");
 
 const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
-const PASSWORD_RESET_EXPIRY_HOURS = 24;
-const { deleteStoredFiles } = require("../services/attachmentFileService");
+const PASSWORD_RESET_EXPIRY_MINUTES = 60;
 
 const getFrontendBaseUrl = () => {
   return process.env.FRONTEND_URL || "http://localhost:5173";
@@ -109,7 +112,7 @@ This link expires in ${expiresInHours} hours.`,
 const sendPasswordResetEmailToUser = async (
   user,
   resetToken,
-  expiresInHours = PASSWORD_RESET_EXPIRY_HOURS
+  expiresInMinutes = PASSWORD_RESET_EXPIRY_MINUTES
 ) => {
   const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
 
@@ -123,13 +126,13 @@ We received a request to reset your password.
 Use the link below to reset it:
 ${resetLink}
 
-This link expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.`,
+This link expires in ${expiresInMinutes} minute${expiresInMinutes === 1 ? "" : "s"}.`,
     html: `
       <p>Hello ${user.username},</p>
       <p>We received a request to reset your password.</p>
       <p>Use the link below to reset it:</p>
       <a href="${resetLink}">${resetLink}</a>
-      <p>This link expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.</p>
+      <p>This link expires in ${expiresInMinutes} minute${expiresInMinutes === 1 ? "" : "s"}.</p>
     `
   });
 };
@@ -200,10 +203,17 @@ const registerUser = async (req, res, next) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const result = await createUser(
+    const { token: verificationToken, tokenHash: verificationTokenHash } =
+      createOneTimeTokenPair();
+    const verificationTokenExpires = new Date(
+      Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
+    );
+    const result = await createUserWithVerificationToken(
       normalizedUsername,
       normalizedEmail,
-      passwordHash
+      passwordHash,
+      verificationTokenHash,
+      verificationTokenExpires
     );
 
     const user = {
@@ -213,25 +223,23 @@ const registerUser = async (req, res, next) => {
       is_verified: 0
     };
 
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    const verificationTokenExpires = new Date(
-      Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
-    );
+    let verificationEmailSent = true;
 
-    await createEmailVerificationToken(
-      user.user_id,
-      verificationToken,
-      verificationTokenExpires
-    );
-
-    await sendVerificationEmailToUser(
-      user,
-      verificationToken,
-      EMAIL_VERIFICATION_EXPIRY_HOURS
-    );
+    try {
+      await sendVerificationEmailToUser(
+        user,
+        verificationToken,
+        EMAIL_VERIFICATION_EXPIRY_HOURS
+      );
+    } catch (emailError) {
+      verificationEmailSent = false;
+      console.error("Failed to send registration verification email:", emailError.message);
+    }
 
     return res.status(201).json({
-      message: "Registration successful. Check your email to verify your account",
+      message: verificationEmailSent
+        ? "Registration successful. Check your email to verify your account"
+        : "Registration successful. Verification email could not be sent; request a new verification email.",
       email: user.email,
       user
     });
@@ -259,14 +267,14 @@ const loginUser = async (req, res, next) => {
 
     if (!user) {
       res.status(401);
-      throw new Error("User does not exist.");
+      throw new Error("Invalid login or password.");
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
       res.status(401);
-      throw new Error("Incorrect password.");
+      throw new Error("Invalid login or password.");
     }
 
     if (!user.is_verified) {
@@ -297,46 +305,37 @@ const verifyEmail = async (req, res, next) => {
   try {
     const { token } = req.query || {};
 
-    if (!token) {
+    if (!isValidOneTimeToken(token)) {
       res.status(400);
       throw new Error("Invalid verification token");
     }
 
-    const verificationRecord = await findEmailVerificationTokenRecord(token);
+    const verificationTokenHash = hashOneTimeToken(token);
+    const verificationResult = await consumeEmailVerificationToken(
+      verificationTokenHash
+    );
 
-    if (!verificationRecord) {
+    if (verificationResult.status === "invalid") {
       res.status(400);
       throw new Error("Invalid verification token");
     }
 
-    if (verificationRecord.used_at) {
-      if (verificationRecord.is_verified) {
-        res.status(400);
-        throw new Error("This email is already verified");
-      }
-
-      res.status(400);
-      throw new Error("Verification token has already been used");
-    }
-
-    const isExpired =
-      !verificationRecord.expires_at ||
-      new Date(verificationRecord.expires_at) < new Date();
-
-    if (isExpired) {
-      res.status(400);
-      throw new Error("Verification token has expired");
-    }
-
-    if (verificationRecord.is_verified) {
+    if (verificationResult.status === "already_verified") {
       res.status(400);
       throw new Error("This email is already verified");
     }
 
-    await markUserAsVerified(verificationRecord.user_id);
-    await markEmailVerificationTokenAsUsed(verificationRecord.verification_id);
+    if (verificationResult.status === "already_used") {
+      res.status(400);
+      throw new Error("Verification token has already been used");
+    }
 
-    const freshUser = await findUserById(verificationRecord.user_id);
+    if (verificationResult.status === "expired") {
+      res.status(400);
+      throw new Error("Verification token has expired");
+    }
+
+    const freshUser = await findUserById(verificationResult.record.user_id);
 
     if (!freshUser) {
       res.status(404);
@@ -381,16 +380,15 @@ const resendVerificationEmail = async (req, res, next) => {
       throw new Error("This email is already verified");
     }
 
-    await invalidateEmailVerificationTokens(user.user_id);
-
-    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const { token: verificationToken, tokenHash: verificationTokenHash } =
+      createOneTimeTokenPair();
     const verificationTokenExpires = new Date(
       Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
     );
 
-    await createEmailVerificationToken(
+    await replaceEmailVerificationToken(
       user.user_id,
-      verificationToken,
+      verificationTokenHash,
       verificationTokenExpires
     );
 
@@ -422,22 +420,27 @@ const requestPasswordReset = async (req, res, next) => {
     const user = await findUserByEmail(normalizedEmail);
 
     if (user) {
-      const resetToken = crypto.randomBytes(32).toString("hex");
+      const { token: resetToken, tokenHash: resetTokenHash } =
+        createOneTimeTokenPair();
       const resetTokenExpires = new Date(
-        Date.now() + PASSWORD_RESET_EXPIRY_HOURS * 60 * 60 * 1000
+        Date.now() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000
       );
 
       await setPasswordResetToken(
         user.user_id,
-        resetToken,
+        resetTokenHash,
         resetTokenExpires
       );
 
-      await sendPasswordResetEmailToUser(
-        user,
-        resetToken,
-        PASSWORD_RESET_EXPIRY_HOURS
-      );
+      try {
+        await sendPasswordResetEmailToUser(
+          user,
+          resetToken,
+          PASSWORD_RESET_EXPIRY_MINUTES
+        );
+      } catch (emailError) {
+        console.error("Failed to send password reset email:", emailError.message);
+      }
     }
 
     return res.status(200).json({
@@ -452,21 +455,20 @@ const validatePasswordResetToken = async (req, res, next) => {
   try {
     const { token } = req.query || {};
 
-    if (!token) {
+    if (!isValidOneTimeToken(token)) {
       res.status(400);
       throw new Error("Invalid password reset token");
     }
 
-    const user = await findUserByPasswordResetToken(token);
+    const resetTokenHash = hashOneTimeToken(token);
+    const user = await findUserByPasswordResetToken(resetTokenHash);
 
     if (!user) {
       res.status(400);
       throw new Error("Invalid password reset token");
     }
 
-    const isExpired =
-      !user.password_reset_token_expires ||
-      new Date(user.password_reset_token_expires) < new Date();
+    const isExpired = Number(user.reset_token_is_unexpired) !== 1;
 
     if (isExpired) {
       res.status(400);
@@ -485,10 +487,12 @@ const resetPassword = async (req, res, next) => {
   try {
     const { token, newPassword, confirmPassword } = req.body || {};
 
-    if (!token) {
+    if (!isValidOneTimeToken(token)) {
       res.status(400);
       throw new Error("Invalid password reset token");
     }
+
+    const resetTokenHash = hashOneTimeToken(token);
 
     if (
       typeof newPassword !== "string" ||
@@ -514,16 +518,14 @@ const resetPassword = async (req, res, next) => {
       );
     }
 
-    const user = await findUserByPasswordResetToken(token);
+    const user = await findUserByPasswordResetToken(resetTokenHash);
 
     if (!user) {
       res.status(400);
       throw new Error("Invalid password reset token");
     }
 
-    const isExpired =
-      !user.password_reset_token_expires ||
-      new Date(user.password_reset_token_expires) < new Date();
+    const isExpired = Number(user.reset_token_is_unexpired) !== 1;
 
     if (isExpired) {
       res.status(400);
@@ -541,8 +543,16 @@ const resetPassword = async (req, res, next) => {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
+    const updateResult = await updateUserPasswordWithResetToken(
+      user.user_id,
+      resetTokenHash,
+      passwordHash
+    );
 
-    await updateUserPassword(user.user_id, passwordHash);
+    if (!updateResult || updateResult.affectedRows !== 1) {
+      res.status(400);
+      throw new Error("Password reset token is invalid or has expired");
+    }
 
     const io = req.app.get("io");
 
@@ -746,16 +756,30 @@ const updateProfile = async (req, res, next) => {
     const emailChanged =
       normalizedEmail !== String(currentUser.email || "").toLowerCase();
 
-    if (emailChanged) {
-      await invalidateEmailVerificationTokens(req.user.user_id);
-    }
+    let verificationToken = null;
 
-    await updateUserProfile(
-      req.user.user_id,
-      normalizedUsername,
-      normalizedEmail,
-      emailChanged
-    );
+    if (emailChanged) {
+      const tokenPair = createOneTimeTokenPair();
+      verificationToken = tokenPair.token;
+      const verificationTokenExpires = new Date(
+        Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
+      );
+
+      await updateUserProfileWithVerificationToken(
+        req.user.user_id,
+        normalizedUsername,
+        normalizedEmail,
+        tokenPair.tokenHash,
+        verificationTokenExpires
+      );
+    } else {
+      await updateUserProfile(
+        req.user.user_id,
+        normalizedUsername,
+        normalizedEmail,
+        false
+      );
+    }
 
     const updatedUser = await findUserById(req.user.user_id);
 
@@ -764,23 +788,19 @@ const updateProfile = async (req, res, next) => {
       throw new Error("User not found");
     }
 
+    let verificationEmailSent = true;
+
     if (emailChanged) {
-      const verificationToken = crypto.randomBytes(32).toString("hex");
-      const verificationTokenExpires = new Date(
-        Date.now() + EMAIL_VERIFICATION_EXPIRY_HOURS * 60 * 60 * 1000
-      );
-
-      await createEmailVerificationToken(
-        updatedUser.user_id,
-        verificationToken,
-        verificationTokenExpires
-      );
-
-      await sendVerificationEmailToUser(
-        updatedUser,
-        verificationToken,
-        EMAIL_VERIFICATION_EXPIRY_HOURS
-      );
+      try {
+        await sendVerificationEmailToUser(
+          updatedUser,
+          verificationToken,
+          EMAIL_VERIFICATION_EXPIRY_HOURS
+        );
+      } catch (emailError) {
+        verificationEmailSent = false;
+        console.error("Failed to send profile verification email:", emailError.message);
+      }
     }
 
     let token = null;
@@ -804,7 +824,9 @@ const updateProfile = async (req, res, next) => {
 
     return res.status(200).json({
       message: emailChanged
-        ? "Profile updated. Please verify your new email address"
+        ? verificationEmailSent
+          ? "Profile updated. Please verify your new email address"
+          : "Profile updated. Verification email could not be sent; request a new verification email."
         : "Profile updated successfully",
       ...(token ? { token } : {}),
       requires_email_verification: emailChanged,

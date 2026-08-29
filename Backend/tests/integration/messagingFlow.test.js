@@ -3,10 +3,8 @@ jest.mock("../../src/models/userModel", () => ({
 }));
 
 jest.mock("../../src/models/messageModel", () => ({
-  createMessage: jest.fn(),
-  createMessageAttachment: jest.fn(),
+  createMessageWithMetadata: jest.fn(),
   getMessageAttachmentsByMessageId: jest.fn(),
-  createMessageMentions: jest.fn(),
   getMessagesByChannelId: jest.fn(),
   searchMessagesByChannelId: jest.fn(),
   getMessageById: jest.fn(),
@@ -83,7 +81,10 @@ describe("channel messaging integration flow", () => {
 
     userModel.findUserCredentialsById.mockResolvedValue({ ...USER });
     messageModel.isUserMemberOfChannelServer.mockResolvedValue(true);
-    messageModel.createMessage.mockResolvedValue({ insertId: 300 });
+    messageModel.createMessageWithMetadata.mockResolvedValue({
+      messageResult: { insertId: 300 },
+      attachmentResult: null
+    });
     messageModel.getMessageById.mockResolvedValue({ ...baseMessage });
     messageModel.getChannelServerId.mockResolvedValue(8);
     messageModel.getChannelServerMemberIds.mockResolvedValue([
@@ -124,7 +125,7 @@ describe("channel messaging integration flow", () => {
       .send({ channel_id: 12, content: "   " });
 
     expect(response.statusCode).toBe(400);
-    expect(messageModel.createMessage).not.toHaveBeenCalled();
+    expect(messageModel.createMessageWithMetadata).not.toHaveBeenCalled();
   });
 
   test("rejects messages longer than 4000 characters", async () => {
@@ -145,7 +146,7 @@ describe("channel messaging integration flow", () => {
       .send({ channel_id: 12, content: "Should fail" });
 
     expect(response.statusCode).toBe(403);
-    expect(messageModel.createMessage).not.toHaveBeenCalled();
+    expect(messageModel.createMessageWithMetadata).not.toHaveBeenCalled();
   });
 
   test("creates a normal channel message", async () => {
@@ -155,12 +156,14 @@ describe("channel messaging integration flow", () => {
       .send({ channel_id: 12, content: " Hello team " });
 
     expect(response.statusCode).toBe(201);
-    expect(messageModel.createMessage).toHaveBeenCalledWith(
-      12,
-      USER.user_id,
-      "Hello team",
-      null
-    );
+    expect(messageModel.createMessageWithMetadata).toHaveBeenCalledWith({
+      channelId: 12,
+      userId: USER.user_id,
+      content: "Hello team",
+      replyToMessageId: null,
+      mentionedUserIds: [],
+      attachmentData: null
+    });
     expect(response.body.data).toMatchObject({
       message_id: 300,
       channel_id: 12,
@@ -177,7 +180,9 @@ describe("channel messaging integration flow", () => {
       .send({ channel_id: 12, content: "@bob @alice please review" });
 
     expect(response.statusCode).toBe(201);
-    expect(messageModel.createMessageMentions).toHaveBeenCalledWith(300, [22]);
+    expect(messageModel.createMessageWithMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ mentionedUserIds: [22] })
+    );
     expect(response.body.data.mentioned_user_ids).toEqual([22]);
   });
 

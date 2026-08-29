@@ -12,29 +12,42 @@ const getStatusCode = (err, res) => {
   return res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
 };
 
-const getErrorMessage = (err) => {
+const getKnownClientErrorMessage = (err) => {
   if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
     return err.field === "avatar"
       ? "Profile pictures cannot exceed 5 MB."
       : "File size cannot exceed 25 MB.";
   }
 
-  return err.message || "Server Error";
+  return err.message || "Request failed";
 };
 
 const notFound = (req, res, next) => {
   const error = new Error(`Not Found - ${req.originalUrl}`);
-  res.status(404);
+  error.statusCode = 404;
   next(error);
 };
 
 const errorHandler = (err, req, res, next) => {
   const statusCode = getStatusCode(err, res);
+  const isProduction = process.env.NODE_ENV === "production";
+  const isServerError = statusCode >= 500;
+
+  if (isServerError) {
+    const rawRequestPath = req.originalUrl || req.url || "";
+    const requestPath = String(rawRequestPath).split("?")[0];
+    const requestLabel = `${req.method || "REQUEST"} ${requestPath}`.trim();
+    console.error(`[${requestLabel}]`, err.stack || err.message || err);
+  }
+
   const responseBody = {
-    message: getErrorMessage(err)
+    message:
+      isProduction && isServerError
+        ? "Internal server error"
+        : getKnownClientErrorMessage(err)
   };
 
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProduction) {
     responseBody.stack = err.stack;
   }
 

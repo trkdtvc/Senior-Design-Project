@@ -12,15 +12,42 @@ const pool = mysql.createPool({
 });
 
 const connectDB = async () => {
+  const connection = await pool.getConnection();
+
   try {
-    const connection = await pool.getConnection();
+    await connection.ping();
     console.log("MySQL connected successfully");
+  } finally {
     connection.release();
-  } catch (error) {
-    console.error("MySQL connection failed:", error.message);
-    process.exit(1);
   }
+};
+
+const withTransaction = async (work) => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const result = await work(connection);
+    await connection.commit();
+    return result;
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch (rollbackError) {
+      console.error("Database rollback failed:", rollbackError.message);
+    }
+
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+const closeDB = async () => {
+  await pool.end();
 };
 
 module.exports = connectDB;
 module.exports.pool = pool;
+module.exports.withTransaction = withTransaction;
+module.exports.closeDB = closeDB;

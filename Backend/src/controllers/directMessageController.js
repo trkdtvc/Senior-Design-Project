@@ -7,8 +7,7 @@ const {
   getUserConversations,
   getMessagesByConversationId,
   getDirectMessageById,
-  createDirectMessage,
-  createDirectMessageAttachment,
+  createDirectMessageWithAttachment,
   getDirectMessageAttachmentsByMessageId,
   updateDirectMessageById,
   deleteDirectMessageAttachmentsByMessageId,
@@ -326,28 +325,16 @@ const sendDirectMessageToConversation = async (req, res, next) => {
       }
     }
 
-    const newMessage = await createDirectMessage(
+    const newMessage = await createDirectMessageWithAttachment({
       conversationId,
-      currentUserId,
-      trimmedContent,
-      replyToDirectMessageId || null
-    );
+      senderId: currentUserId,
+      content: trimmedContent,
+      replyToDirectMessageId: replyToDirectMessageId || null,
+      attachmentData: attachmentPayload
+    });
 
     if (attachmentPayload) {
-      const attachmentResult = await createDirectMessageAttachment(
-        newMessage.direct_message_id,
-        attachmentPayload
-      );
-
       markUploadedFileCommitted(req);
-
-      newMessage.attachments = [
-        {
-          attachment_id: attachmentResult.insertId,
-          direct_message_id: newMessage.direct_message_id,
-          ...attachmentPayload
-        }
-      ];
     }
 
     newMessage.reply_to = buildDirectReplyPreview(newMessage);

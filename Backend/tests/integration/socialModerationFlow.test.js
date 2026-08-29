@@ -13,6 +13,7 @@ jest.mock("../../src/models/friendRequestModel", () => ({
   getOutgoingPendingRequestsByUserId: jest.fn(),
   getFriendRequestById: jest.fn(),
   updateFriendRequestStatus: jest.fn(),
+  acceptFriendRequestAtomic: jest.fn(),
   createFriendship: jest.fn(),
   getFriendshipBetweenUsers: jest.fn(),
   deleteFriendship: jest.fn(),
@@ -30,6 +31,7 @@ jest.mock("../../src/models/userSafetyModel", () => ({
 }));
 
 jest.mock("../../src/models/serverInviteModel", () => ({
+  replaceActiveServerInvite: jest.fn(),
   createServerInvite: jest.fn(),
   getInviteByCode: jest.fn(),
   getActiveInvitesByServerId: jest.fn(),
@@ -131,6 +133,10 @@ describe("social, moderation, invite, and mute integration flow", () => {
       status: "pending"
     });
     friendModel.updateFriendRequestStatus.mockResolvedValue({ affectedRows: 1 });
+    friendModel.acceptFriendRequestAtomic.mockResolvedValue({
+      requestResult: { affectedRows: 1 },
+      friendshipResult: { insertId: 1 }
+    });
     friendModel.createFriendship.mockResolvedValue({ insertId: 1 });
 
     userSafetyModel.getUserById.mockResolvedValue({
@@ -154,6 +160,7 @@ describe("social, moderation, invite, and mute integration flow", () => {
     inviteModel.isInviteCodeInUse.mockResolvedValue(false);
     inviteModel.deactivateInvitesByServerId.mockResolvedValue({ affectedRows: 1 });
     inviteModel.createServerInvite.mockResolvedValue({ insertId: 7 });
+    inviteModel.replaceActiveServerInvite.mockResolvedValue({ insertId: 7 });
 
     memberModel.isUserBannedFromServer.mockResolvedValue(false);
     memberModel.isUserMemberOfServer.mockResolvedValue(false);
@@ -255,7 +262,7 @@ describe("social, moderation, invite, and mute integration flow", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.statusCode).toBe(403);
-    expect(friendModel.createFriendship).not.toHaveBeenCalled();
+    expect(friendModel.acceptFriendRequestAtomic).not.toHaveBeenCalled();
   });
 
   test("accepts a valid pending friend request and creates the friendship", async () => {
@@ -264,10 +271,10 @@ describe("social, moderation, invite, and mute integration flow", () => {
       .set("Authorization", `Bearer ${token}`);
 
     expect(response.statusCode).toBe(200);
-    expect(friendModel.createFriendship).toHaveBeenCalledWith(62, 61);
-    expect(friendModel.updateFriendRequestStatus).toHaveBeenCalledWith(
+    expect(friendModel.acceptFriendRequestAtomic).toHaveBeenCalledWith(
       500,
-      "accepted"
+      62,
+      61
     );
   });
 

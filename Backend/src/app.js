@@ -63,7 +63,9 @@ app.use(
         return;
       }
 
-      callback(new Error("Not allowed by CORS"));
+      const corsError = new Error("Not allowed by CORS");
+      corsError.statusCode = 403;
+      callback(corsError);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
