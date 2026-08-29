@@ -1,7 +1,8 @@
 const fs = require("fs/promises");
 const path = require("path");
+const { getUploadsRoot } = require("../config/paths");
 
-const uploadsRoot = path.resolve(__dirname, "..", "..", "uploads");
+const uploadsRoot = getUploadsRoot();
 const storedUploadDirectories = {
   "/uploads/messages/": path.resolve(uploadsRoot, "messages"),
   "/uploads/avatars/": path.resolve(uploadsRoot, "avatars")

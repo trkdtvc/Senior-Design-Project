@@ -1,3 +1,4 @@
+const path = require("path");
 const swaggerJsdoc = require("swagger-jsdoc");
 
 const options = {
@@ -10,8 +11,11 @@ const options = {
     },
     servers: [
       {
-        url: "http://localhost:5000",
-        description: "Local development server"
+        url: process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`,
+        description:
+          process.env.NODE_ENV === "production"
+            ? "Production server"
+            : "Local development server"
       }
     ],
     components: {
@@ -24,7 +28,7 @@ const options = {
       }
     }
   },
-  apis: ["./src/routes/*.js"]
+  apis: [path.join(__dirname, "..", "routes", "*.js")]
 };
 
 const swaggerSpec = swaggerJsdoc(options);

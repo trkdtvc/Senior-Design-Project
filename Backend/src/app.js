@@ -1,9 +1,11 @@
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
+const { getAllowedOrigins, isSwaggerEnabled } = require("./config/env");
+const { getUploadsRoot } = require("./config/paths");
 
 const authRoutes = require("./routes/authRoutes");
 const serverRoutes = require("./routes/serverRoutes");
@@ -36,24 +38,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Production hosts such as Railway sit behind a reverse proxy.
-// Trust the nearest proxy so req.ip reflects the real client for rate limiting.
-app.set("trust proxy", 1);
+// Reverse-proxy trust is explicit so req.ip remains reliable for rate limiting.
+// Local development defaults to no trusted proxy; production defaults to one hop.
+const defaultProxyHops = process.env.NODE_ENV === "production" ? 1 : 0;
+const configuredProxyHops = Number.parseInt(
+  process.env.TRUST_PROXY_HOPS ?? String(defaultProxyHops),
+  10
+);
+app.set("trust proxy", configuredProxyHops);
 
-const parseAllowedOrigins = () => {
-  const origins = process.env.CORS_ORIGINS || process.env.FRONTEND_URL;
-
-  if (!origins) {
-    return ["http://localhost:5173", "http://127.0.0.1:5173"];
-  }
-
-  return origins
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-};
-
-const allowedOrigins = parseAllowedOrigins();
+const allowedOrigins = getAllowedOrigins();
 
 app.use(
   cors({
@@ -76,7 +70,7 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(
   "/uploads/avatars",
-  express.static(path.join(__dirname, "..", "uploads", "avatars"), {
+  express.static(path.join(getUploadsRoot(), "avatars"), {
     maxAge: "7d",
     immutable: true
   })
@@ -95,7 +89,9 @@ app.use("/api/user-safety", userSafetyRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/attachments", attachmentRoutes);
 
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+if (isSwaggerEnabled()) {
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
 
 app.use(notFound);
 app.use(errorHandler);

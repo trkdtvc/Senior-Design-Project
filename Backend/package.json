@@ -5,9 +5,14 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "config:check": "node scripts/checkEnv.js",
+    "db:schema": "node scripts/dbSchema.js",
+    "db:setup": "npm run db:schema && npm run db:migrate",
+    "db:migrate": "node scripts/dbMigrate.js",
+    "db:seed": "node scripts/dbSeed.js",
     "test": "jest --runInBand",
-    "test:unit": "jest --runInBand tests/aiService.test.js tests/unit",
-    "test:integration": "jest --runInBand tests/authRoutes.test.js tests/authValidation.test.js tests/notFound.test.js tests/protectedWriteRoutes.test.js tests/serverRoutes.test.js tests/aiRoutes.test.js tests/integration",
+    "test:unit": "jest --runInBand tests/unit",
+    "test:integration": "jest --runInBand tests/integration",
     "test:coverage": "jest --runInBand --coverage"
   },
   "keywords": [],
@@ -31,5 +36,9 @@
     "jest": "^30.3.0",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "npm": ">=10.0.0"
   }
 }

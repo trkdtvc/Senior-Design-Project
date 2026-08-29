@@ -1,1 +1,6 @@
 /Things to Fix.txt
+
+# Environment files may contain credentials and deployment secrets.
+.env
+.env.*
+!.env.example

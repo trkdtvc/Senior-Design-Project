@@ -1,16 +1,37 @@
-# React + Vite
+# YFNC Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The frontend for **Your Friendly Neighborhood Chatster** is a React 19 application built with Vite and connected to the backend through REST APIs and Socket.IO.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Copy `.env.example` to `.env` and set `VITE_API_URL` to the backend API base URL. For local development the example uses:
 
-## React Compiler
+```text
+VITE_API_URL=http://localhost:5000/api
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Then install and run:
 
-## Expanding the ESLint configuration
+```bash
+npm ci
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Quality checks and production build
+
+```bash
+npm run lint
+npm run build
+```
+
+Production builds require `VITE_API_URL`; this prevents a deployed bundle from silently falling back to a localhost API.
+
+## System/E2E test
+
+With the frontend and backend already running:
+
+```bash
+npm run test:e2e
+```
+
+Set `E2E_USER_LOGIN` and `E2E_USER_PASSWORD` to enable the authenticated Selenium flow. Additional optional variables are documented in the repository root README.

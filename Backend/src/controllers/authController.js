@@ -30,7 +30,7 @@ const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_MINUTES = 60;
 
 const getFrontendBaseUrl = () => {
-  return process.env.FRONTEND_URL || "http://localhost:5173";
+  return (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
 };
 
 const isValidEmail = (email) => {

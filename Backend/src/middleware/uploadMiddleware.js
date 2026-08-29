@@ -2,13 +2,14 @@ const fs = require("fs");
 const fsPromises = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const { getUploadsRoot } = require("../config/paths");
 const { TextDecoder } = require("util");
 const multer = require("multer");
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 const FILE_SIGNATURE_BYTES = 8192;
-const uploadsRoot = path.join(__dirname, "..", "..", "uploads");
+const uploadsRoot = getUploadsRoot();
 const messageUploadDirectory = path.join(uploadsRoot, "messages");
 const avatarUploadDirectory = path.join(uploadsRoot, "avatars");
 
