@@ -104,9 +104,9 @@ The default local addresses in the example configuration are:
 
 Swagger is enabled by default outside production and disabled by default in production unless `SWAGGER_ENABLED=true` is explicitly configured. `API_PUBLIC_URL` controls the server URL advertised in the generated OpenAPI specification.
 
-## Production build
+## Production build and deployment
 
-The frontend intentionally requires `VITE_API_URL` for production builds so a deployed bundle cannot accidentally contain the localhost backend URL:
+The frontend intentionally requires `VITE_API_URL` for production builds so there is no silent localhost fallback. Before deployment, set it to the real production API URL (or `/api` for same-origin hosting):
 
 ```bash
 cd Frontend
@@ -115,6 +115,12 @@ npm run build
 ```
 
 The generated production assets are written to `Frontend/dist/`.
+
+For provider-neutral production requirements, health-check endpoints, persistent upload guidance, scaling assumptions, and the release checklist, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+## Continuous integration
+
+GitHub Actions runs the backend configuration check, complete Jest suite, dependency audit, frontend lint, production build, and frontend dependency audit on pushes and pull requests to `main` (`.github/workflows/ci.yml`). Selenium remains a release-candidate/local system test because its authenticated flow requires a running application and test account.
 
 ## Tests
 

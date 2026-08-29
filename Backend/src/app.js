@@ -19,6 +19,7 @@ const notificationSettingsRoutes = require("./routes/notificationSettingsRoutes"
 const userSafetyRoutes = require("./routes/userSafetyRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const attachmentRoutes = require("./routes/attachmentRoutes");
+const healthRoutes = require("./routes/healthRoutes");
 
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
@@ -35,6 +36,11 @@ app.use((req, res, next) => {
     "camera=(), microphone=(), geolocation=(), payment=()"
   );
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000");
+  }
+
   next();
 });
 
@@ -68,6 +74,13 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+// Authenticated API responses can contain private user and message data.
+// Prevent browsers and intermediary caches from retaining those responses.
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
 app.use(
   "/uploads/avatars",
   express.static(path.join(getUploadsRoot(), "avatars"), {
@@ -88,6 +101,7 @@ app.use("/api/notification-settings", notificationSettingsRoutes);
 app.use("/api/user-safety", userSafetyRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/attachments", attachmentRoutes);
+app.use("/api/health", healthRoutes);
 
 if (isSwaggerEnabled()) {
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

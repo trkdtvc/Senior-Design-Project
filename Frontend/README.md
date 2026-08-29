@@ -24,7 +24,7 @@ npm run lint
 npm run build
 ```
 
-Production builds require `VITE_API_URL`; this prevents a deployed bundle from silently falling back to a localhost API.
+Production builds require `VITE_API_URL`; this prevents a silent localhost fallback. Before deployment, replace the local example value with the real production API URL (or `/api` for same-origin hosting).
 
 ## System/E2E test
 
