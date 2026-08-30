@@ -23,6 +23,7 @@ const setValidEnvironment = (overrides = {}) => {
     DB_PASSWORD: "app_password",
     DB_NAME: "chatster_test",
     JWT_SECRET: "12345678901234567890123456789012",
+    EMAIL_PROVIDER: "smtp",
     MAIL_HOST: "smtp.example.com",
     MAIL_PORT: "587",
     MAIL_SECURE: "false",
@@ -65,6 +66,37 @@ describe("environment configuration", () => {
     setValidEnvironment({ NODE_ENV: "production", API_PUBLIC_URL: "" });
 
     expect(() => validateEnvironment()).toThrow(/API_PUBLIC_URL is required/);
+  });
+
+
+  test("accepts Resend without SMTP credentials", () => {
+    setValidEnvironment({
+      NODE_ENV: "production",
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "re_test_key",
+      MAIL_FROM: "YFNC <no-reply@mail.yfnc.dev>",
+      MAIL_HOST: "",
+      MAIL_PORT: "",
+      MAIL_SECURE: "",
+      MAIL_USER: "",
+      MAIL_PASS: ""
+    });
+
+    expect(validateEnvironment()).toBe(true);
+  });
+
+  test("requires a Resend API key when Resend is selected", () => {
+    setValidEnvironment({
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "",
+      MAIL_HOST: "",
+      MAIL_PORT: "",
+      MAIL_SECURE: "",
+      MAIL_USER: "",
+      MAIL_PASS: ""
+    });
+
+    expect(() => validateEnvironment()).toThrow(/RESEND_API_KEY is required/);
   });
 
   test("requires the matching provider key for hosted AI providers", () => {

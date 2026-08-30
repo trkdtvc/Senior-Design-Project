@@ -1,5 +1,6 @@
 const VALID_NODE_ENVS = new Set(["development", "test", "production"]);
 const VALID_AI_PROVIDERS = new Set(["local", "gemini", "openai"]);
+const VALID_EMAIL_PROVIDERS = new Set(["smtp", "resend"]);
 
 const isBlank = (value) => value === undefined || value === null || String(value).trim() === "";
 
@@ -126,17 +127,33 @@ const validateApplicationEnvironment = (errors) => {
     errors.push("JWT_SECRET must be at least 32 characters long.");
   }
 
-  requireValue("MAIL_HOST", errors);
-  requireValue("MAIL_USER", errors);
-  requireValue("MAIL_PASS", errors);
+  const emailProvider = String(process.env.EMAIL_PROVIDER || "smtp").trim().toLowerCase();
+  process.env.EMAIL_PROVIDER = emailProvider;
+
+  if (!VALID_EMAIL_PROVIDERS.has(emailProvider)) {
+    errors.push(`EMAIL_PROVIDER must be one of: ${[...VALID_EMAIL_PROVIDERS].join(", ")}.`);
+  }
+
   requireValue("MAIL_FROM", errors);
-  requireValue("MAIL_PORT", errors);
-  requireValue("MAIL_SECURE", errors);
-  validateInteger("MAIL_PORT", errors, { min: 1, max: 65535 });
-  validateBoolean("MAIL_SECURE", errors);
-  validateInteger("MAIL_CONNECTION_TIMEOUT_MS", errors, { min: 1, max: 300000 });
-  validateInteger("MAIL_GREETING_TIMEOUT_MS", errors, { min: 1, max: 300000 });
-  validateInteger("MAIL_SOCKET_TIMEOUT_MS", errors, { min: 1, max: 300000 });
+
+  if (emailProvider === "smtp") {
+    requireValue("MAIL_HOST", errors);
+    requireValue("MAIL_USER", errors);
+    requireValue("MAIL_PASS", errors);
+    requireValue("MAIL_PORT", errors);
+    requireValue("MAIL_SECURE", errors);
+    validateInteger("MAIL_PORT", errors, { min: 1, max: 65535 });
+    validateBoolean("MAIL_SECURE", errors);
+    validateInteger("MAIL_CONNECTION_TIMEOUT_MS", errors, { min: 1, max: 300000 });
+    validateInteger("MAIL_GREETING_TIMEOUT_MS", errors, { min: 1, max: 300000 });
+    validateInteger("MAIL_SOCKET_TIMEOUT_MS", errors, { min: 1, max: 300000 });
+  }
+
+  if (emailProvider === "resend") {
+    requireValue("RESEND_API_KEY", errors);
+    validateHttpUrl("RESEND_API_URL", process.env.RESEND_API_URL, errors);
+    validateInteger("EMAIL_API_TIMEOUT_MS", errors, { min: 1000, max: 300000 });
+  }
 
   const aiProvider = String(process.env.AI_PROVIDER || "local").trim().toLowerCase();
   process.env.AI_PROVIDER = aiProvider;
