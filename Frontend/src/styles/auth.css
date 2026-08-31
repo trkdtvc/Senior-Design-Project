@@ -3492,6 +3492,11 @@ textarea.auth-input {
 
 .discord-ai-message-user {
   justify-content: flex-end;
+  align-items: center;
+}
+
+.discord-ai-message-assistant {
+  align-items: center;
 }
 
 .discord-ai-message-user .discord-ai-message-avatar {
@@ -5420,12 +5425,134 @@ select:focus-visible,
 
 /* AI panel: distinct, but still part of the same visual language. */
 .discord-ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin: 12px 16px 0;
   padding: 16px;
   border: 1px solid rgba(105, 120, 217, 0.28);
   border-radius: 14px;
   background: #111824;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
+}
+
+.discord-ai-panel .discord-ai-panel-header {
+  min-height: 32px;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.discord-ai-panel .discord-ai-eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1.4;
+  letter-spacing: 0.09em;
+}
+
+.discord-ai-panel .discord-ai-clear-button,
+.discord-ai-panel .discord-ai-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  margin: 0;
+  border-radius: 8px;
+}
+
+.discord-ai-panel .discord-ai-close-button {
+  width: 32px;
+  padding: 0;
+}
+
+.discord-ai-panel .discord-ai-chat-shell {
+  min-height: 0;
+  margin: 0;
+  border-radius: 10px;
+}
+
+.discord-ai-panel .discord-ai-chat-thread {
+  gap: 16px;
+  max-height: min(330px, 40dvh);
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+
+.discord-ai-panel .discord-ai-message-body {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.discord-ai-panel .discord-ai-message-body > p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.discord-ai-panel .discord-ai-question-form {
+  flex-shrink: 0;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  align-items: stretch;
+  gap: 12px;
+  margin: 0;
+}
+
+.discord-ai-panel .discord-ai-question-input {
+  display: block;
+  min-height: 68px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.discord-ai-panel .discord-ai-action-button {
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.discord-ai-panel .discord-ai-source-item {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.discord-ai-panel .discord-ai-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(219, 85, 103, 0.2);
+  border-radius: 8px;
+  background: var(--app-danger-soft);
+  color: var(--app-danger);
+}
+
+@media (max-width: 560px) {
+  .discord-ai-panel {
+    gap: 12px;
+    margin: 10px;
+    padding: 12px;
+  }
+
+  .discord-ai-panel .discord-ai-question-form {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .discord-ai-panel .discord-ai-chat-thread {
+    padding: 10px;
+  }
 }
 
 .discord-ai-eyebrow,
