@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { loginUser, resendVerificationEmail } from "../services/authService";
+import PasswordInput from "../components/PasswordInput";
 import "../styles/auth.css";
 
 const normalizeInput = (value = "") => value.trim();
@@ -236,8 +237,7 @@ const LoginPage = () => {
             }
           />
 
-          <input
-            type="password"
+          <PasswordInput
             name="password"
             placeholder="Password"
             value={formData.password}

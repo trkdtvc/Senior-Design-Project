@@ -9327,11 +9327,8 @@ const MainPage = () => {
             <div className="discord-modal-header discord-modal-header-with-close">
               <div className="discord-modal-header-copy">
                 <h2 id="delete-account-title" className="discord-modal-title">
-                  Delete Account
+                  Enter your password to delete account
                 </h2>
-                <p className="discord-modal-subtitle">
-                  This action is permanent and cannot be undone.
-                </p>
               </div>
 
               <button
@@ -9347,16 +9344,6 @@ const MainPage = () => {
             </div>
 
             <form onSubmit={handleDeleteAccount} className="discord-form-stack">
-              <div className="discord-modal-danger-zone">
-                <div>
-                  <strong>Confirm account deletion</strong>
-                  <p>
-                    Your account data and any servers you own will be permanently deleted.
-                    Enter your current password to continue.
-                  </p>
-                </div>
-              </div>
-
               {deleteAccountError ? (
                 <p className="auth-error server-inline-error">{deleteAccountError}</p>
               ) : null}

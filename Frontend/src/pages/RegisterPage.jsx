@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { registerUser } from "../services/authService";
+import PasswordInput from "../components/PasswordInput";
 import "../styles/auth.css";
 
 const EMPTY_FIELDS_ERROR = "Please fill in all fields";
@@ -273,8 +274,7 @@ const RegisterPage = () => {
             }
           />
 
-          <input
-            type="password"
+          <PasswordInput
             name="password"
             placeholder="Password"
             value={formData.password}
@@ -319,8 +319,7 @@ const RegisterPage = () => {
             <p className="auth-error">{normalizedError}</p>
           ) : null}
 
-          <input
-            type="password"
+          <PasswordInput
             name="confirmPassword"
             placeholder="Confirm Password"
             value={formData.confirmPassword}

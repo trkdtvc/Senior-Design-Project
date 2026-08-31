@@ -5973,7 +5973,66 @@ select:focus-visible,
 }
 
 .discord-profile-danger-zone {
-  margin-top: 0;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  margin: 0 0 20px;
+}
+
+/* Password visibility controls share the existing auth input styling. */
+.auth-password-field {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.auth-form .auth-password-field input {
+  padding-right: 52px;
+}
+
+.auth-password-field input::-ms-reveal {
+  display: none;
+}
+
+.auth-form .auth-password-toggle {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-muted);
+  box-shadow: none;
+}
+
+.auth-form .auth-password-toggle:hover:not(:disabled) {
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+}
+
+.auth-form .auth-password-toggle:active {
+  transform: none;
+}
+
+.auth-form .auth-password-toggle:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: -3px;
+}
+
+.auth-password-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 @media (max-width: 560px) {
@@ -6307,4 +6366,3 @@ select:focus-visible,
   margin: 0;
   transform: none;
 }
-
