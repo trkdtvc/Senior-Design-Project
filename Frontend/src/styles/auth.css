@@ -5275,7 +5275,8 @@ select:focus-visible,
   line-height: 1.25;
 }
 
-.discord-form-stack .auth-input + .auth-label {
+.discord-form-stack .auth-input + .auth-label,
+.discord-form-stack .auth-password-field + .auth-label {
   margin-top: 6px;
 }
 
@@ -5985,7 +5986,7 @@ select:focus-visible,
   min-width: 0;
 }
 
-.auth-form .auth-password-field input {
+.auth-password-field .auth-input {
   padding-right: 52px;
 }
 
@@ -5993,7 +5994,7 @@ select:focus-visible,
   display: none;
 }
 
-.auth-form .auth-password-toggle {
+.auth-password-field .auth-password-toggle {
   position: absolute;
   top: 0;
   right: 4px;
@@ -6009,20 +6010,26 @@ select:focus-visible,
   background: transparent;
   color: var(--app-text-muted);
   box-shadow: none;
+  cursor: pointer;
 }
 
-.auth-form .auth-password-toggle:hover:not(:disabled) {
+.auth-password-field .auth-password-toggle:hover:not(:disabled) {
   background: var(--app-accent-soft);
   color: var(--app-text);
 }
 
-.auth-form .auth-password-toggle:active {
+.auth-password-field .auth-password-toggle:active {
   transform: none;
 }
 
-.auth-form .auth-password-toggle:focus-visible {
+.auth-password-field .auth-password-toggle:focus-visible {
   outline: 2px solid var(--app-accent);
   outline-offset: -3px;
+}
+
+.auth-password-field .auth-password-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .auth-password-toggle svg {

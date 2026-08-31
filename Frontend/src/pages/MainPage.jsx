@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
+import PasswordInput from "../components/PasswordInput";
 import {
   changePassword,
   deleteAccount,
@@ -9214,9 +9215,9 @@ const MainPage = () => {
                 <label className="auth-label" htmlFor="security_current_password">
                   Current password
                 </label>
-                <input
+                <PasswordInput
                   id="security_current_password"
-                  type="password"
+                  visibilityLabel="current password"
                   className="auth-input compact-input"
                   value={passwordFormData.currentPassword}
                   onChange={(e) => {
@@ -9234,9 +9235,9 @@ const MainPage = () => {
                 <label className="auth-label" htmlFor="security_new_password">
                   New password
                 </label>
-                <input
+                <PasswordInput
                   id="security_new_password"
-                  type="password"
+                  visibilityLabel="new password"
                   className="auth-input compact-input"
                   value={passwordFormData.newPassword}
                   onChange={(e) => {
@@ -9254,9 +9255,9 @@ const MainPage = () => {
                 <label className="auth-label" htmlFor="security_confirm_password">
                   Confirm new password
                 </label>
-                <input
+                <PasswordInput
                   id="security_confirm_password"
-                  type="password"
+                  visibilityLabel="confirm new password"
                   className="auth-input compact-input"
                   value={passwordFormData.confirmPassword}
                   onChange={(e) => {
@@ -9351,9 +9352,9 @@ const MainPage = () => {
               <label className="auth-label" htmlFor="delete_account_password">
                 Current password
               </label>
-              <input
+              <PasswordInput
                 id="delete_account_password"
-                type="password"
+                visibilityLabel="current password"
                 className="auth-input compact-input"
                 value={deleteAccountPassword}
                 onChange={(e) => {

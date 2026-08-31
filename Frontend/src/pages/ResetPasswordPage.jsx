@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import PasswordInput from "../components/PasswordInput";
 import {
   forgotPassword as forgotPasswordRequest,
   resetPassword as resetPasswordRequest,
@@ -395,10 +396,10 @@ const ResetPasswordPage = () => {
             ) : null}
 
             <form className="auth-form" onSubmit={handleSubmit} noValidate>
-              <input
+              <PasswordInput
                 id="newPassword"
                 name="newPassword"
-                type="password"
+                visibilityLabel="new password"
                 placeholder="New password"
                 value={formData.newPassword}
                 onChange={handleChange}
@@ -434,10 +435,10 @@ const ResetPasswordPage = () => {
                 </div>
               ) : null}
 
-              <input
+              <PasswordInput
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
+                visibilityLabel="confirm new password"
                 placeholder="Confirm new password"
                 value={formData.confirmPassword}
                 onChange={handleChange}

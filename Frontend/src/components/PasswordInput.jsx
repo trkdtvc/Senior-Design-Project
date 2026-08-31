@@ -1,10 +1,12 @@
 import { useId, useState } from "react";
 
-const PasswordInput = ({ id, disabled, ...inputProps }) => {
+const PasswordInput = ({ id, disabled, visibilityLabel, ...inputProps }) => {
   const generatedId = useId();
   const inputId = id || generatedId;
   const [isVisible, setIsVisible] = useState(false);
-  const fieldLabel = inputProps.name === "confirmPassword" ? "confirm password" : "password";
+  const fieldLabel = visibilityLabel || (
+    inputProps.name === "confirmPassword" ? "confirm password" : "password"
+  );
   const toggleLabel = `${isVisible ? "Hide" : "Show"} ${fieldLabel}`;
 
   return (
@@ -14,6 +16,9 @@ const PasswordInput = ({ id, disabled, ...inputProps }) => {
         id={inputId}
         type={isVisible ? "text" : "password"}
         disabled={disabled}
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="none"
       />
       <button
         type="button"
