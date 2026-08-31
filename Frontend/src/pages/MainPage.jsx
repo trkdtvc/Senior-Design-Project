@@ -1134,6 +1134,9 @@ const MainPage = () => {
   });
   const [accountSecurityError, setAccountSecurityError] = useState("");
   const [accountSecuritySuccess, setAccountSecuritySuccess] = useState("");
+  const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deleteAccountError, setDeleteAccountError] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [removeFriendError, setRemoveFriendError] = useState("");
@@ -4365,6 +4368,9 @@ const MainPage = () => {
       newPassword: "",
       confirmPassword: ""
     });
+    setIsDeleteAccountModalOpen(false);
+    setDeleteAccountPassword("");
+    setDeleteAccountError("");
     setProfileError("");
     setProfileSuccess("");
     setAvatarError("");
@@ -4384,9 +4390,37 @@ const MainPage = () => {
     }
 
     setIsEditProfileModalOpen(false);
+    setIsDeleteAccountModalOpen(false);
+    setDeleteAccountPassword("");
+    setDeleteAccountError("");
     setProfileError("");
     setAccountSecurityError("");
     setAccountSecuritySuccess("");
+  };
+
+  const handleOpenDeleteAccountModal = () => {
+    if (
+      isUpdatingProfile ||
+      isUpdatingAvatar ||
+      isChangingPassword ||
+      isDeletingAccount
+    ) {
+      return;
+    }
+
+    setDeleteAccountPassword("");
+    setDeleteAccountError("");
+    setIsDeleteAccountModalOpen(true);
+  };
+
+  const handleCloseDeleteAccountModal = () => {
+    if (isDeletingAccount) {
+      return;
+    }
+
+    setIsDeleteAccountModalOpen(false);
+    setDeleteAccountPassword("");
+    setDeleteAccountError("");
   };
 
   const handleProfileFormChange = (e) => {
@@ -4594,39 +4628,31 @@ const MainPage = () => {
     }
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = async (event) => {
+    event?.preventDefault();
+
     const token = getAuthToken();
-    const password = passwordFormData.currentPassword;
+    const password = deleteAccountPassword;
 
     if (!token) {
       navigate("/login");
       return;
     }
 
-    if (!password) {
-      setAccountSecurityError(
-        "Enter your current password above before deleting your account."
-      );
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "Delete your account permanently? Your account data and any servers you own will be deleted. This cannot be undone."
-    );
-
-    if (!confirmed) {
+    if (!password.trim()) {
+      setDeleteAccountError("Enter your current password to confirm deletion.");
       return;
     }
 
     try {
       setIsDeletingAccount(true);
-      setAccountSecurityError("");
+      setDeleteAccountError("");
       await deleteAccount(token, password);
       disconnectSocket();
       localStorage.removeItem("token");
-      navigate("/register");
+      navigate("/register", { replace: true });
     } catch (error) {
-      setAccountSecurityError(error.message || "Failed to delete account.");
+      setDeleteAccountError(error.message || "Failed to delete account.");
     } finally {
       setIsDeletingAccount(false);
     }
@@ -9258,27 +9284,119 @@ const MainPage = () => {
                   {isChangingPassword ? "Changing..." : "Change password"}
                 </button>
               </form>
-            </section>
 
-            <div className="discord-modal-danger-zone discord-profile-danger-zone">
-              <div>
-                <strong>Delete account</strong>
-                <p>Enter your current password above first. This cannot be undone.</p>
+              <div className="discord-modal-danger-zone discord-profile-danger-zone">
+                <div>
+                  <strong>Delete account</strong>
+                  <p>
+                    Permanently delete your account and its associated data. Servers you own
+                    will also be deleted. This cannot be undone.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="auth-button auth-button-danger compact-button"
+                  onClick={handleOpenDeleteAccountModal}
+                  disabled={
+                    isChangingPassword ||
+                    isDeletingAccount ||
+                    isUpdatingProfile ||
+                    isUpdatingAvatar
+                  }
+                >
+                  Delete account
+                </button>
               </div>
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {isDeleteAccountModalOpen ? (
+        <div
+          className="discord-create-server-backdrop"
+          onClick={handleCloseDeleteAccountModal}
+        >
+          <div
+            className="discord-create-server-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-account-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="discord-modal-header discord-modal-header-with-close">
+              <div className="discord-modal-header-copy">
+                <h2 id="delete-account-title" className="discord-modal-title">
+                  Delete Account
+                </h2>
+                <p className="discord-modal-subtitle">
+                  This action is permanent and cannot be undone.
+                </p>
+              </div>
+
               <button
                 type="button"
-                className="auth-button auth-button-danger compact-button"
-                onClick={handleDeleteAccount}
-                disabled={
-                  isChangingPassword ||
-                  isDeletingAccount ||
-                  isUpdatingProfile ||
-                  isUpdatingAvatar
-                }
+                className="discord-modal-close-button"
+                onClick={handleCloseDeleteAccountModal}
+                disabled={isDeletingAccount}
+                aria-label="Close delete account confirmation"
+                title="Close"
               >
-                {isDeletingAccount ? "Deleting..." : "Delete account"}
+                ×
               </button>
             </div>
+
+            <form onSubmit={handleDeleteAccount} className="discord-form-stack">
+              <div className="discord-modal-danger-zone">
+                <div>
+                  <strong>Confirm account deletion</strong>
+                  <p>
+                    Your account data and any servers you own will be permanently deleted.
+                    Enter your current password to continue.
+                  </p>
+                </div>
+              </div>
+
+              {deleteAccountError ? (
+                <p className="auth-error server-inline-error">{deleteAccountError}</p>
+              ) : null}
+
+              <label className="auth-label" htmlFor="delete_account_password">
+                Current password
+              </label>
+              <input
+                id="delete_account_password"
+                type="password"
+                className="auth-input compact-input"
+                value={deleteAccountPassword}
+                onChange={(e) => {
+                  setDeleteAccountPassword(e.target.value);
+                  setDeleteAccountError("");
+                }}
+                autoComplete="current-password"
+                maxLength={255}
+                disabled={isDeletingAccount}
+                autoFocus
+              />
+
+              <div className="discord-modal-actions">
+                <button
+                  type="button"
+                  className="auth-button auth-button-secondary compact-button"
+                  onClick={handleCloseDeleteAccountModal}
+                  disabled={isDeletingAccount}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="auth-button auth-button-danger compact-button"
+                  disabled={isDeletingAccount}
+                >
+                  {isDeletingAccount ? "Deleting..." : "Delete account"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}
