@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1200" viewBox="0 0 2200 1200">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#193a63" flood-opacity="0.16"/>
+    </filter>
+    <style>
+      .title { font: bold 66px 'Times New Roman', serif; fill: #173a66; }
+      .subtitle { font: 34px 'Times New Roman', serif; fill: #58708b; }
+      .card-title { font: bold 38px 'Times New Roman', serif; fill: #173a66; }
+      .metric { font: bold 78px 'Times New Roman', serif; fill: #173a66; }
+      .label { font: 30px 'Times New Roman', serif; fill: #334f6d; }
+      .small { font: 26px 'Times New Roman', serif; fill: #46617e; }
+      .status { font: bold 30px 'Times New Roman', serif; fill: #1b674b; }
+      .footer-title { font: bold 34px 'Times New Roman', serif; fill: #ffffff; }
+      .footer { font: 29px 'Times New Roman', serif; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="2200" height="1200" fill="#ffffff"/>
+  <text x="1100" y="92" text-anchor="middle" class="title">YFNC Automated Verification Results</text>
+  <text x="1100" y="148" text-anchor="middle" class="subtitle">Measured backend test execution and frontend quality checks</text>
+
+  <g filter="url(#shadow)">
+    <rect x="115" y="220" width="1970" height="190" rx="28" fill="#eef5fa" stroke="#7fa4c3" stroke-width="5"/>
+  </g>
+  <text x="310" y="285" text-anchor="middle" class="metric">23</text>
+  <text x="310" y="335" text-anchor="middle" class="label">test suites</text>
+  <line x1="485" y1="255" x2="485" y2="375" stroke="#a9bfd2" stroke-width="3"/>
+  <text x="760" y="285" text-anchor="middle" class="metric">138</text>
+  <text x="760" y="335" text-anchor="middle" class="label">tests passed</text>
+  <line x1="1000" y1="255" x2="1000" y2="375" stroke="#a9bfd2" stroke-width="3"/>
+  <text x="1225" y="285" text-anchor="middle" class="metric">0</text>
+  <text x="1225" y="335" text-anchor="middle" class="label">tests failed</text>
+  <line x1="1450" y1="255" x2="1450" y2="375" stroke="#a9bfd2" stroke-width="3"/>
+  <circle cx="1695" cy="303" r="56" fill="#dcefe6" stroke="#4c9474" stroke-width="5"/>
+  <path d="M1666 304 l20 21 42 -48" fill="none" stroke="#247451" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1870" y="294" text-anchor="middle" class="status">ALL CHECKS</text>
+  <text x="1870" y="334" text-anchor="middle" class="status">PASSED</text>
+
+  <g filter="url(#shadow)">
+    <rect x="115" y="465" width="945" height="370" rx="30" fill="#e5eff7" stroke="#557ea2" stroke-width="5"/>
+    <rect x="1140" y="465" width="945" height="370" rx="30" fill="#e3e2f1" stroke="#70679a" stroke-width="5"/>
+  </g>
+
+  <circle cx="270" cy="605" r="92" fill="#ffffff" stroke="#557ea2" stroke-width="6"/>
+  <text x="270" y="625" text-anchor="middle" class="metric">61</text>
+  <text x="430" y="535" class="card-title">Unit testing</text>
+  <text x="430" y="590" class="label">15 test suites</text>
+  <text x="430" y="640" class="label">61 of 61 tests passed</text>
+  <text x="430" y="702" class="small">Tokens, permissions, transactions,</text>
+  <text x="430" y="741" class="small">migrations, uploads, email, errors,</text>
+  <text x="430" y="780" class="small">configuration, storage, and presence</text>
+
+  <circle cx="1295" cy="605" r="92" fill="#ffffff" stroke="#70679a" stroke-width="6"/>
+  <text x="1295" y="625" text-anchor="middle" class="metric">77</text>
+  <text x="1455" y="535" class="card-title">Integration testing</text>
+  <text x="1455" y="590" class="label">8 test suites</text>
+  <text x="1455" y="640" class="label">77 of 77 tests passed</text>
+  <text x="1455" y="702" class="small">Authentication, servers, channels,</text>
+  <text x="1455" y="741" class="small">messages, attachments, social and</text>
+  <text x="1455" y="780" class="small">moderation, AI, and health endpoints</text>
+
+  <g filter="url(#shadow)">
+    <rect x="115" y="890" width="945" height="150" rx="26" fill="#fff2c9" stroke="#a8862d" stroke-width="5"/>
+    <rect x="1140" y="890" width="945" height="150" rx="26" fill="#dfeef8" stroke="#3a6fa5" stroke-width="5"/>
+  </g>
+  <circle cx="220" cy="965" r="42" fill="#ffffff" stroke="#a8862d" stroke-width="4"/>
+  <path d="M200 966 l14 15 29 -34" fill="none" stroke="#247451" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="295" y="950" class="card-title">Frontend lint</text>
+  <text x="295" y="998" class="label">ESLint completed without errors</text>
+  <circle cx="1245" cy="965" r="42" fill="#ffffff" stroke="#3a6fa5" stroke-width="4"/>
+  <path d="M1225 966 l14 15 29 -34" fill="none" stroke="#247451" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1320" y="950" class="card-title">Production build</text>
+  <text x="1320" y="998" class="label">Vite generated deployable output successfully</text>
+
+  <rect x="115" y="1090" width="1970" height="82" rx="22" fill="#193f6b"/>
+  <text x="1100" y="1126" text-anchor="middle" class="footer-title">Automated verification outcome</text>
+  <text x="1100" y="1159" text-anchor="middle" class="footer">All executed backend tests and frontend quality gates completed successfully.</text>
+</svg>

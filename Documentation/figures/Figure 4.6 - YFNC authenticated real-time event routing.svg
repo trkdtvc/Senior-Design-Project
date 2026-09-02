@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1400" viewBox="0 0 2200 1400">
+  <rect width="2200" height="1400" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#2f5597"/>
+    </marker>
+    <style>
+      .box { stroke:#2f5597; stroke-width:5; rx:24; ry:24; }
+      .heading { font-family:'Times New Roman',serif; font-size:47px; font-weight:700; fill:#1f1f1f; text-anchor:middle; }
+      .title { font-family:'Times New Roman',serif; font-size:36px; font-weight:700; fill:#111111; text-anchor:middle; }
+      .text { font-family:'Times New Roman',serif; font-size:27px; fill:#111111; text-anchor:middle; }
+      .small { font-family:'Times New Roman',serif; font-size:23px; fill:#111111; text-anchor:middle; }
+      .label { font-family:'Times New Roman',serif; font-size:24px; fill:#263b50; text-anchor:middle; }
+      .arrow { stroke:#2f5597; stroke-width:5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#8064a2; stroke-width:4; stroke-dasharray:13 9; fill:none; marker-end:url(#arrow); }
+    </style>
+  </defs>
+
+  <text class="heading" x="1100" y="65">Authenticated Socket.IO Event Routing</text>
+
+  <rect class="box" x="80" y="115" width="560" height="165" fill="#fff2cc"/>
+  <text class="title" x="360" y="175">Connected Browser Client</text>
+  <text class="text" x="360" y="225">React and Socket.IO Client</text>
+
+  <rect class="box" x="820" y="115" width="560" height="165" fill="#d9eaf7"/>
+  <text class="title" x="1100" y="175">Socket.IO Gateway</text>
+  <text class="text" x="1100" y="225">Backend real-time server</text>
+
+  <rect class="box" x="1560" y="115" width="560" height="165" fill="#e4dfec"/>
+  <text class="title" x="1840" y="175">Connection Authentication</text>
+  <text class="small" x="1840" y="220">JWT, account, verification state,</text>
+  <text class="small" x="1840" y="252">and password-bound credentials</text>
+
+  <path class="arrow" d="M640 197 L815 197"/>
+  <text class="label" x="728" y="170">JWT handshake</text>
+  <path class="arrow" d="M1380 197 L1555 197"/>
+  <text class="label" x="1468" y="170">Authenticate</text>
+
+  <rect class="box" x="90" y="395" width="900" height="195" fill="#d9eaf7"/>
+  <text class="title" x="540" y="455">Persistence-Backed Events</text>
+  <text class="text" x="540" y="505">REST controller → MySQL commit → Socket.IO emit</text>
+  <text class="small" x="540" y="550">Messages and resource changes are emitted only after success</text>
+
+  <rect class="box" x="1210" y="395" width="900" height="195" fill="#e4dfec"/>
+  <text class="title" x="1660" y="455">Ephemeral Events</text>
+  <text class="text" x="1660" y="505">Typing or presence → access check → targeted emit</text>
+  <text class="small" x="1660" y="550">Membership, participation, and block state are verified first</text>
+
+  <rect class="box" x="650" y="700" width="900" height="155" fill="#d9eaf7"/>
+  <text class="title" x="1100" y="760">Authorized Room Routing</text>
+  <text class="text" x="1100" y="810">Select the smallest permitted recipient scope</text>
+
+  <path class="arrow" d="M1840 280 C2050 300,2150 330,2150 640 L1470 640 C1420 640,1380 665,1350 695"/>
+  <path class="arrow" d="M540 590 C540 655,760 635,850 695"/>
+  <path class="arrow" d="M1660 590 C1660 655,1440 635,1350 695"/>
+
+  <rect class="box" x="70" y="955" width="620" height="170" fill="#eaf2f8"/>
+  <text class="title" x="380" y="1015">User Rooms</text>
+  <text class="text" x="380" y="1065">Direct messages, friendships,</text>
+  <text class="small" x="380" y="1105">notifications, presence, and account events</text>
+
+  <rect class="box" x="790" y="955" width="620" height="170" fill="#eaf2f8"/>
+  <text class="title" x="1100" y="1015">Server Rooms</text>
+  <text class="text" x="1100" y="1065">Membership, roles, servers,</text>
+  <text class="small" x="1100" y="1105">channels, and moderation events</text>
+
+  <rect class="box" x="1510" y="955" width="620" height="170" fill="#eaf2f8"/>
+  <text class="title" x="1820" y="1015">Channel Rooms</text>
+  <text class="text" x="1820" y="1065">Messages, reactions, pins,</text>
+  <text class="small" x="1820" y="1105">deletions, and typing events</text>
+
+  <path class="arrow" d="M850 855 C760 915,520 890,410 950"/>
+  <path class="arrow" d="M1100 855 L1100 950"/>
+  <path class="arrow" d="M1350 855 C1440 915,1680 890,1790 950"/>
+
+  <rect class="box" x="650" y="1225" width="900" height="140" fill="#fff2cc"/>
+  <text class="title" x="1100" y="1280">Authorized Connected Recipients</text>
+  <text class="text" x="1100" y="1325">React state updates and re-renders the interface</text>
+
+  <path class="dash" d="M380 1125 C420 1200,760 1170,850 1220"/>
+  <path class="dash" d="M1100 1125 L1100 1220"/>
+  <path class="dash" d="M1820 1125 C1780 1200,1440 1170,1350 1220"/>
+</svg>

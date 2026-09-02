@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1400" viewBox="0 0 2200 1400">
+  <rect width="2200" height="1400" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#263b50"/>
+    </marker>
+    <style>
+      .box { stroke:#263b50; stroke-width:5; rx:24; ry:24; }
+      .title { font-family:'Times New Roman',serif; font-size:55px; font-weight:700; fill:#111111; text-anchor:middle; }
+      .subtitle { font-family:'Times New Roman',serif; font-size:37px; fill:#111111; text-anchor:middle; }
+      .small { font-family:'Times New Roman',serif; font-size:31px; fill:#111111; text-anchor:middle; }
+      .label { font-family:'Times New Roman',serif; font-size:29px; fill:#263b50; text-anchor:middle; }
+      .arrow { stroke:#263b50; stroke-width:6; fill:none; marker-end:url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="box" x="610" y="55" width="980" height="180" fill="#fff6e5"/>
+  <text class="title" x="1100" y="130">User's Web Browser</text>
+  <text class="subtitle" x="1100" y="190">Application runtime and interface</text>
+
+  <path class="arrow" d="M1100 235 L1100 320"/>
+  <text class="label" x="1390" y="275">HTML, CSS, and JavaScript</text>
+
+  <rect class="box" x="90" y="325" width="2020" height="245" fill="#eaf3fb"/>
+  <text class="title" x="1100" y="405">Frontend Implementation</text>
+  <text class="subtitle" x="1100" y="470">React 19.2 · Vite 8.2 · React Router 7.18</text>
+  <text class="small" x="1100" y="525">Socket.IO Client 4.8 · Component-based pages · CSS styling</text>
+
+  <path class="arrow" d="M930 570 L930 660"/>
+  <path class="arrow" d="M1270 570 L1270 660"/>
+  <text class="label" x="780" y="625">REST API</text>
+  <text class="label" x="1430" y="625">Socket.IO events</text>
+
+  <rect class="box" x="90" y="665" width="2020" height="255" fill="#eaf3fb"/>
+  <text class="title" x="1100" y="745">Backend Implementation</text>
+  <text class="subtitle" x="1100" y="810">Node.js 22.12 · Express 5.2 · Socket.IO 4.8</text>
+  <text class="small" x="1100" y="865">JWT · bcryptjs · Multer · MySQL2 · Swagger/OpenAPI</text>
+
+  <path class="arrow" d="M350 920 L350 1010"/>
+  <path class="arrow" d="M910 920 L910 1010"/>
+  <path class="arrow" d="M1470 920 L1470 1010"/>
+  <path class="arrow" d="M1940 920 L1940 1010"/>
+
+  <rect class="box" x="90" y="1015" width="520" height="190" fill="#f1f5f8"/>
+  <text class="title" x="350" y="1090">MySQL 8</text>
+  <text class="small" x="350" y="1140">InnoDB relational storage</text>
+  <text class="small" x="350" y="1180">Schema and migrations</text>
+
+  <rect class="box" x="650" y="1015" width="520" height="190" fill="#f1f5f8"/>
+  <text class="title" x="910" y="1090">Email</text>
+  <text class="small" x="910" y="1140">Resend API or SMTP</text>
+  <text class="small" x="910" y="1180">Verification and recovery</text>
+
+  <rect class="box" x="1210" y="1015" width="520" height="190" fill="#f1f5f8"/>
+  <text class="title" x="1470" y="1090">Attachments</text>
+  <text class="small" x="1470" y="1140">Protected persistent storage</text>
+  <text class="small" x="1470" y="1180">Multer upload processing</text>
+
+  <rect class="box" x="1770" y="1015" width="340" height="190" fill="#f1eef8"/>
+  <text class="title" x="1940" y="1090">AI</text>
+  <text class="small" x="1940" y="1140">Gemini, OpenAI,</text>
+  <text class="small" x="1940" y="1180">or local provider</text>
+
+  <rect class="box" x="270" y="1260" width="1660" height="105" fill="#fff6e5"/>
+  <text class="subtitle" x="1100" y="1310">Development and verification environment</text>
+  <text class="small" x="1100" y="1350">npm 10 · ESLint 9 · Jest 30 · Supertest 7 · Selenium WebDriver 4.44 · GitHub Actions</text>
+</svg>

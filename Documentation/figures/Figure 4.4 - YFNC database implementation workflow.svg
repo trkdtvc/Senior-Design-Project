@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1350" viewBox="0 0 2200 1350">
+  <rect width="2200" height="1350" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#2f5597"/>
+    </marker>
+    <style>
+      .box { stroke:#2f5597; stroke-width:5; rx:22; ry:22; }
+      .heading { font-family:'Times New Roman',serif; font-size:43px; font-weight:700; fill:#1f1f1f; text-anchor:middle; }
+      .title { font-family:'Times New Roman',serif; font-size:38px; font-weight:700; fill:#111111; text-anchor:middle; }
+      .text { font-family:'Times New Roman',serif; font-size:28px; fill:#111111; text-anchor:middle; }
+      .small { font-family:'Times New Roman',serif; font-size:25px; fill:#111111; text-anchor:middle; }
+      .arrow { stroke:#2f5597; stroke-width:5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#8064a2; stroke-width:4; stroke-dasharray:12 9; fill:none; marker-end:url(#arrow); }
+    </style>
+  </defs>
+
+  <text class="heading" x="1100" y="65">Database Provisioning and Controlled Evolution</text>
+
+  <rect class="box" x="110" y="115" width="520" height="155" fill="#fff2cc"/>
+  <text class="title" x="370" y="175">Empty MySQL Database</text>
+  <text class="text" x="370" y="225">Validated environment settings</text>
+
+  <rect class="box" x="840" y="115" width="520" height="155" fill="#eaf2f8"/>
+  <text class="title" x="1100" y="175">Database/schema.sql</text>
+  <text class="text" x="1100" y="225">Baseline tables and constraints</text>
+
+  <rect class="box" x="1570" y="115" width="520" height="155" fill="#e4dfec"/>
+  <text class="title" x="1830" y="175">Migration Files</text>
+  <text class="text" x="1830" y="225">Ordered forward SQL changes</text>
+
+  <rect class="box" x="700" y="350" width="800" height="155" fill="#d9eaf7"/>
+  <text class="title" x="1100" y="412">npm run db:setup</text>
+  <text class="text" x="1100" y="462">Runs baseline schema setup, then migrations</text>
+
+  <path class="arrow" d="M370 270 C370 330,700 300,820 350"/>
+  <path class="arrow" d="M1100 270 L1100 345"/>
+  <path class="arrow" d="M1830 270 C1830 330,1500 300,1380 350"/>
+
+  <rect class="box" x="220" y="610" width="760" height="220" fill="#eaf2f8"/>
+  <text class="title" x="600" y="675">Baseline Schema Stage</text>
+  <text class="text" x="600" y="725">Refuses to run when tables already exist</text>
+  <text class="text" x="600" y="770">Applies schema.sql to a new database</text>
+  <text class="small" x="600" y="810">InnoDB · utf8mb4 · foreign keys · unique constraints</text>
+
+  <rect class="box" x="1220" y="610" width="760" height="220" fill="#e4dfec"/>
+  <text class="title" x="1600" y="675">Migration Stage</text>
+  <text class="text" x="1600" y="725">Validates ordered migration filenames</text>
+  <text class="text" x="1600" y="770">Applies only pending SQL files</text>
+  <text class="small" x="1600" y="810">Tracks name, SHA-256 checksum, and application time</text>
+
+  <path class="arrow" d="M900 505 C900 555,600 550,600 605"/>
+  <path class="arrow" d="M1300 505 C1300 555,1600 550,1600 605"/>
+
+  <rect class="box" x="760" y="900" width="680" height="165" fill="#d9eaf7"/>
+  <text class="title" x="1100" y="965">MySQL 8 / InnoDB</text>
+  <text class="text" x="1100" y="1015">Persistent relational application data</text>
+
+  <path class="arrow" d="M600 830 C600 895,820 860,900 895"/>
+  <path class="arrow" d="M1600 830 C1600 895,1380 860,1300 895"/>
+
+  <text class="heading" x="470" y="1145">Runtime Database Access</text>
+
+  <rect class="box" x="90" y="1180" width="430" height="125" fill="#fff2cc"/>
+  <text class="title" x="305" y="1232">Controllers</text>
+  <text class="small" x="305" y="1275">Coordinate operations</text>
+
+  <rect class="box" x="620" y="1180" width="430" height="125" fill="#eaf2f8"/>
+  <text class="title" x="835" y="1232">Model Modules</text>
+  <text class="small" x="835" y="1275">Parameterized SQL queries</text>
+
+  <rect class="box" x="1150" y="1180" width="430" height="125" fill="#eaf2f8"/>
+  <text class="title" x="1365" y="1232">MySQL2 Pool</text>
+  <text class="small" x="1365" y="1275">Up to 10 connections</text>
+
+  <rect class="box" x="1680" y="1180" width="430" height="125" fill="#e4dfec"/>
+  <text class="title" x="1895" y="1232">Transactions</text>
+  <text class="small" x="1895" y="1275">Commit or rollback</text>
+
+  <path class="arrow" d="M520 1242 L615 1242"/>
+  <path class="arrow" d="M1050 1242 L1145 1242"/>
+  <path class="arrow" d="M1365 1180 L1365 1070"/>
+  <path class="dash" d="M1680 1242 L1585 1242"/>
+</svg>

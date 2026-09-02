@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1400" viewBox="0 0 2200 1400">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,6 L0,12 z" fill="#24486b"/>
+    </marker>
+    <style>
+      .title { font-family: 'Times New Roman', serif; font-size: 54px; font-weight: 700; fill: #17365d; }
+      .subtitle { font-family: 'Times New Roman', serif; font-size: 27px; fill: #49647c; }
+      .laneTitle { font-family: 'Times New Roman', serif; font-size: 32px; font-weight: 700; fill: #17365d; }
+      .boxTitle { font-family: 'Times New Roman', serif; font-size: 27px; font-weight: 700; fill: #17365d; }
+      .boxText { font-family: 'Times New Roman', serif; font-size: 22px; fill: #263746; }
+      .small { font-family: 'Times New Roman', serif; font-size: 19px; fill: #49647c; }
+      .flow { fill: none; stroke: #24486b; stroke-width: 4; marker-end: url(#arrow); }
+      .lane { fill: #f8fbfe; stroke: #8aa8c3; stroke-width: 3; }
+      .blue { fill: #d9eaf7; stroke: #2f5597; stroke-width: 3; }
+      .pale { fill: #eaf2f8; stroke: #5b7f9f; stroke-width: 3; }
+      .lav { fill: #e4dfec; stroke: #675f8f; stroke-width: 3; }
+      .gold { fill: #fff2cc; stroke: #9a7b32; stroke-width: 3; }
+      .white { fill: #ffffff; stroke: #5b7f9f; stroke-width: 3; }
+    </style>
+  </defs>
+
+  <rect width="2200" height="1400" fill="#ffffff"/>
+  <text x="1100" y="92" text-anchor="middle" class="title">External Services and Protected Attachment Storage</text>
+  <text x="1100" y="137" text-anchor="middle" class="subtitle">Backend-controlled integration paths used by YFNC</text>
+
+  <!-- Email lane -->
+  <rect x="95" y="205" width="2010" height="305" rx="24" class="lane"/>
+  <rect x="95" y="205" width="270" height="305" rx="24" fill="#d9eaf7" stroke="#2f5597" stroke-width="3"/>
+  <text x="230" y="320" text-anchor="middle" class="laneTitle">Email</text>
+  <text x="230" y="360" text-anchor="middle" class="boxText">verification and</text>
+  <text x="230" y="390" text-anchor="middle" class="boxText">password recovery</text>
+
+  <rect x="425" y="275" width="350" height="160" rx="16" class="white"/>
+  <text x="600" y="330" text-anchor="middle" class="boxTitle">Backend email service</text>
+  <text x="600" y="370" text-anchor="middle" class="boxText">Builds recipient, subject,</text>
+  <text x="600" y="400" text-anchor="middle" class="boxText">text, and HTML content</text>
+
+  <rect x="895" y="275" width="340" height="160" rx="16" class="gold"/>
+  <text x="1065" y="330" text-anchor="middle" class="boxTitle">Provider selection</text>
+  <text x="1065" y="370" text-anchor="middle" class="boxText">EMAIL_PROVIDER</text>
+  <text x="1065" y="400" text-anchor="middle" class="small">configuration remains server-side</text>
+
+  <rect x="1365" y="238" width="300" height="105" rx="14" class="lav"/>
+  <text x="1515" y="282" text-anchor="middle" class="boxTitle">Resend API</text>
+  <text x="1515" y="315" text-anchor="middle" class="small">HTTPS request with timeout</text>
+  <rect x="1365" y="367" width="300" height="105" rx="14" class="lav"/>
+  <text x="1515" y="411" text-anchor="middle" class="boxTitle">SMTP server</text>
+  <text x="1515" y="444" text-anchor="middle" class="small">Nodemailer transport</text>
+
+  <rect x="1780" y="275" width="255" height="160" rx="16" class="blue"/>
+  <text x="1907" y="330" text-anchor="middle" class="boxTitle">User inbox</text>
+  <text x="1907" y="370" text-anchor="middle" class="boxText">Verification or</text>
+  <text x="1907" y="400" text-anchor="middle" class="boxText">recovery message</text>
+
+  <path d="M775 355 H895" class="flow"/>
+  <path d="M1235 335 H1305 V290 H1365" class="flow"/>
+  <path d="M1235 375 H1305 V420 H1365" class="flow"/>
+  <path d="M1665 290 H1720 V335 H1780" class="flow"/>
+  <path d="M1665 420 H1720 V375 H1780" class="flow"/>
+
+  <!-- AI lane -->
+  <rect x="95" y="550" width="2010" height="305" rx="24" class="lane"/>
+  <rect x="95" y="550" width="270" height="305" rx="24" fill="#e4dfec" stroke="#675f8f" stroke-width="3"/>
+  <text x="230" y="665" text-anchor="middle" class="laneTitle">AI service</text>
+  <text x="230" y="705" text-anchor="middle" class="boxText">assistant answers and</text>
+  <text x="230" y="735" text-anchor="middle" class="boxText">conversation intelligence</text>
+
+  <rect x="425" y="620" width="350" height="160" rx="16" class="white"/>
+  <text x="600" y="672" text-anchor="middle" class="boxTitle">Protected AI endpoint</text>
+  <text x="600" y="712" text-anchor="middle" class="boxText">JWT plus channel membership</text>
+  <text x="600" y="742" text-anchor="middle" class="boxText">or direct-participant check</text>
+
+  <rect x="895" y="620" width="340" height="160" rx="16" class="pale"/>
+  <text x="1065" y="672" text-anchor="middle" class="boxTitle">Context preparation</text>
+  <text x="1065" y="712" text-anchor="middle" class="boxText">Relevant MySQL messages</text>
+  <text x="1065" y="742" text-anchor="middle" class="boxText">and bounded panel history</text>
+
+  <rect x="1365" y="582" width="300" height="105" rx="14" class="lav"/>
+  <text x="1515" y="626" text-anchor="middle" class="boxTitle">Gemini / OpenAI</text>
+  <text x="1515" y="659" text-anchor="middle" class="small">Configured remote provider</text>
+  <rect x="1365" y="711" width="300" height="105" rx="14" class="gold"/>
+  <text x="1515" y="755" text-anchor="middle" class="boxTitle">Local provider</text>
+  <text x="1515" y="788" text-anchor="middle" class="small">Built-in search and summary</text>
+
+  <rect x="1780" y="620" width="255" height="160" rx="16" class="blue"/>
+  <text x="1907" y="672" text-anchor="middle" class="boxTitle">Backend response</text>
+  <text x="1907" y="712" text-anchor="middle" class="boxText">Answer, sources, or</text>
+  <text x="1907" y="742" text-anchor="middle" class="boxText">conversation analysis</text>
+
+  <path d="M775 700 H895" class="flow"/>
+  <path d="M1235 680 H1305 V635 H1365" class="flow"/>
+  <path d="M1235 720 H1305 V764 H1365" class="flow"/>
+  <path d="M1665 635 H1720 V680 H1780" class="flow"/>
+  <path d="M1665 764 H1720 V720 H1780" class="flow"/>
+
+  <!-- Attachment lane -->
+  <rect x="95" y="895" width="2010" height="390" rx="24" class="lane"/>
+  <rect x="95" y="895" width="270" height="390" rx="24" fill="#fff2cc" stroke="#9a7b32" stroke-width="3"/>
+  <text x="230" y="1035" text-anchor="middle" class="laneTitle">Attachments</text>
+  <text x="230" y="1075" text-anchor="middle" class="boxText">validated upload,</text>
+  <text x="230" y="1105" text-anchor="middle" class="boxText">persistent storage,</text>
+  <text x="230" y="1135" text-anchor="middle" class="boxText">authorized retrieval</text>
+
+  <rect x="410" y="960" width="300" height="160" rx="16" class="white"/>
+  <text x="560" y="1012" text-anchor="middle" class="boxTitle">Multipart request</text>
+  <text x="560" y="1052" text-anchor="middle" class="boxText">JWT and conversation</text>
+  <text x="560" y="1082" text-anchor="middle" class="boxText">authorization checks</text>
+
+  <rect x="790" y="960" width="300" height="160" rx="16" class="pale"/>
+  <text x="940" y="1012" text-anchor="middle" class="boxTitle">Multer validation</text>
+  <text x="940" y="1052" text-anchor="middle" class="boxText">MIME allowlist, size limit,</text>
+  <text x="940" y="1082" text-anchor="middle" class="boxText">and file-signature check</text>
+
+  <rect x="1170" y="930" width="300" height="125" rx="16" class="gold"/>
+  <text x="1320" y="978" text-anchor="middle" class="boxTitle">Persistent files</text>
+  <text x="1320" y="1018" text-anchor="middle" class="boxText">Configured upload directory</text>
+  <rect x="1170" y="1085" width="300" height="125" rx="16" class="blue"/>
+  <text x="1320" y="1133" text-anchor="middle" class="boxTitle">MySQL metadata</text>
+  <text x="1320" y="1173" text-anchor="middle" class="boxText">Name, type, size, and URL</text>
+
+  <rect x="1550" y="960" width="300" height="160" rx="16" class="white"/>
+  <text x="1700" y="1012" text-anchor="middle" class="boxTitle">Protected download</text>
+  <text x="1700" y="1052" text-anchor="middle" class="boxText">Access re-checked before</text>
+  <text x="1700" y="1082" text-anchor="middle" class="boxText">the file is streamed</text>
+
+  <rect x="1910" y="960" width="145" height="160" rx="16" class="blue"/>
+  <text x="1982" y="1012" text-anchor="middle" class="boxTitle">Client</text>
+  <text x="1982" y="1052" text-anchor="middle" class="boxText">Inline</text>
+  <text x="1982" y="1082" text-anchor="middle" class="boxText">or saved</text>
+
+  <path d="M710 1040 H790" class="flow"/>
+  <path d="M1090 1020 H1170" class="flow"/>
+  <path d="M1090 1060 H1130 V1148 H1170" class="flow"/>
+  <path d="M1470 993 H1510 V1020 H1550" class="flow"/>
+  <path d="M1470 1148 H1510 V1060 H1550" class="flow"/>
+  <path d="M1850 1040 H1910" class="flow"/>
+
+  <text x="940" y="1165" text-anchor="middle" class="small">Rejected or uncommitted files are removed</text>
+  <text x="1100" y="1340" text-anchor="middle" class="subtitle">Provider keys and storage paths are supplied through backend environment configuration</text>
+</svg>
