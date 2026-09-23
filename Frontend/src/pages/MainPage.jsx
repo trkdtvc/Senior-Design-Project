@@ -1119,6 +1119,9 @@ const MainPage = () => {
   const [user, setUser] = useState(null);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobileContextOpen, setIsMobileContextOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [profileFormData, setProfileFormData] = useState({
     username: "",
     email: ""
@@ -1287,6 +1290,28 @@ const MainPage = () => {
 
   const isDmView = !activeServerId;
   const showContextRightPane = !isDmView || Boolean(activeConversationId);
+
+  useEffect(() => {
+    setIsMobileSidebarOpen(false);
+    setIsMobileContextOpen(false);
+    setIsMobileSearchOpen(false);
+  }, [activeServerId, activeChannelId, activeConversationId, activeDmSection]);
+
+  useEffect(() => {
+    const handleMobileLayoutResize = () => {
+      if (window.innerWidth > 760) {
+        setIsMobileSidebarOpen(false);
+        setIsMobileContextOpen(false);
+        setIsMobileSearchOpen(false);
+      }
+    };
+
+    window.addEventListener("resize", handleMobileLayoutResize);
+
+    return () => {
+      window.removeEventListener("resize", handleMobileLayoutResize);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isAccountMenuOpen) {
@@ -4658,6 +4683,8 @@ const MainPage = () => {
   };
 
   const handleSelectHome = () => {
+    setIsMobileSidebarOpen(false);
+    setIsMobileSearchOpen(false);
     shouldAutoScrollRef.current = true;
     setActiveMentionHighlight(null);
     setActiveServerId(null);
@@ -4682,6 +4709,8 @@ const MainPage = () => {
   };
 
   const handleSelectDmSection = (section) => {
+    setIsMobileSidebarOpen(false);
+    setIsMobileSearchOpen(false);
     shouldAutoScrollRef.current = true;
     setActiveMentionHighlight(null);
     setActiveServerId(null);
@@ -4704,6 +4733,8 @@ const MainPage = () => {
   };
 
   const handleSelectServer = (serverId) => {
+    setIsMobileSidebarOpen(false);
+    setIsMobileSearchOpen(false);
     shouldAutoScrollRef.current = true;
     setActiveMentionHighlight(null);
     setActiveConversationId(null);
@@ -4731,6 +4762,8 @@ const MainPage = () => {
       return;
     }
 
+    setIsMobileSidebarOpen(false);
+    setIsMobileSearchOpen(false);
     shouldAutoScrollRef.current = true;
     setActiveMentionHighlight(null);
     setActiveChannelId(channelId);
@@ -4748,6 +4781,8 @@ const MainPage = () => {
   };
 
   const handleSelectConversation = (conversationId) => {
+    setIsMobileSidebarOpen(false);
+    setIsMobileSearchOpen(false);
     shouldAutoScrollRef.current = true;
     setActiveMentionHighlight(null);
     setActiveServerId(null);
@@ -6662,7 +6697,20 @@ const MainPage = () => {
           showContextRightPane ? "" : " main-layout-grid-without-right-pane"
         }`}
       >
-        <aside className="server-sidebar discord-sidebar-shell">
+        <aside
+          className={`server-sidebar discord-sidebar-shell${
+            isMobileSidebarOpen ? " discord-sidebar-shell-mobile-open" : ""
+          }`}
+        >
+          <button
+            type="button"
+            className="discord-mobile-drawer-close discord-mobile-sidebar-close"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            aria-label="Close navigation"
+          >
+            ×
+          </button>
+
           <div className="discord-guilds-bar">
             <button
               type="button"
@@ -7406,8 +7454,34 @@ const MainPage = () => {
           </div>
         </aside>
 
+        {(isMobileSidebarOpen || isMobileContextOpen) ? (
+          <button
+            type="button"
+            className="discord-mobile-drawer-backdrop"
+            onClick={() => {
+              setIsMobileSidebarOpen(false);
+              setIsMobileContextOpen(false);
+            }}
+            aria-label="Close mobile panel"
+          />
+        ) : null}
+
         <main className="server-main discord-chat-panel">
           <div className="server-main-header discord-chat-header">
+            <button
+              type="button"
+              className="discord-mobile-header-button discord-mobile-nav-button"
+              onClick={() => {
+                setIsMobileContextOpen(false);
+                setIsMobileSearchOpen(false);
+                setIsMobileSidebarOpen((isOpen) => !isOpen);
+              }}
+              aria-label="Open navigation"
+              aria-expanded={isMobileSidebarOpen}
+            >
+              ☰
+            </button>
+
             <div className="discord-chat-header-left">
               {isDmView ? (
                 activeConversationUser ? (
@@ -7470,10 +7544,42 @@ const MainPage = () => {
               )}
             </div>
 
+            <div className="discord-mobile-header-tools">
+              {((!isDmView && activeChannelId) || (isDmView && activeConversationId)) ? (
+                <button
+                  type="button"
+                  className="discord-mobile-header-button"
+                  onClick={() => setIsMobileSearchOpen((isOpen) => !isOpen)}
+                  aria-label="Search messages"
+                  aria-expanded={isMobileSearchOpen}
+                >
+                  Search
+                </button>
+              ) : null}
+
+              {showContextRightPane ? (
+                <button
+                  type="button"
+                  className="discord-mobile-header-button"
+                  onClick={() => {
+                    setIsMobileSidebarOpen(false);
+                    setIsMobileSearchOpen(false);
+                    setIsMobileContextOpen((isOpen) => !isOpen);
+                  }}
+                  aria-label={isDmView ? "Open profile" : "Open members"}
+                  aria-expanded={isMobileContextOpen}
+                >
+                  {isDmView ? "Profile" : "Members"}
+                </button>
+              ) : null}
+            </div>
+
             {((!isDmView && activeChannelId) || (isDmView && activeConversationId)) ? (
               <form
                 onSubmit={handleSearchMessages}
-                className="discord-message-search"
+                className={`discord-message-search${
+                  isMobileSearchOpen ? " discord-message-search-mobile-open" : ""
+                }`}
               >
                 <input
                   type="text"
@@ -8751,11 +8857,23 @@ const MainPage = () => {
         </main>
 
         {showContextRightPane ? (
-          <aside className="server-members-panel discord-right-pane">
+          <aside
+            className={`server-members-panel discord-right-pane${
+              isMobileContextOpen ? " discord-right-pane-mobile-open" : ""
+            }`}
+          >
           {isDmView ? (
             <>
               <div className="discord-right-pane-header">
                 <h2 className="server-members-title">Profile</h2>
+                <button
+                  type="button"
+                  className="discord-mobile-drawer-close"
+                  onClick={() => setIsMobileContextOpen(false)}
+                  aria-label="Close profile"
+                >
+                  ×
+                </button>
               </div>
 
               {activeConversationUser ? (
@@ -8859,6 +8977,14 @@ const MainPage = () => {
             <>
               <div className="discord-right-pane-header">
                 <h2 className="server-members-title">Members</h2>
+                <button
+                  type="button"
+                  className="discord-mobile-drawer-close"
+                  onClick={() => setIsMobileContextOpen(false)}
+                  aria-label="Close members"
+                >
+                  ×
+                </button>
               </div>
 
               {membersError && (

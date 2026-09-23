@@ -6500,3 +6500,370 @@ select:focus-visible,
   margin: 0;
   transform: none;
 }
+
+/* MOBILE BROWSER LAYOUT — drawers, touch targets, and narrow-screen ergonomics */
+.discord-mobile-header-button,
+.discord-mobile-header-tools,
+.discord-mobile-drawer-close,
+.discord-mobile-drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --chat-header-height: 58px;
+  }
+
+  .server-page.main-page-shell,
+  .server-layout.main-layout-grid,
+  .server-layout.main-layout-grid.main-layout-grid-without-right-pane,
+  .server-main.discord-chat-panel {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+  }
+
+  .server-layout.main-layout-grid,
+  .server-layout.main-layout-grid.main-layout-grid-without-right-pane {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .server-sidebar.discord-sidebar-shell {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 320;
+    width: min(92vw, var(--chat-left-column));
+    height: 100dvh;
+    grid-template-columns: var(--chat-guild-rail) minmax(0, 1fr);
+    transform: translateX(-102%);
+    transition: transform 180ms ease;
+    box-shadow: 20px 0 48px rgba(0, 0, 0, 0.42);
+  }
+
+  .server-sidebar.discord-sidebar-shell.discord-sidebar-shell-mobile-open {
+    transform: translateX(0);
+  }
+
+  .server-sidebar.discord-sidebar-shell .discord-sidebar-pane {
+    display: grid;
+  }
+
+  .discord-mobile-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.58);
+    box-shadow: none;
+  }
+
+  .discord-mobile-drawer-close {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    border: 1px solid var(--app-border);
+    border-radius: 9px;
+    background: var(--app-bg-elevated-2);
+    color: var(--app-text-soft);
+    font-size: 1.25rem;
+    line-height: 1;
+    box-shadow: none;
+  }
+
+  .discord-mobile-sidebar-close {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    z-index: 4;
+  }
+
+  .server-sidebar.discord-sidebar-shell .discord-sidebar-pane-top {
+    padding-top: 48px;
+  }
+
+  .discord-chat-header {
+    position: relative;
+    height: var(--chat-header-height);
+    min-height: var(--chat-header-height);
+    overflow: visible;
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    padding: 0 8px;
+  }
+
+  .discord-mobile-header-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 0 9px;
+    border: 1px solid var(--app-border);
+    border-radius: 9px;
+    background: var(--app-bg-elevated-2);
+    color: var(--app-text-soft);
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: none;
+  }
+
+  .discord-mobile-nav-button {
+    flex: 0 0 42px;
+    padding: 0;
+    font-size: 1.1rem;
+  }
+
+  .discord-mobile-header-tools {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .discord-chat-header-left {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .discord-chat-subtitle {
+    display: none;
+  }
+
+  .discord-message-search {
+    display: none;
+  }
+
+  .discord-message-search.discord-message-search-mobile-open {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 8px;
+    right: 8px;
+    z-index: 210;
+    display: flex;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 6px;
+    border-color: var(--app-border-strong);
+    background: var(--app-bg-elevated);
+    box-shadow: var(--app-card-shadow);
+  }
+
+  .discord-message-search-mobile-open .discord-message-search-input {
+    min-width: 0;
+    width: 100%;
+    font-size: 16px;
+  }
+
+  .server-members-panel.discord-right-pane.discord-right-pane-mobile-open {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 330;
+    display: block;
+    width: min(88vw, 320px);
+    height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-left: 1px solid var(--app-border-strong);
+    background: var(--app-bg-elevated);
+    box-shadow: -20px 0 48px rgba(0, 0, 0, 0.42);
+  }
+
+  .discord-right-pane-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--app-bg-elevated);
+  }
+
+  .discord-message-list,
+  .message-list {
+    padding: 10px 8px 8px;
+  }
+
+  .discord-message-row {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .discord-message-body,
+  .discord-message-row-own .discord-message-body {
+    max-width: 92%;
+    overflow-wrap: anywhere;
+  }
+
+  .discord-composer {
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    padding-left: max(8px, env(safe-area-inset-left));
+  }
+
+  .discord-composer-shell {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    padding: 5px;
+  }
+
+  .discord-composer-tools {
+    gap: 2px;
+  }
+
+  .discord-icon-button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .discord-composer-input,
+  .message-input {
+    min-height: 40px;
+    height: 40px;
+    padding: 8px 6px;
+    font-size: 16px;
+  }
+
+  .discord-send-button {
+    width: auto;
+    min-width: 68px;
+    height: 40px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .discord-emoji-picker-popover,
+  .discord-emoji-picker-loading {
+    width: min(330px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+  }
+
+  .discord-attachment-card,
+  .discord-attachment-file {
+    max-width: 100%;
+  }
+
+  .auth-page {
+    min-height: 100dvh;
+    padding-top: max(16px, env(safe-area-inset-top));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-left: max(12px, env(safe-area-inset-left));
+  }
+
+  .auth-form input,
+  .auth-input,
+  .auth-form textarea,
+  .discord-search-input,
+  .discord-message-search-input,
+  .discord-ai-question-input {
+    font-size: 16px;
+  }
+
+  .discord-sidebar-scroll,
+  .discord-message-list,
+  .server-members-panel.discord-right-pane.discord-right-pane-mobile-open {
+    overscroll-behavior: contain;
+  }
+
+  .discord-context-target {
+    -webkit-touch-callout: none;
+  }
+
+  .discord-popover-menu-item,
+  .discord-message-option {
+    min-height: 44px;
+  }
+
+  .discord-message-reaction-option {
+    height: 40px;
+  }
+
+  .discord-modal-backdrop,
+  .discord-create-server-backdrop {
+    align-items: flex-end;
+    padding: 8px;
+  }
+
+  .discord-modal-card,
+  .discord-create-server-modal {
+    width: 100%;
+    max-width: none;
+    max-height: min(92dvh, 760px);
+    border-radius: 16px 16px 10px 10px;
+  }
+}
+
+@media (max-width: 560px) {
+  .discord-chat-header-actions .discord-ai-header-button {
+    min-width: 42px;
+    width: 42px;
+    padding: 0;
+    overflow: hidden;
+    font-size: 0;
+  }
+
+  .discord-chat-header-actions .discord-ai-header-button::after {
+    content: "AI";
+    font-size: 0.72rem;
+    font-weight: 750;
+  }
+
+  .discord-mobile-header-button:not(.discord-mobile-nav-button) {
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0 7px;
+    font-size: 0.68rem;
+  }
+
+  .discord-message-row-own {
+    padding-left: 10px;
+  }
+
+  .discord-message-row-own .discord-message-body {
+    max-width: 92%;
+  }
+}
+
+@media (max-width: 420px) {
+  .server-sidebar.discord-sidebar-shell {
+    width: 100vw;
+  }
+
+  .server-members-panel.discord-right-pane.discord-right-pane-mobile-open {
+    width: 100vw;
+  }
+
+  .discord-mobile-header-tools {
+    gap: 3px;
+  }
+
+  .discord-mobile-header-button:not(.discord-mobile-nav-button) {
+    min-width: 38px;
+    padding: 0 6px;
+  }
+
+  .discord-composer-input,
+  .message-input {
+    min-width: 0;
+  }
+
+  .discord-send-button {
+    min-width: 64px;
+  }
+}
